@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
+import { useToast } from '../store/useToast';
+import { validateImageFile, fileToDataUrl, parseDataUrl } from '../lib/validation';
+import { splitName } from '../lib/prompts';
+import { detectFace } from '../lib/detectFace';
+import { computeClipRegions } from '../lib/clipRegions';
 import { ControlBar } from './ControlBar';
 import '../styles/viewer.css';
+import type { YinghuaStyleId } from '../types';
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
@@ -17,10 +23,16 @@ const prefersReducedMotion = () =>
  * programmatic transition (scanline sweep + glitch). Honors reduced-motion.
  */
 export function YinghuaViewer() {
-  const { parts, togglePart, characterName, yinghuaSlots } = useStore();
+  const {
+    parts, togglePart, characterName, yinghuaSlots, setSlotManual,
+    visionCred, viewerClipRegions, setViewerClipRegions,
+    detectFaceError, setDetectFaceError,
+  } = useStore();
+  const showError = useToast((s) => s.show);
   const [sweeping, setSweeping] = useState(false);
   const [glitch, setGlitch] = useState(false);
   const timers = useRef<number[]>([]);
+  const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null });
 
   useEffect(() => {
     return () => timers.current.forEach((t) => clearTimeout(t));
@@ -29,7 +41,7 @@ export function YinghuaViewer() {
   const handleToggle = useCallback(
     (code: string) => {
       togglePart(code);
-      if (prefersReducedMotion()) return; // plain fade via CSS only
+      if (prefersReducedMotion()) return;
       setSweeping(true);
       setGlitch(true);
       timers.current.push(
@@ -40,7 +52,41 @@ export function YinghuaViewer() {
     [togglePart],
   );
 
+  const runFaceDetect = useCallback(
+    async (src: string) => {
+      setDetectFaceError(null);
+      try {
+        const parsed = parseDataUrl(src);
+        const bounds = await detectFace(parsed.base64, parsed.mime, {
+          apiKey: visionCred.apiKey || undefined,
+          baseUrl: visionCred.baseUrl || undefined,
+        });
+        setViewerClipRegions(computeClipRegions(bounds.faceTop, bounds.faceBottom));
+      } catch (err) {
+        setDetectFaceError(err instanceof Error ? err.message : '人脸检测失败');
+      }
+    },
+    [visionCred, setViewerClipRegions, setDetectFaceError],
+  );
+
+  const handleRefreshClip = useCallback(() => {
+    const src = yinghuaSlots[1].images[0];
+    if (src) void runFaceDetect(src);
+  }, [yinghuaSlots, runFaceDetect]);
+
+  const handleSlotUpload = useCallback(
+    async (id: YinghuaStyleId, file: File) => {
+      const check = validateImageFile(file);
+      if (!check.ok) { showError(check.message ?? '文件校验失败'); return; }
+      const dataUrl = await fileToDataUrl(file);
+      setSlotManual(id, dataUrl);
+      if (id === 1) void runFaceDetect(dataUrl);
+    },
+    [setSlotManual, showError, runFaceDetect],
+  );
+
   const name = (characterName || 'YINGHUA').toUpperCase();
+  const [nameTop, nameBottom] = splitName(name);
 
   // The three generated tiers; first image of each yinghua style slot.
   const tierImage = (id: 1 | 2 | 3): string | undefined => yinghuaSlots[id].images[0];
@@ -59,15 +105,21 @@ export function YinghuaViewer() {
 
         {/* Main stage */}
         <div
-          className={`relative aspect-video flex-1 overflow-hidden bg-zzz-bg ${glitch ? 'fx-glitch' : ''}`}
+          className={`relative aspect-[3/2] flex-1 overflow-hidden bg-zzz-bg ${glitch ? 'fx-glitch' : ''}`}
         >
-          {/* Oversized background name typography */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
+          {/* Text overlay — fixed above all image layers, matches style-1 typography layout */}
+          <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
             <span
-              className="select-none whitespace-nowrap font-display font-bold leading-none text-zzz-primary/20"
-              style={{ fontSize: 'clamp(4rem, 18vw, 14rem)', letterSpacing: '-0.02em' }}
+              className="absolute left-4 top-2 select-none font-display font-black uppercase leading-none text-zzz-text/90 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+              style={{ fontSize: 'clamp(2.5rem, 10vw, 7rem)', letterSpacing: '-0.03em' }}
             >
-              {name}
+              {nameTop}
+            </span>
+            <span
+              className="absolute bottom-3 right-4 select-none font-display font-black uppercase leading-none text-zzz-text/90 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+              style={{ fontSize: 'clamp(2.5rem, 10vw, 7rem)', letterSpacing: '-0.03em' }}
+            >
+              {nameBottom}
             </span>
           </div>
 
@@ -89,13 +141,17 @@ export function YinghuaViewer() {
           {parts.map((p) => {
             const src = tierImage(p.styleId);
             if (!src || !p.visible) return null;
+            const regionStyle = viewerClipRegions
+              ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
+              : {};
             return (
               <img
                 key={p.code}
                 src={src}
                 alt={`${p.styleId === 2 ? '三命' : '六命'} 区域 ${p.code}`}
                 data-visible="true"
-                className={`layer-part region-${p.region} fx-enter`}
+                className={`layer-part fx-enter${viewerClipRegions ? '' : ` region-${p.region}`}`}
+                style={regionStyle}
                 loading="lazy"
               />
             );
@@ -116,11 +172,49 @@ export function YinghuaViewer() {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-zzz-text/10 p-3 font-mono text-[11px] text-zzz-text/55">
-        <span>零命 = 底图（始终显示）</span>
-        <span>01–03 = 三命的三块对角区域</span>
-        <span>04–06 = 六命的三块对角区域</span>
+      {/* Legend + manual upload */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zzz-text/10 p-3">
+        {/* Face detection status */}
+        {detectFaceError && (
+          <div className="flex w-full items-center gap-2">
+            <span className="font-mono text-[11px] text-red-400">{detectFaceError}</span>
+            <button
+              onClick={handleRefreshClip}
+              className="glass-btn px-2 py-0.5 font-mono text-[10px] text-zzz-magenta"
+            >
+              刷新识图
+            </button>
+          </div>
+        )}
+        {!detectFaceError && viewerClipRegions && (
+          <span className="w-full font-mono text-[11px] text-zzz-primary/70">✓ 已动态裁切</span>
+        )}
+        {([
+          { id: 1 as YinghuaStyleId, label: '零命 = 底图（始终显示）' },
+          { id: 2 as YinghuaStyleId, label: '01–03 = 三命对角区域' },
+          { id: 3 as YinghuaStyleId, label: '04–06 = 六命对角区域' },
+        ] as const).map(({ id, label }) => (
+          <div key={id} className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-zzz-text/55">{label}</span>
+            <button
+              onClick={() => slotInputRefs.current[id]?.click()}
+              className="glass-btn px-2 py-0.5 font-mono text-[10px] text-zzz-text/70"
+            >
+              上传
+            </button>
+            <input
+              ref={(el) => { slotInputRefs.current[id] = el; }}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleSlotUpload(id, f);
+                e.target.value = '';
+              }}
+            />
+          </div>
+        ))}
       </div>
     </section>
   );

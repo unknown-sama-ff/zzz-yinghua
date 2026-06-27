@@ -48,13 +48,16 @@ export function Uploader() {
 
   return (
     <section className="glass p-6">
-      <SectionHeader step="01" title="上传立绘" />
+      <SectionHeader step="01" title="上传三视图立绘" />
+      <p className="mb-3 font-mono text-xs text-zzz-text/55">
+        建议上传三视图成品以获得最佳生成效果。没有三视图？使用下方工作台生成 ↓
+      </p>
 
       {!uploadedImage ? (
         <div
           role="button"
           tabIndex={0}
-          aria-label="拖拽或点击上传角色正面图片"
+          aria-label="拖拽或点击上传角色三视图立绘"
           onClick={() => inputRef.current?.click()}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();

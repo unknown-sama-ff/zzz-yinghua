@@ -1,8 +1,9 @@
 // Shared helpers for the Node proxy: fetch with timeout + retry, and SSRF guard.
 
-// Image generation is routinely slow (30–120s), so the per-request ceiling is
-// generous by default. Override with UPSTREAM_TIMEOUT_MS in .env if needed.
-const DEFAULT_TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 120000);
+// Image-to-image editing (gpt-image-2 etc.) can genuinely take several minutes,
+// so the per-request ceiling is large by default. Override with
+// UPSTREAM_TIMEOUT_MS in .env if your endpoint is faster/slower.
+const DEFAULT_TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 300000);
 
 /** Normalized upstream error carrying a stable code for the client. */
 export class UpstreamError extends Error {
@@ -17,12 +18,15 @@ export class UpstreamError extends Error {
 export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIMEOUT) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
+  const started = Date.now();
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } catch (err) {
     if (err.name === 'AbortError') {
+      console.warn(`[upstream] TIMEOUT after ${Date.now() - started}ms → ${url}`);
       throw new UpstreamError('UPSTREAM_TIMEOUT', `上游请求超时 (${timeout}ms)`, 504);
     }
+    console.warn(`[upstream] FAILED ${err.message} → ${url}`);
     throw new UpstreamError('UPSTREAM_ERROR', `上游连接失败: ${err.message}`);
   } finally {
     clearTimeout(timer);

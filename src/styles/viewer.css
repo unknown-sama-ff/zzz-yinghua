@@ -19,15 +19,16 @@
 
 /* Three diagonal bands that together tile the whole stage. Each higher-tier
    region image is clipped to one band, so toggling buttons reveals that slice
-   of 三命 / 六命 over the 零命 base. */
+   of 三命 / 六命 over the 零命 base.
+   region-0: upper band (face/eyes); region-1: mid (torso); region-2: lower. */
 .region-0 {
-  clip-path: polygon(0 0, 100% 0, 100% 33%, 0 66%);
+  clip-path: polygon(0 0, 100% 0, 100% 38%, 0 52%);
 }
 .region-1 {
-  clip-path: polygon(0 66%, 100% 33%, 100% 66%, 0 100%);
+  clip-path: polygon(0 52%, 100% 38%, 100% 72%, 0 82%);
 }
 .region-2 {
-  clip-path: polygon(0 100%, 100% 66%, 100% 100%);
+  clip-path: polygon(0 82%, 100% 72%, 100% 100%, 0 100%);
 }
 
 .layer-part[data-visible='false'] {
@@ -51,16 +52,13 @@
   0% {
     opacity: 0;
     filter: brightness(2.2) drop-shadow(0 0 18px var(--zzz-primary));
-    clip-path: inset(0 0 100% 0);
   }
   45% {
     filter: brightness(1.6) drop-shadow(0 0 12px var(--zzz-magenta));
-    clip-path: inset(0 0 0 0);
   }
   100% {
     opacity: 1;
     filter: brightness(1) drop-shadow(0 0 0 transparent);
-    clip-path: inset(0 0 0 0);
   }
 }
 

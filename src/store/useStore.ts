@@ -7,6 +7,7 @@ import type {
   YinghuaStyleId,
 } from '../types';
 import { THREE_VIEW_PROMPT } from '../lib/prompts';
+import type { ClipRegions } from '../lib/clipRegions';
 
 const emptySlot = (): GenSlot => ({ status: 'idle', images: [] });
 
@@ -56,8 +57,8 @@ interface WorkshopState {
   ) => void;
 
   // --- Three-view step ---
-  threeViewEnabled: boolean;
-  setThreeViewEnabled: (v: boolean) => void;
+  threeViewUploads: { front: string | null; side: string | null; back: string | null };
+  setThreeViewUpload: (view: 'front' | 'side' | 'back', dataUrl: string | null) => void;
   threeViewPrompt: string;
   setThreeViewPrompt: (p: string) => void;
   threeViewSlot: GenSlot;
@@ -68,12 +69,21 @@ interface WorkshopState {
   setYinghuaPrompt: (id: YinghuaStyleId, p: string) => void;
   yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
   setYinghuaSlot: (id: YinghuaStyleId, patch: Partial<GenSlot>) => void;
+  setSlotManual: (id: YinghuaStyleId, dataUrl: string) => void;
+
+  // --- Vision model credentials (in-memory only) ---
+  visionCred: { apiKey: string; baseUrl: string };
+  setVisionCred: (patch: Partial<{ apiKey: string; baseUrl: string }>) => void;
 
   // --- Viewer ---
   parts: LayerPart[];
   togglePart: (code: string) => void;
   setAllParts: (visible: boolean) => void;
   setStageVisible: (stage: 1 | 2, visible: boolean) => void;
+  viewerClipRegions: ClipRegions | null;
+  setViewerClipRegions: (r: ClipRegions | null) => void;
+  detectFaceError: string | null;
+  setDetectFaceError: (msg: string | null) => void;
 }
 
 export const useStore = create<WorkshopState>((set) => ({
@@ -101,8 +111,9 @@ export const useStore = create<WorkshopState>((set) => ({
       creds: { ...s.creds, [provider]: { ...s.creds[provider], ...patch } },
     })),
 
-  threeViewEnabled: true,
-  setThreeViewEnabled: (v) => set({ threeViewEnabled: v }),
+  threeViewUploads: { front: null, side: null, back: null },
+  setThreeViewUpload: (view, dataUrl) =>
+    set((s) => ({ threeViewUploads: { ...s.threeViewUploads, [view]: dataUrl } })),
   threeViewPrompt: THREE_VIEW_PROMPT,
   setThreeViewPrompt: (p) => set({ threeViewPrompt: p }),
   threeViewSlot: emptySlot(),
@@ -116,6 +127,10 @@ export const useStore = create<WorkshopState>((set) => ({
   setYinghuaSlot: (id, patch) =>
     set((s) => ({
       yinghuaSlots: { ...s.yinghuaSlots, [id]: { ...s.yinghuaSlots[id], ...patch } },
+    })),
+  setSlotManual: (id, dataUrl) =>
+    set((s) => ({
+      yinghuaSlots: { ...s.yinghuaSlots, [id]: { status: 'done', images: [dataUrl] } },
     })),
 
   parts: initialParts(),
@@ -131,4 +146,12 @@ export const useStore = create<WorkshopState>((set) => ({
     set((s) => ({
       parts: s.parts.map((p) => (p.stage === stage ? { ...p, visible } : p)),
     })),
+
+  visionCred: { apiKey: '', baseUrl: '' },
+  setVisionCred: (patch) =>
+    set((s) => ({ visionCred: { ...s.visionCred, ...patch } })),
+  viewerClipRegions: null,
+  setViewerClipRegions: (r) => set({ viewerClipRegions: r }),
+  detectFaceError: null,
+  setDetectFaceError: (msg) => set({ detectFaceError: msg }),
 }));

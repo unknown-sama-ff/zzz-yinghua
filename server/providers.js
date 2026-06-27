@@ -106,12 +106,15 @@ async function gptImage(req) {
   if (!key) {
     throw new UpstreamError('UNAUTHORIZED', 'gpt-image 缺少密钥（前端输入或服务端 OPENAI_API_KEY 二选一）', 401);
   }
-  const model = req.model || 'gpt-image-1';
+  const model = req.model || 'gpt-image-2';
   const size = req.size || '1024x1024';
   const n = req.n || 1;
   const root = base.replace(/\/$/, '');
 
-  // With an input image → /images/edits as multipart/form-data.
+  // With an input image → /images/edits as multipart/form-data so the upload
+  // strictly conditions the result (true image-to-image). No fallback: if the
+  // endpoint doesn't support edits we surface a clear error rather than silently
+  // degrading to text-only generation (which would ignore the uploaded art).
   if (req.imageBase64) {
     const buffer = Buffer.from(req.imageBase64, 'base64');
     const blob = new Blob([buffer], { type: req.imageMime || 'image/png' });
@@ -130,7 +133,7 @@ async function gptImage(req) {
         body: form,
       });
       if (!res.ok) {
-        throw new UpstreamError(codeFromStatus(res.status), `gpt-image 返回 ${res.status}`, res.status);
+        throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status}`, res.status);
       }
       return parseJsonSafe(res);
     });

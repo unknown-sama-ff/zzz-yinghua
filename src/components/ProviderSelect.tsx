@@ -19,6 +19,8 @@ export function ProviderSelect() {
     setCharacterName,
     creds,
     setCred,
+    visionCred,
+    setVisionCred,
   } = useStore();
 
   const isKeyed = provider === 'seedance' || provider === 'gpt-image';
@@ -86,7 +88,7 @@ export function ProviderSelect() {
             <input
               value={creds[provider].model}
               onChange={(e) => setCred(provider, { model: e.target.value })}
-              placeholder={provider === 'gpt-image' ? 'gpt-image-1（默认）' : '如 seedance-v1'}
+              placeholder={provider === 'gpt-image' ? 'gpt-image-2（默认）' : '如 seedance-v1'}
               className="glass-input w-full px-3 py-2 font-mono text-sm"
             />
           </div>
@@ -96,6 +98,28 @@ export function ProviderSelect() {
           </p>
         </div>
       )}
+
+      {/* Vision model config — always shown; used for face detection clip regions */}
+      <div className="mt-4 space-y-2 border-t border-zzz-text/10 pt-4">
+        <label className="font-mono text-xs text-zzz-text/60">视觉模型 // 人脸识别裁切</label>
+        <input
+          type="password"
+          autoComplete="off"
+          value={visionCred.apiKey}
+          onChange={(e) => setVisionCred({ apiKey: e.target.value })}
+          placeholder="API Key（留空则使用服务端 VISION_API_KEY）"
+          className="glass-input w-full px-3 py-2 font-mono text-sm"
+        />
+        <input
+          value={visionCred.baseUrl}
+          onChange={(e) => setVisionCred({ baseUrl: e.target.value })}
+          placeholder="Base URL（可选，默认 api.openai.com）"
+          className="glass-input w-full px-3 py-2 font-mono text-sm"
+        />
+        <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
+          用于零命图片生成后自动检测人脸位置，动态计算切割区域。Key 留空时使用服务端 .env 的 VISION_API_KEY；若均未配置则报错。
+        </p>
+      </div>
 
       {provider === 'custom-url' && (
         <div className="mt-4 space-y-3 border-t border-zzz-text/10 pt-4">
