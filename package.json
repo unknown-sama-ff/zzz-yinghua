@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently -k -n web,api -c magenta,cyan \"vite\" \"npm:dev:server\"",
     "dev:server": "node --watch server/index.js",
-    "build": "tsc --noEmit && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js",
     "lint": "tsc --noEmit"
