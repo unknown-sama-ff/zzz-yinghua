@@ -59,7 +59,7 @@ export function YinghuaViewer() {
 
         {/* Main stage */}
         <div
-          className={`relative aspect-[4/5] flex-1 overflow-hidden bg-zzz-bg sm:aspect-video ${glitch ? 'fx-glitch' : ''}`}
+          className={`relative aspect-video flex-1 overflow-hidden bg-zzz-bg ${glitch ? 'fx-glitch' : ''}`}
         >
           {/* Oversized background name typography */}
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">

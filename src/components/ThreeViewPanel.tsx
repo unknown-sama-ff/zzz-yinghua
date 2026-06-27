@@ -1,6 +1,7 @@
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
+import { YINGHUA_SIZE } from '../lib/prompts';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
@@ -26,7 +27,7 @@ export function ThreeViewPanel() {
     }
     setThreeViewSlot({ status: 'loading', error: undefined });
     try {
-      const images = await generate(buildRequest(threeViewPrompt));
+      const images = await generate(buildRequest(threeViewPrompt, { size: YINGHUA_SIZE }));
       setThreeViewSlot({ status: 'done', images });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
@@ -73,7 +74,6 @@ export function ThreeViewPanel() {
           <button
             onClick={() => void run()}
             disabled={threeViewSlot.status === 'loading'}
-            data-active="true"
             className="glass-btn mt-3 w-full py-2.5 font-mono text-sm uppercase tracking-widest text-zzz-text"
           >
             生成三视图

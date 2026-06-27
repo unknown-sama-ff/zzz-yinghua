@@ -16,10 +16,10 @@ export default function App() {
       {/* Header */}
       <header className="relative overflow-hidden px-6 py-8">
         <div
-          className="pointer-events-none absolute -right-20 top-0 h-full w-1/2"
+          className="pointer-events-none absolute -right-24 top-0 h-full w-2/3"
           style={{
             background:
-              'linear-gradient(120deg, transparent 50%, color-mix(in srgb, var(--zzz-primary) 22%, transparent) 75%)',
+              'radial-gradient(60% 120% at 100% 0%, color-mix(in srgb, var(--zzz-primary) 20%, transparent), transparent 70%)',
           }}
         />
         <div className="mx-auto max-w-6xl">

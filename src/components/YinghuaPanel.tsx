@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
-import { YINGHUA_STYLES, fillName } from '../lib/prompts';
+import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
@@ -46,7 +46,7 @@ export function YinghuaPanel() {
     }
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
-      const images = await generate(buildRequest(yinghuaPrompts[id]));
+      const images = await generate(buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE }));
       setYinghuaSlot(id, { status: 'done', images });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
@@ -75,7 +75,6 @@ export function YinghuaPanel() {
             <button
               onClick={() => void run(style.id)}
               disabled={yinghuaSlots[style.id].status === 'loading'}
-              data-active="true"
               className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text"
             >
               生成

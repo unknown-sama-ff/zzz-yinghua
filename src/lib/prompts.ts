@@ -1,6 +1,13 @@
 import type { YinghuaStyle } from '../types';
 
 /**
+ * Landscape output size for yinghua art, matching the viewer's 16:9 stage so the
+ * generated image fills it without cropping. 1536x1024 is the closest landscape
+ * size gpt-image-1 supports; providers that ignore it fall back gracefully.
+ */
+export const YINGHUA_SIZE = '1536x1024';
+
+/**
  * Fidelity prefix — prepended to every yinghua style prompt so the model treats
  * the uploaded art as the character reference and keeps identity intact while
  * stylizing. Surfaced (and editable) in the UI as part of each prompt.

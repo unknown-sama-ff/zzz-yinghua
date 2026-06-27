@@ -22,14 +22,15 @@ export function parseHeaders(raw: string): Record<string, string> {
 export function useBuildRequest() {
   const { provider, uploadedImage, custom, creds } = useStore();
 
-  return (prompt: string, imageOverride?: string): GenRequest => {
-    const image = imageOverride ?? uploadedImage ?? undefined;
+  return (prompt: string, opts?: { imageOverride?: string; size?: string }): GenRequest => {
+    const image = opts?.imageOverride ?? uploadedImage ?? undefined;
     const parsed = image ? parseDataUrl(image) : undefined;
     const req: GenRequest = {
       provider,
       prompt,
       imageBase64: parsed?.base64,
       imageMime: parsed?.mime,
+      size: opts?.size,
       n: 1,
     };
     if (provider === 'seedance' || provider === 'gpt-image') {
