@@ -1,4 +1,0 @@
-:80 {
-	encode gzip
-	reverse_proxy localhost:{env.PORT}
-}
