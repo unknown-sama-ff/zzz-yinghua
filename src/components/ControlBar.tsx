@@ -13,17 +13,24 @@ export function ControlBar({ onToggle }: ControlBarProps) {
   const { parts, setAllParts, setStageVisible } = useStore();
   const stage1 = parts.filter((p) => p.stage === 1);
   const stage2 = parts.filter((p) => p.stage === 2);
+  const allOn = parts.every((p) => p.visible);
 
   return (
     <div className="flex w-20 flex-shrink-0 flex-col items-center gap-3 py-4 sm:w-24">
+      {/* Single toggle: flips all six parts on/off based on current state. */}
       <button
-        onClick={() => setAllParts(true)}
-        className="font-mono text-[10px] tracking-widest text-zzz-cyan hover:text-zzz-text"
+        onClick={() => setAllParts(!allOn)}
+        aria-pressed={allOn}
+        className="glass-btn w-full py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
       >
-        ALL ON
+        {allOn ? 'ALL OFF' : 'ALL ON'}
       </button>
 
-      <StageGroup parts={stage1} onToggle={onToggle} onStage={() => setStageVisible(1, !stage1.every((p) => p.visible))} />
+      <StageGroup
+        parts={stage1}
+        onToggle={onToggle}
+        onStage={() => setStageVisible(1, !stage1.every((p) => p.visible))}
+      />
 
       <div className="flex w-full items-center gap-1 py-1">
         <div className="h-px flex-1 bg-zzz-primary/50" />
@@ -31,14 +38,11 @@ export function ControlBar({ onToggle }: ControlBarProps) {
         <div className="h-px flex-1 bg-zzz-primary/50" />
       </div>
 
-      <StageGroup parts={stage2} onToggle={onToggle} onStage={() => setStageVisible(2, !stage2.every((p) => p.visible))} />
-
-      <button
-        onClick={() => setAllParts(false)}
-        className="font-mono text-[10px] tracking-widest text-zzz-text/55 hover:text-zzz-text"
-      >
-        ALL OFF
-      </button>
+      <StageGroup
+        parts={stage2}
+        onToggle={onToggle}
+        onStage={() => setStageVisible(2, !stage2.every((p) => p.visible))}
+      />
     </div>
   );
 }
@@ -52,16 +56,20 @@ function StageGroup({
   onToggle: (code: string) => void;
   onStage: () => void;
 }) {
+  const allVisible = parts.every((p) => p.visible);
   return (
     <div className="flex w-full flex-col gap-2">
       {parts.map((p) => (
         <PartButton key={p.code} part={p} onToggle={onToggle} />
       ))}
+      {/* Same glass style as the part buttons, just smaller. */}
       <button
         onClick={onStage}
-        className="mt-0.5 font-mono text-[9px] tracking-widest text-zzz-text/55 hover:text-zzz-cyan"
+        aria-pressed={allVisible}
+        data-active={allVisible}
+        className="glass-btn h-7 w-full font-mono text-[10px] tracking-widest text-zzz-text"
       >
-        STAGE ▢
+        STAGE
       </button>
     </div>
   );
