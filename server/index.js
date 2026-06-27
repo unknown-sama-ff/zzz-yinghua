@@ -137,8 +137,8 @@ function loadEnv() {
   }
 }
 
-const server = app.listen(PORT, () => {
-  console.log(`[影画工坊] proxy listening on http://localhost:${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[影画工坊] proxy listening on http://0.0.0.0:${PORT}`);
 });
 
 // Allow long image-to-image requests to complete. Node's default requestTimeout
