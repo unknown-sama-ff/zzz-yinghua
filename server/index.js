@@ -106,17 +106,34 @@ app.post('/api/detect-face', async (req, res) => {
   }
 });
 
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, port: PORT }));
 
 // In production, serve the built frontend from dist/.
 const distDir = path.resolve(__dirname, '..', 'dist');
-if (fs.existsSync(distDir)) {
+const hasDist = fs.existsSync(distDir);
+console.log(`[影画工坊] distDir=${distDir} exists=${hasDist}`);
+
+// Root handler — explicit, no dependency on express.static index resolution.
+app.get('/', (_req, res) => {
+  if (hasDist) return res.sendFile(path.join(distDir, 'index.html'));
+  res.type('html').send('<!DOCTYPE html><html><body><h1>影画工坊</h1><p>dist/ not found</p></body></html>');
+});
+
+if (hasDist) {
   app.use(express.static(distDir));
-  // SPA fallback for client-side routes only — never swallow /api/* so a
-  // mistyped method or unknown API path returns a real 404/JSON error instead
-  // of silently serving index.html.
-  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
+  // SPA fallback for client-side routes — never swallow /api/*
+  app.get(/^(?!\/api\/).*/, (req, _res, next) => {
+    // Only reach here if the path doesn't match a file in dist/
+    if (req.path === '/') return next(); // already handled above
+    _res.sendFile(path.join(distDir, 'index.html'));
+  });
 }
+
+// Global error handler — must not crash the server
+app.use((err, _req, res, _next) => {
+  console.error('[server] unhandled error:', err?.message || err);
+  if (!res.headersSent) res.status(500).json({ ok: false, code: 'UNKNOWN', message: '服务端内部错误' });
+});
 
 function fail(res, status, code, message) {
   return res.status(status).json({ ok: false, code, message });
@@ -138,13 +155,13 @@ function loadEnv() {
 }
 
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[影画工坊] proxy listening on http://0.0.0.0:${PORT}`);
+  console.log(`[影画工坊] proxy listening on http://0.0.0.0:${PORT} dist=${hasDist} node=${process.version}`);
 });
 
-// Allow long image-to-image requests to complete. Node's default requestTimeout
-// (≈300s) would otherwise race the upstream ceiling and sever the connection;
-// give it headroom beyond UPSTREAM_TIMEOUT_MS.
-const upstreamMs = Number(process.env.UPSTREAM_TIMEOUT_MS || 300000);
-server.requestTimeout = upstreamMs + 60000;
-server.headersTimeout = upstreamMs + 60000;
+// Allow long image-to-image requests to complete.
+if (typeof server.requestTimeout === 'number') {
+  const upstreamMs = Number(process.env.UPSTREAM_TIMEOUT_MS || 300000);
+  server.requestTimeout = upstreamMs + 60000;
+  server.headersTimeout = upstreamMs + 60000;
+}
 
