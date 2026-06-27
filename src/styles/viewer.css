@@ -9,10 +9,25 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  /* cover (not contain) so the base and every overlay map to the exact same
+     box — diagonal region clips must align pixel-for-pixel across tiers. */
+  object-fit: cover;
   transition:
     opacity 360ms var(--zzz-ease),
     filter 360ms var(--zzz-ease);
+}
+
+/* Three diagonal bands that together tile the whole stage. Each higher-tier
+   region image is clipped to one band, so toggling buttons reveals that slice
+   of 三命 / 六命 over the 零命 base. */
+.region-0 {
+  clip-path: polygon(0 0, 100% 0, 100% 33%, 0 66%);
+}
+.region-1 {
+  clip-path: polygon(0 66%, 100% 33%, 100% 66%, 0 100%);
+}
+.region-2 {
+  clip-path: polygon(0 100%, 100% 66%, 100% 100%);
 }
 
 .layer-part[data-visible='false'] {

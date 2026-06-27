@@ -10,12 +10,18 @@ import { THREE_VIEW_PROMPT } from '../lib/prompts';
 
 const emptySlot = (): GenSlot => ({ status: 'idle', images: [] });
 
-/** The six viewer parts: stage 1 = 01..03, stage 2 = 04..06. */
+/**
+ * The six viewer parts. Stage 1 (buttons 01-03) reveals the three diagonal
+ * regions of the 三命 image (styleId 2); stage 2 (04-06) reveals the regions of
+ * the 六命 image (styleId 3). Start hidden so the viewer opens on the 零命 base.
+ */
 const initialParts = (): LayerPart[] =>
   Array.from({ length: 6 }, (_, i) => ({
     code: String(i + 1).padStart(2, '0'),
-    stage: i < 3 ? 1 : 2,
-    visible: true,
+    stage: (i < 3 ? 1 : 2) as 1 | 2,
+    styleId: (i < 3 ? 2 : 3) as 2 | 3,
+    region: (i % 3) as 0 | 1 | 2,
+    visible: false,
   }));
 
 export interface CustomProviderConfig {
@@ -42,6 +48,12 @@ interface WorkshopState {
   setProvider: (p: ProviderName) => void;
   custom: CustomProviderConfig;
   setCustom: (patch: Partial<CustomProviderConfig>) => void;
+  // Per-provider credentials, kept in memory only (never persisted to disk).
+  creds: Record<'seedance' | 'gpt-image', { apiKey: string; baseUrl: string; model: string }>;
+  setCred: (
+    provider: 'seedance' | 'gpt-image',
+    patch: Partial<{ apiKey: string; baseUrl: string; model: string }>,
+  ) => void;
 
   // --- Three-view step ---
   threeViewEnabled: boolean;
@@ -60,7 +72,6 @@ interface WorkshopState {
   // --- Viewer ---
   parts: LayerPart[];
   togglePart: (code: string) => void;
-  setPartSrc: (code: string, src: string) => void;
   setAllParts: (visible: boolean) => void;
   setStageVisible: (stage: 1 | 2, visible: boolean) => void;
 }
@@ -81,6 +92,14 @@ export const useStore = create<WorkshopState>((set) => ({
   setProvider: (p) => set({ provider: p }),
   custom: { endpoint: '', headers: '', bodyTemplate: '' },
   setCustom: (patch) => set((s) => ({ custom: { ...s.custom, ...patch } })),
+  creds: {
+    seedance: { apiKey: '', baseUrl: '', model: '' },
+    'gpt-image': { apiKey: '', baseUrl: '', model: '' },
+  },
+  setCred: (provider, patch) =>
+    set((s) => ({
+      creds: { ...s.creds, [provider]: { ...s.creds[provider], ...patch } },
+    })),
 
   threeViewEnabled: true,
   setThreeViewEnabled: (v) => set({ threeViewEnabled: v }),
@@ -105,10 +124,6 @@ export const useStore = create<WorkshopState>((set) => ({
       parts: s.parts.map((p) =>
         p.code === code ? { ...p, visible: !p.visible } : p,
       ),
-    })),
-  setPartSrc: (code, src) =>
-    set((s) => ({
-      parts: s.parts.map((p) => (p.code === code ? { ...p, src } : p)),
     })),
   setAllParts: (visible) =>
     set((s) => ({ parts: s.parts.map((p) => ({ ...p, visible })) })),

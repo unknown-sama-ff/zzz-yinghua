@@ -14,41 +14,42 @@ export default function App() {
   return (
     <div className="min-h-full">
       {/* Header */}
-      <header className="relative overflow-hidden border-b border-zzz-primary/30 px-6 py-6">
+      <header className="relative overflow-hidden px-6 py-8">
         <div
           className="pointer-events-none absolute -right-20 top-0 h-full w-1/2"
           style={{
-            background: 'linear-gradient(120deg, transparent 50%, color-mix(in srgb, var(--zzz-primary) 25%, transparent) 70%)',
-            clipPath: 'polygon(40% 0, 100% 0, 100% 100%, 0 100%)',
+            background:
+              'linear-gradient(120deg, transparent 50%, color-mix(in srgb, var(--zzz-primary) 22%, transparent) 75%)',
           }}
         />
-        <h1 className="zzz-heading text-3xl tracking-widest text-zzz-text sm:text-4xl">
-          影画<span className="text-zzz-primary">工坊</span>
-          <span className="ml-3 font-mono text-sm tracking-[0.3em] text-zzz-magenta">
-            YINGHUA WORKSHOP
-          </span>
-        </h1>
-        <p className="mt-1 font-mono text-xs text-zzz-muted">
-          上传立绘 → 补全三视图 → 生成影画三风格 → ZZZ 风格图层查看器
-          {palette && <span className="ml-2 text-zzz-cyan">// 主题已跟随立绘取色</span>}
-        </p>
+        <div className="mx-auto max-w-6xl">
+          <h1 className="zzz-heading text-4xl tracking-widest text-zzz-text sm:text-5xl">
+            影画<span className="text-zzz-primary">工坊</span>
+            <span className="ml-3 align-middle font-mono text-sm tracking-[0.3em] text-zzz-magenta">
+              YINGHUA WORKSHOP
+            </span>
+          </h1>
+          <p className="mt-2 font-mono text-xs text-zzz-text/55">
+            上传立绘 → 补全三视图 → 生成影画三风格 → ZZZ 风格图层查看器
+            {palette && <span className="ml-2 text-zzz-cyan">// 主题已跟随立绘取色</span>}
+          </p>
+        </div>
       </header>
 
-      <main className="mx-auto grid max-w-7xl grid-cols-1 gap-5 p-5 lg:grid-cols-2">
-        <div className="space-y-5">
+      <main className="mx-auto max-w-6xl space-y-6 px-6 pb-10">
+        {/* Setup row: upload + provider side by side, balanced. */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Uploader />
           <ProviderSelect />
-          <ThreeViewPanel />
         </div>
-        <div className="space-y-5">
-          <YinghuaPanel />
-        </div>
-        <div className="lg:col-span-2">
-          <YinghuaViewer />
-        </div>
+
+        {/* Generation steps, full width, stacked in order. */}
+        <ThreeViewPanel />
+        <YinghuaPanel />
+        <YinghuaViewer />
       </main>
 
-      <footer className="border-t border-zzz-primary/20 p-4 text-center font-mono text-[11px] text-zzz-muted">
+      <footer className="mx-auto max-w-6xl px-6 pb-8 text-center font-mono text-[11px] text-zzz-text/40">
         密钥仅存于服务端 · custom-url 出站经基础 SSRF 校验 · 切换特效程序化复刻
       </footer>
 

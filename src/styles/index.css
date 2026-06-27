@@ -20,6 +20,7 @@
   --zzz-text: #f5f0ff;
   --zzz-text-on: #f5f0ff;
   --zzz-radius: 4px;
+  --zzz-radius-lg: 18px;
   --zzz-shadow: 0 0 12px rgba(176, 38, 255, 0.6);
   --zzz-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
@@ -42,6 +43,24 @@ body,
 
 body {
   background-color: var(--zzz-bg);
+  /* Theme-tinted radial glows behind the glass, so blur has color to refract. */
+  background-image:
+    radial-gradient(
+      60vw 60vw at 12% -10%,
+      color-mix(in srgb, var(--zzz-primary) 28%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      55vw 55vw at 105% 8%,
+      color-mix(in srgb, var(--zzz-magenta) 24%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      70vw 50vw at 50% 115%,
+      color-mix(in srgb, var(--zzz-cyan) 14%, transparent),
+      transparent 60%
+    );
+  background-attachment: fixed;
   color: var(--zzz-text);
   font-family: 'Oswald', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -58,12 +77,12 @@ body::before {
   background-image:
     repeating-linear-gradient(
       0deg,
-      rgba(0, 0, 0, 0.18) 0px,
-      rgba(0, 0, 0, 0.18) 1px,
+      rgba(0, 0, 0, 0.16) 0px,
+      rgba(0, 0, 0, 0.16) 1px,
       transparent 1px,
       transparent 3px
     );
-  opacity: 0.35;
+  opacity: 0.28;
   mix-blend-mode: multiply;
 }
 
@@ -73,11 +92,11 @@ body::before {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--zzz-ink);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--zzz-primary);
-  border-radius: var(--zzz-radius);
+  background: color-mix(in srgb, var(--zzz-primary) 70%, transparent);
+  border-radius: 999px;
 }
 
 /* Color custom-property transitions need @property to animate in most engines;
@@ -100,21 +119,140 @@ body::before {
 
 /* --- Reusable ZZZ component classes --- */
 @layer components {
-  .zzz-panel {
-    background: color-mix(in srgb, var(--zzz-ink) 92%, var(--zzz-primary) 8%);
-    border: 1px solid color-mix(in srgb, var(--zzz-primary) 35%, transparent);
-    border-radius: var(--zzz-radius);
+  /* Liquid-glass surface (approximation of liquid-glass-react in pure CSS:
+     backdrop blur + saturate frost, translucent theme tint, specular inset
+     highlight on the top edge, soft depth shadow, hairline lit border). */
+  .glass {
+    position: relative;
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--zzz-text) 9%, transparent),
+        color-mix(in srgb, var(--zzz-text) 2%, transparent) 40%,
+        transparent 75%
+      ),
+      color-mix(in srgb, var(--zzz-ink) 55%, transparent);
+    backdrop-filter: blur(18px) saturate(150%);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    border: 1px solid color-mix(in srgb, var(--zzz-text) 16%, transparent);
+    border-radius: var(--zzz-radius-lg);
+    box-shadow:
+      inset 0 1px 1px color-mix(in srgb, var(--zzz-text) 35%, transparent),
+      inset 0 -1px 1px color-mix(in srgb, #000 30%, transparent),
+      0 12px 40px color-mix(in srgb, #000 45%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--zzz-primary) 12%, transparent);
   }
 
-  .zzz-clip {
-    /* The signature diagonal-cut corner. */
-    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+  /* A faint top-edge sheen — the "wet" specular line of liquid glass. */
+  .glass::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--zzz-text) 45%, transparent),
+      transparent 35%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Interactive glass (buttons): same frost, springy hover lift. */
+  .glass-btn {
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--zzz-text) 12%, transparent),
+        transparent 70%
+      ),
+      color-mix(in srgb, var(--zzz-ink) 45%, transparent);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid color-mix(in srgb, var(--zzz-text) 18%, transparent);
+    border-radius: 12px;
+    box-shadow:
+      inset 0 1px 1px color-mix(in srgb, var(--zzz-text) 30%, transparent),
+      0 6px 18px color-mix(in srgb, #000 40%, transparent);
+    transition:
+      transform 220ms var(--zzz-ease),
+      box-shadow 220ms var(--zzz-ease),
+      background 220ms var(--zzz-ease),
+      border-color 220ms var(--zzz-ease);
+  }
+  .glass-btn:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--zzz-primary) 60%, transparent);
+    box-shadow:
+      inset 0 1px 1px color-mix(in srgb, var(--zzz-text) 40%, transparent),
+      0 8px 24px color-mix(in srgb, var(--zzz-primary) 30%, transparent);
+  }
+  .glass-btn:active {
+    transform: translateY(0) scale(0.985);
+  }
+  .glass-btn:disabled {
+    opacity: 0.45;
+    transform: none;
+  }
+  /* Active/selected state: theme-colored frost + neon ring. */
+  .glass-btn[data-active='true'] {
+    background:
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--zzz-primary) 42%, transparent),
+        color-mix(in srgb, var(--zzz-magenta) 22%, transparent) 90%
+      );
+    border-color: color-mix(in srgb, var(--zzz-primary) 80%, transparent);
+    box-shadow:
+      inset 0 1px 1px color-mix(in srgb, var(--zzz-text) 45%, transparent),
+      0 0 18px color-mix(in srgb, var(--zzz-primary) 55%, transparent);
+  }
+
+  /* Glassy text input / textarea. */
+  .glass-input {
+    background: color-mix(in srgb, var(--zzz-ink) 50%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid color-mix(in srgb, var(--zzz-text) 14%, transparent);
+    border-radius: 10px;
+    color: var(--zzz-text);
+    transition: border-color 200ms var(--zzz-ease), box-shadow 200ms var(--zzz-ease);
+  }
+  .glass-input:focus {
+    outline: none;
+    border-color: color-mix(in srgb, var(--zzz-primary) 70%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--zzz-primary) 22%, transparent);
   }
 
   .zzz-heading {
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+
+  /* Small numbered step badge used in section headers. */
+  .step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--zzz-text);
+    border-radius: 8px;
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--zzz-primary) 70%, transparent),
+      color-mix(in srgb, var(--zzz-magenta) 60%, transparent)
+    );
+    box-shadow: 0 0 14px color-mix(in srgb, var(--zzz-primary) 45%, transparent);
   }
 }
 

@@ -3,6 +3,7 @@ import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
+import { SectionHeader } from './SectionHeader';
 
 /** Section 2.3 — three-view + close-up generation, with an on/off toggle. */
 export function ThreeViewPanel() {
@@ -34,28 +35,32 @@ export function ThreeViewPanel() {
     }
   };
 
+  const toggle = (
+    <label className="flex cursor-pointer select-none items-center gap-2 font-mono text-xs text-zzz-text/70">
+      <span className="w-12 text-right">{threeViewEnabled ? '已启用' : '已跳过'}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={threeViewEnabled}
+        onClick={() => setThreeViewEnabled(!threeViewEnabled)}
+        className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full px-0.5 transition-colors duration-300 ${
+          threeViewEnabled
+            ? 'bg-zzz-primary'
+            : 'border border-zzz-text/25 bg-zzz-ink/60'
+        }`}
+      >
+        <span
+          className={`h-5 w-5 rounded-full bg-zzz-text shadow transition-transform duration-300 ${
+            threeViewEnabled ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </label>
+  );
+
   return (
-    <section className="zzz-panel zzz-clip p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="zzz-heading text-lg text-zzz-primary">03 · 三视图 + 特写</h2>
-        <label className="flex cursor-pointer items-center gap-2 font-mono text-xs text-zzz-muted">
-          <span>{threeViewEnabled ? '已启用' : '已跳过'}</span>
-          <button
-            role="switch"
-            aria-checked={threeViewEnabled}
-            onClick={() => setThreeViewEnabled(!threeViewEnabled)}
-            className={`relative h-6 w-11 rounded-full transition-colors duration-300 ${
-              threeViewEnabled ? 'bg-zzz-primary' : 'bg-zzz-ink border border-zzz-muted'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-zzz-text transition-transform duration-300 ${
-                threeViewEnabled ? 'translate-x-5' : 'translate-x-0.5'
-              }`}
-            />
-          </button>
-        </label>
-      </div>
+    <section className="glass p-6">
+      <SectionHeader step="03" title="三视图 + 特写" action={toggle} />
 
       {threeViewEnabled ? (
         <>
@@ -63,20 +68,20 @@ export function ThreeViewPanel() {
             value={threeViewPrompt}
             onChange={(e) => setThreeViewPrompt(e.target.value)}
             rows={4}
-            className="w-full resize-y border border-zzz-primary/40 bg-zzz-ink px-3 py-2 text-sm leading-relaxed text-zzz-text outline-none focus:border-zzz-primary"
-            style={{ borderRadius: 'var(--zzz-radius)' }}
+            className="glass-input w-full resize-y px-3 py-2 text-sm leading-relaxed"
           />
           <button
             onClick={() => void run()}
             disabled={threeViewSlot.status === 'loading'}
-            className="zzz-clip mt-3 w-full border border-zzz-primary bg-zzz-primary/20 py-2 font-mono text-sm uppercase tracking-widest text-zzz-text transition hover:bg-zzz-primary/35 disabled:opacity-50"
+            data-active="true"
+            className="glass-btn mt-3 w-full py-2.5 font-mono text-sm uppercase tracking-widest text-zzz-text"
           >
             生成三视图
           </button>
           <ResultView slot={threeViewSlot} downloadPrefix="three-view" />
         </>
       ) : (
-        <p className="font-mono text-xs leading-relaxed text-zzz-muted">
+        <p className="font-mono text-xs leading-relaxed text-zzz-text/60">
           此步已跳过。将直接使用上传的立绘进入影画动作设计。
         </p>
       )}

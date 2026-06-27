@@ -7,8 +7,14 @@ export interface GenRequest {
   provider: ProviderName;
   prompt: string;
   imageBase64?: string;
+  imageMime?: string;
   size?: string;
   n?: number;
+  // Optional per-request credentials (override server .env when provided).
+  // Kept in memory only on the client; never persisted.
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
   // custom-url only:
   customEndpoint?: string;
   customHeaders?: Record<string, string>;
@@ -55,13 +61,23 @@ export interface YinghuaStyle {
   promptTemplate: string;
 }
 
-/** The six independently-toggleable parts of the viewer (2 stages × 3 parts). */
+/**
+ * One of the six independently-toggleable parts of the viewer.
+ * Mechanic (mirrors 六种样式/0~6.png): 零命 (style 1) is the always-on base layer.
+ * 三命 (style 2) overlays on top, diagonally split into 3 regions → buttons 01-03.
+ * 六命 (style 3) overlays above that, split into 3 regions → buttons 04-06.
+ * Toggling a button reveals that diagonal region of the higher-tier image,
+ * progressively building from 零命 up to 六命.
+ */
 export interface LayerPart {
   /** '01'..'06' */
   code: string;
+  /** Which stage group in the control bar (1 = buttons 01-03, 2 = 04-06). */
   stage: 1 | 2;
-  /** Image src for this part, if assigned. */
-  src?: string;
+  /** Which generated image tier this part draws from (2 = 三命, 3 = 六命). */
+  styleId: 2 | 3;
+  /** Diagonal region index within that tier's image (0,1,2 = top→bottom band). */
+  region: 0 | 1 | 2;
   visible: boolean;
 }
 

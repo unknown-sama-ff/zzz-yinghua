@@ -15,10 +15,7 @@ export function ResultView({ slot, downloadPrefix, onPick, pickLabel }: ResultVi
 
   if (slot.status === 'loading') {
     return (
-      <div
-        className="mt-3 flex h-48 animate-pulse items-center justify-center border border-zzz-primary/30 bg-zzz-ink"
-        style={{ borderRadius: 'var(--zzz-radius)' }}
-      >
+      <div className="mt-3 flex h-48 animate-pulse items-center justify-center rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03]">
         <span className="font-mono text-xs tracking-widest text-zzz-primary">
           GENERATING…
         </span>
@@ -28,10 +25,7 @@ export function ResultView({ slot, downloadPrefix, onPick, pickLabel }: ResultVi
 
   if (slot.status === 'error') {
     return (
-      <div
-        className="mt-3 border border-zzz-magenta/60 bg-zzz-ink p-3 font-mono text-xs text-zzz-magenta"
-        style={{ borderRadius: 'var(--zzz-radius)' }}
-      >
+      <div className="mt-3 rounded-xl border border-zzz-magenta/60 bg-zzz-magenta/10 p-3 font-mono text-xs text-zzz-magenta">
         ⚠ {slot.error ?? '生成失败'}
       </div>
     );
@@ -40,7 +34,7 @@ export function ResultView({ slot, downloadPrefix, onPick, pickLabel }: ResultVi
   return (
     <div className="mt-3 grid grid-cols-1 gap-3">
       {slot.images.map((src, i) => (
-        <figure key={i} className="group relative overflow-hidden" style={{ borderRadius: 'var(--zzz-radius)' }}>
+        <figure key={i} className="group relative overflow-hidden rounded-xl">
           <img
             src={src}
             alt={`${downloadPrefix}-${i + 1}`}
@@ -51,14 +45,14 @@ export function ResultView({ slot, downloadPrefix, onPick, pickLabel }: ResultVi
             {onPick && (
               <button
                 onClick={() => onPick(src)}
-                className="zzz-clip border border-zzz-cyan bg-zzz-ink/90 px-3 py-1 text-xs text-zzz-cyan"
+                className="glass-btn px-3 py-1 text-xs text-zzz-cyan"
               >
                 {pickLabel ?? '送入查看器'}
               </button>
             )}
             <button
               onClick={() => void downloadImage(src, `${downloadPrefix}-${i + 1}.png`)}
-              className="zzz-clip border border-zzz-primary bg-zzz-ink/90 px-3 py-1 text-xs text-zzz-primary"
+              className="glass-btn px-3 py-1 text-xs text-zzz-text"
             >
               下载
             </button>

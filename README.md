@@ -59,7 +59,13 @@ npm start              # Node 代理同时托管 dist/ 静态资源
 - `POST /api/generate` — body `{ provider, prompt, imageBase64?, size?, n?, customEndpoint?, customHeaders?, customBodyTemplate? }`
 - 响应：`{ ok: true, images: string[] }` 或 `{ ok: false, code, message }`
 - 错误码：`INVALID_INPUT` `UNAUTHORIZED` `UPSTREAM_TIMEOUT` `UPSTREAM_ERROR` `RATE_LIMITED` `SSRF_BLOCKED`
-- 代理特性：错误归一化、60s 超时、最多 2 次指数退避重试、seedance 长任务轮询。
+- 代理特性：错误归一化、120s 超时（超时不重试）、瞬时错误最多 2 次指数退避重试、seedance 长任务轮询、上游非 JSON 响应容错。
+
+## 角色保真（让生图严格参考上传立绘）
+
+- **gpt-image**：有上传图时走 `/images/edits`（multipart 上传图片文件），使立绘真正作为图生图条件；无图时回退 `/images/generations` 纯文生图。需所用模型支持图像编辑。
+- **seedance / custom-url**：以 base64 随请求体发送图片（`image` 字段 / `{image}` 占位）。
+- **提示词保真前缀**：三种影画风格与三视图提示词均强约束「保留上传角色的面部、发型发色、服装与配色，确保同一角色」，在 UI 文本框可见且可微调（见 `src/lib/prompts.ts` 的 `FIDELITY_PREFIX`）。
 
 ## 部署到 Vercel
 

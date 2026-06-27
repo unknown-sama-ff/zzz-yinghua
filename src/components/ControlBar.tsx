@@ -35,7 +35,7 @@ export function ControlBar({ onToggle }: ControlBarProps) {
 
       <button
         onClick={() => setAllParts(false)}
-        className="font-mono text-[10px] tracking-widest text-zzz-muted hover:text-zzz-text"
+        className="font-mono text-[10px] tracking-widest text-zzz-text/55 hover:text-zzz-text"
       >
         ALL OFF
       </button>
@@ -59,7 +59,7 @@ function StageGroup({
       ))}
       <button
         onClick={onStage}
-        className="mt-0.5 font-mono text-[9px] tracking-widest text-zzz-muted hover:text-zzz-cyan"
+        className="mt-0.5 font-mono text-[9px] tracking-widest text-zzz-text/55 hover:text-zzz-cyan"
       >
         STAGE ▢
       </button>
@@ -74,19 +74,13 @@ function PartButton({ part, onToggle }: { part: LayerPart; onToggle: (code: stri
       onClick={() => onToggle(part.code)}
       aria-pressed={active}
       aria-label={`部分 ${part.code} ${active ? '已显示' : '已隐藏'}`}
-      className="group relative h-12 w-full font-mono text-sm font-bold transition-all duration-200"
-      style={{
-        clipPath: 'polygon(0 0, 100% 0, 100% 70%, 85% 100%, 0 100%)',
-        background: active ? 'color-mix(in srgb, var(--zzz-primary) 30%, var(--zzz-ink))' : 'var(--zzz-ink)',
-        border: `1px solid ${active ? 'var(--zzz-primary)' : 'color-mix(in srgb, var(--zzz-muted) 60%, transparent)'}`,
-        boxShadow: active ? 'var(--zzz-shadow)' : 'none',
-        color: active ? 'var(--zzz-text)' : 'var(--zzz-muted)',
-      }}
+      data-active={active}
+      className="glass-btn group relative h-12 w-full font-mono text-sm font-bold text-zzz-text"
     >
-      {part.code}
+      <span className={active ? 'text-zzz-text' : 'text-zzz-text/50'}>{part.code}</span>
       {active && (
         <span
-          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
+          className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full"
           style={{ background: 'var(--zzz-cyan)', boxShadow: '0 0 6px var(--zzz-cyan)' }}
         />
       )}

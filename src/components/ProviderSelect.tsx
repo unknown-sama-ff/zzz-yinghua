@@ -1,10 +1,11 @@
 import { useStore } from '../store/useStore';
 import type { ProviderName } from '../types';
+import { SectionHeader } from './SectionHeader';
 
 const PROVIDERS: { value: ProviderName; label: string }[] = [
   { value: 'seedance', label: 'seedance' },
   { value: 'gpt-image', label: 'gpt-image' },
-  { value: 'custom-url', label: 'custom-url' },
+  { value: 'custom-url', label: '自定义URL' },
 ];
 
 /** Provider dropdown + character name; expands custom-url config when chosen. */
@@ -16,52 +17,99 @@ export function ProviderSelect() {
     setCustom,
     characterName,
     setCharacterName,
+    creds,
+    setCred,
   } = useStore();
 
-  return (
-    <section className="zzz-panel zzz-clip p-5">
-      <h2 className="zzz-heading mb-3 text-lg text-zzz-primary">02 · 接口与角色</h2>
+  const isKeyed = provider === 'seedance' || provider === 'gpt-image';
+  const baseUrlPlaceholder =
+    provider === 'gpt-image'
+      ? 'https://api.openai.com/v1（可留空用默认）'
+      : 'https://api.seedance.example/v1';
 
-      <label className="mb-1 block font-mono text-xs text-zzz-muted">角色英文名</label>
+  return (
+    <section className="glass p-6">
+      <SectionHeader step="02" title="接口与角色" />
+
+      <label className="mb-1 block font-mono text-xs text-zzz-text/60">角色英文名</label>
       <input
         value={characterName}
         onChange={(e) => setCharacterName(e.target.value)}
         placeholder="CORIN"
-        className="mb-4 w-full border border-zzz-primary/40 bg-zzz-ink px-3 py-2 font-mono uppercase tracking-widest text-zzz-text outline-none focus:border-zzz-primary"
-        style={{ borderRadius: 'var(--zzz-radius)' }}
+        className="glass-input mb-4 w-full px-3 py-2 font-mono uppercase tracking-widest"
       />
 
-      <label className="mb-1 block font-mono text-xs text-zzz-muted">Provider</label>
+      <label className="mb-1 block font-mono text-xs text-zzz-text/60">Provider</label>
       <div className="flex gap-2">
         {PROVIDERS.map((p) => (
           <button
             key={p.value}
             onClick={() => setProvider(p.value)}
-            className={`zzz-clip flex-1 border px-2 py-2 font-mono text-xs uppercase transition ${
-              provider === p.value
-                ? 'border-zzz-primary bg-zzz-primary/25 text-zzz-text shadow-zzz'
-                : 'border-zzz-primary/30 text-zzz-muted hover:text-zzz-text'
-            }`}
+            data-active={provider === p.value}
+            className="glass-btn flex-1 px-2 py-2.5 font-mono text-xs text-zzz-text"
           >
             {p.label}
           </button>
         ))}
       </div>
 
-      {provider === 'custom-url' && (
-        <div className="mt-4 space-y-3 border-t border-zzz-primary/20 pt-4">
+      {isKeyed && (
+        <div className="mt-4 space-y-3 border-t border-zzz-text/10 pt-4">
           <div>
-            <label className="mb-1 block font-mono text-xs text-zzz-muted">Endpoint URL</label>
+            <label className="mb-1 block font-mono text-xs text-zzz-text/60">
+              API Key // {provider}
+            </label>
+            <input
+              type="password"
+              autoComplete="off"
+              value={creds[provider].apiKey}
+              onChange={(e) => setCred(provider, { apiKey: e.target.value })}
+              placeholder={provider === 'gpt-image' ? 'sk-...' : '你的 seedance 密钥'}
+              className="glass-input w-full px-3 py-2 font-mono text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block font-mono text-xs text-zzz-text/60">
+              Base URL // 可选
+            </label>
+            <input
+              value={creds[provider].baseUrl}
+              onChange={(e) => setCred(provider, { baseUrl: e.target.value })}
+              placeholder={baseUrlPlaceholder}
+              className="glass-input w-full px-3 py-2 font-mono text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block font-mono text-xs text-zzz-text/60">
+              模型名称 // 可选
+            </label>
+            <input
+              value={creds[provider].model}
+              onChange={(e) => setCred(provider, { model: e.target.value })}
+              placeholder={provider === 'gpt-image' ? 'gpt-image-1（默认）' : '如 seedance-v1'}
+              className="glass-input w-full px-3 py-2 font-mono text-sm"
+            />
+          </div>
+          <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
+            🔒 密钥仅保存在当前浏览器会话内存，不写入磁盘、不随项目提交；随请求发送到本地后端代理转发上游。
+            留空则回退到服务端 .env 配置。
+          </p>
+        </div>
+      )}
+
+      {provider === 'custom-url' && (
+        <div className="mt-4 space-y-3 border-t border-zzz-text/10 pt-4">
+          <div>
+            <label className="mb-1 block font-mono text-xs text-zzz-text/60">Endpoint URL</label>
             <input
               value={custom.endpoint}
               onChange={(e) => setCustom({ endpoint: e.target.value })}
               placeholder="https://api.example.com/v1/images"
-              className="w-full border border-zzz-primary/40 bg-zzz-ink px-3 py-2 font-mono text-sm text-zzz-text outline-none focus:border-zzz-primary"
-              style={{ borderRadius: 'var(--zzz-radius)' }}
+              className="glass-input w-full px-3 py-2 font-mono text-sm"
             />
           </div>
           <div>
-            <label className="mb-1 block font-mono text-xs text-zzz-muted">
+            <label className="mb-1 block font-mono text-xs text-zzz-text/60">
               请求头 // 每行 Key: Value
             </label>
             <textarea
@@ -69,24 +117,22 @@ export function ProviderSelect() {
               onChange={(e) => setCustom({ headers: e.target.value })}
               placeholder={'Authorization: Bearer sk-...\nX-Custom: value'}
               rows={3}
-              className="w-full resize-y border border-zzz-primary/40 bg-zzz-ink px-3 py-2 font-mono text-xs text-zzz-text outline-none focus:border-zzz-primary"
-              style={{ borderRadius: 'var(--zzz-radius)' }}
+              className="glass-input w-full resize-y px-3 py-2 font-mono text-xs"
             />
           </div>
           <div>
-            <label className="mb-1 block font-mono text-xs text-zzz-muted">
-              请求体模板 // 可用 {'{prompt}'} {'{image}'} 占位
+            <label className="mb-1 block font-mono text-xs text-zzz-text/60">
+              请求体模板 // 可用 {'{prompt}'} {'{image}'} {'{model}'} 占位
             </label>
             <textarea
               value={custom.bodyTemplate}
               onChange={(e) => setCustom({ bodyTemplate: e.target.value })}
               placeholder={'{"prompt":"{prompt}","image":"{image}"}'}
               rows={3}
-              className="w-full resize-y border border-zzz-primary/40 bg-zzz-ink px-3 py-2 font-mono text-xs text-zzz-text outline-none focus:border-zzz-primary"
-              style={{ borderRadius: 'var(--zzz-radius)' }}
+              className="glass-input w-full resize-y px-3 py-2 font-mono text-xs"
             />
           </div>
-          <p className="font-mono text-[11px] leading-relaxed text-zzz-muted">
+          <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
             ⚠ 仅填可信端点。后端会拦截指向 localhost / 内网地址的请求（基础 SSRF 防护）。
           </p>
         </div>

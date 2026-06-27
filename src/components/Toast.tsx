@@ -15,7 +15,7 @@ export function Toast({ message, onClose }: ToastProps) {
   return (
     <div
       role="alert"
-      className="fixed bottom-6 left-1/2 z-[10000] -translate-x-1/2 zzz-clip border border-zzz-magenta bg-zzz-ink px-5 py-3 shadow-zzz"
+      className="glass fixed bottom-6 left-1/2 z-[10000] -translate-x-1/2 px-5 py-3"
       style={{ borderColor: 'var(--zzz-magenta)' }}
     >
       <div className="flex items-center gap-3">
@@ -26,7 +26,7 @@ export function Toast({ message, onClose }: ToastProps) {
         <button
           onClick={onClose}
           aria-label="关闭提示"
-          className="ml-2 font-mono text-zzz-muted hover:text-zzz-text"
+          className="ml-2 font-mono text-zzz-text/50 hover:text-zzz-text"
         >
           ✕
         </button>

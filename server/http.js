@@ -1,6 +1,8 @@
 // Shared helpers for the Node proxy: fetch with timeout + retry, and SSRF guard.
 
-const DEFAULT_TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 60000);
+// Image generation is routinely slow (30–120s), so the per-request ceiling is
+// generous by default. Override with UPSTREAM_TIMEOUT_MS in .env if needed.
+const DEFAULT_TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 120000);
 
 /** Normalized upstream error carrying a stable code for the client. */
 export class UpstreamError extends Error {
@@ -35,8 +37,14 @@ export async function withRetry(fn, retries = 2) {
       return await fn();
     } catch (err) {
       lastErr = err;
-      // Don't retry client-caused errors.
-      if (err instanceof UpstreamError && [400, 401, 403].includes(err.status)) {
+      // Don't retry client-caused errors, nor timeouts: retrying a full
+      // request that already ran to the timeout ceiling just multiplies the
+      // user's wait (e.g. 3 × 120s) and rarely succeeds. Retry only transient
+      // network / 5xx upstream failures.
+      if (
+        err instanceof UpstreamError &&
+        ([400, 401, 403].includes(err.status) || err.code === 'UPSTREAM_TIMEOUT')
+      ) {
         throw err;
       }
       if (attempt < retries) {
@@ -92,4 +100,22 @@ export function codeFromStatus(status) {
   if (status === 429) return 'RATE_LIMITED';
   if (status === 408 || status === 504) return 'UPSTREAM_TIMEOUT';
   return 'UPSTREAM_ERROR';
+}
+
+/**
+ * Parse a Response as JSON, but fail cleanly when the upstream returns HTML or
+ * other non-JSON (wrong Base URL, login/404 page, gateway error page). Without
+ * this, res.json() throws a raw SyntaxError that surfaces as an opaque UNKNOWN.
+ */
+export async function parseJsonSafe(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const snippet = text.trim().slice(0, 120).replace(/\s+/g, ' ');
+    throw new UpstreamError(
+      'UPSTREAM_ERROR',
+      `上游返回了非 JSON 响应（检查 Base URL / 端点是否正确）：${snippet || '空响应'}`,
+    );
+  }
 }

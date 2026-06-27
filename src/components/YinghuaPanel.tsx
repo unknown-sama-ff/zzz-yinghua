@@ -5,6 +5,7 @@ import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, fillName } from '../lib/prompts';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
+import { SectionHeader } from './SectionHeader';
 import type { YinghuaStyleId } from '../types';
 
 /** Section 2.4 — generate the three ZZZ yinghua action styles. */
@@ -16,8 +17,6 @@ export function YinghuaPanel() {
     yinghuaSlots,
     setYinghuaSlot,
     uploadedImage,
-    parts,
-    setPartSrc,
   } = useStore();
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
@@ -56,45 +55,34 @@ export function YinghuaPanel() {
     }
   };
 
-  // Assign a picked image to the first part that has no source yet.
-  const sendToViewer = (src: string) => {
-    const target = parts.find((p) => !p.src);
-    if (!target) {
-      showError('查看器 6 个部分已全部分配，可在查看器中替换');
-      return;
-    }
-    setPartSrc(target.code, src);
-  };
-
   return (
-    <section className="zzz-panel zzz-clip p-5">
-      <h2 className="zzz-heading mb-3 text-lg text-zzz-primary">04 · 影画动作设计 · 三风格</h2>
+    <section className="glass p-6">
+      <SectionHeader step="04" title="影画动作设计 · 三风格" />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {YINGHUA_STYLES.map((style) => (
-          <div key={style.id} className="flex flex-col border border-zzz-primary/25 p-3" style={{ borderRadius: 'var(--zzz-radius)' }}>
-            <h3 className="font-mono text-sm text-zzz-magenta">
-              样式 {style.id} · {style.label}
-            </h3>
-            <p className="mb-2 mt-1 text-xs leading-relaxed text-zzz-muted">{style.description}</p>
+          <div
+            key={style.id}
+            className="flex flex-col rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03] p-3"
+          >
+            <h3 className="font-mono text-sm font-bold text-zzz-magenta">{style.label}</h3>
+            <p className="mb-2 mt-1 text-xs leading-relaxed text-zzz-text/55">{style.description}</p>
             <textarea
               value={yinghuaPrompts[style.id]}
               onChange={(e) => setYinghuaPrompt(style.id, e.target.value)}
               rows={5}
-              className="w-full flex-1 resize-y border border-zzz-primary/30 bg-zzz-ink px-2 py-2 text-xs leading-relaxed text-zzz-text outline-none focus:border-zzz-primary"
-              style={{ borderRadius: 'var(--zzz-radius)' }}
+              className="glass-input w-full flex-1 resize-y px-2 py-2 text-xs leading-relaxed"
             />
             <button
               onClick={() => void run(style.id)}
               disabled={yinghuaSlots[style.id].status === 'loading'}
-              className="zzz-clip mt-2 border border-zzz-primary bg-zzz-primary/20 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text transition hover:bg-zzz-primary/35 disabled:opacity-50"
+              data-active="true"
+              className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text"
             >
               生成
             </button>
             <ResultView
               slot={yinghuaSlots[style.id]}
               downloadPrefix={`yinghua-style${style.id}`}
-              onPick={sendToViewer}
-              pickLabel="→ 查看器"
             />
           </div>
         ))}

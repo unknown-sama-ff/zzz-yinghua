@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { ControlBar } from './ControlBar';
-import { LayerSlots } from './LayerSlots';
 import '../styles/viewer.css';
 
 const prefersReducedMotion = () =>
@@ -9,15 +8,18 @@ const prefersReducedMotion = () =>
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 /**
- * Section 3 — the ZZZ yinghua viewer. Stacked image layers controlled by the
- * 6-button bar; each toggle fires a programmatic transition (scanline sweep +
- * glitch + glow) over the stage. Honors prefers-reduced-motion.
+ * Section 3 — the ZZZ yinghua viewer. Mirrors 六种样式/0~6.png:
+ *  - 零命 (yinghua style 1) is the always-on base layer filling the stage.
+ *  - 三命 (style 2) overlays on top, diagonally split into 3 regions → 01-03.
+ *  - 六命 (style 3) overlays above that, split into 3 regions → 04-06.
+ * Toggling a button reveals that diagonal region of the higher-tier image, so
+ * the picture builds progressively from 零命 up to a full 六命, with a
+ * programmatic transition (scanline sweep + glitch). Honors reduced-motion.
  */
 export function YinghuaViewer() {
-  const { parts, togglePart, characterName } = useStore();
+  const { parts, togglePart, characterName, yinghuaSlots } = useStore();
   const [sweeping, setSweeping] = useState(false);
   const [glitch, setGlitch] = useState(false);
-  const stageRef = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
 
   useEffect(() => {
@@ -28,8 +30,6 @@ export function YinghuaViewer() {
     (code: string) => {
       togglePart(code);
       if (prefersReducedMotion()) return; // plain fade via CSS only
-
-      // Fire the sweep + brief glitch shake, then clear.
       setSweeping(true);
       setGlitch(true);
       timers.current.push(
@@ -41,12 +41,17 @@ export function YinghuaViewer() {
   );
 
   const name = (characterName || 'YINGHUA').toUpperCase();
-  const hasAnySrc = parts.some((p) => p.src);
+
+  // The three generated tiers; first image of each yinghua style slot.
+  const tierImage = (id: 1 | 2 | 3): string | undefined => yinghuaSlots[id].images[0];
+  const baseImg = tierImage(1); // 零命
+  const hasBase = Boolean(baseImg);
 
   return (
-    <section className="zzz-panel zzz-clip overflow-hidden">
-      <h2 className="zzz-heading border-b border-zzz-primary/20 p-4 text-lg text-zzz-primary">
-        05 · 影画查看器
+    <section className="glass overflow-hidden">
+      <h2 className="zzz-heading flex items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text">
+        <span className="step-badge">05</span>
+        影画查看器
       </h2>
 
       <div className="flex">
@@ -54,7 +59,6 @@ export function YinghuaViewer() {
 
         {/* Main stage */}
         <div
-          ref={stageRef}
           className={`relative aspect-[4/5] flex-1 overflow-hidden bg-zzz-bg sm:aspect-video ${glitch ? 'fx-glitch' : ''}`}
         >
           {/* Oversized background name typography */}
@@ -76,37 +80,48 @@ export function YinghuaViewer() {
             }}
           />
 
-          {/* Stacked layers */}
-          {parts.map((p) =>
-            p.src ? (
+          {/* 零命 base layer — always visible when generated */}
+          {baseImg && (
+            <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />
+          )}
+
+          {/* 三命 / 六命 diagonal regions, revealed per toggled button */}
+          {parts.map((p) => {
+            const src = tierImage(p.styleId);
+            if (!src || !p.visible) return null;
+            return (
               <img
                 key={p.code}
-                src={p.src}
-                alt={`图层 ${p.code}`}
-                data-visible={p.visible}
-                className={`layer-part ${p.visible ? 'fx-enter' : 'fx-exit'}`}
+                src={src}
+                alt={`${p.styleId === 2 ? '三命' : '六命'} 区域 ${p.code}`}
+                data-visible="true"
+                className={`layer-part region-${p.region} fx-enter`}
                 loading="lazy"
               />
-            ) : null,
-          )}
+            );
+          })}
 
           {/* Transition sweep overlay */}
           {sweeping && <div className="fx-sweep" />}
 
           {/* Empty-state hint */}
-          {!hasAnySrc && (
+          {!hasBase && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <p className="zzz-clip border border-zzz-primary/40 bg-zzz-ink/80 px-4 py-2 text-center font-mono text-xs text-zzz-muted">
-                尚未分配图层 // 在下方为 6 个部分指定图片，
-                <br />或在影画结果中点击「→ 查看器」
+              <p className="glass px-4 py-2 text-center font-mono text-xs text-zzz-text/70">
+                尚未生成影画 // 先在上方 04 模块生成三种风格
+                <br />（零命=底图，三命/六命=按钮揭示的对角区域）
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Per-part source assignment */}
-      <LayerSlots />
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1 border-t border-zzz-text/10 p-3 font-mono text-[11px] text-zzz-text/55">
+        <span>零命 = 底图（始终显示）</span>
+        <span>01–03 = 三命的三块对角区域</span>
+        <span>04–06 = 六命的三块对角区域</span>
+      </div>
     </section>
   );
 }

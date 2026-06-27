@@ -5,6 +5,7 @@ import {
   codeFromStatus,
   assertSafeUrl,
   sleep,
+  parseJsonSafe,
 } from './http.js';
 
 /**
@@ -41,10 +42,10 @@ function pluckImages(json) {
 // seedance — image-to-image / edit endpoint, may return a task_id to poll.
 // ---------------------------------------------------------------------------
 async function seedance(req) {
-  const key = process.env.SEEDANCE_API_KEY;
-  const base = process.env.SEEDANCE_BASE_URL;
+  const key = req.apiKey || process.env.SEEDANCE_API_KEY;
+  const base = req.baseUrl || process.env.SEEDANCE_BASE_URL;
   if (!key || !base) {
-    throw new UpstreamError('UNAUTHORIZED', 'seedance 未配置 SEEDANCE_API_KEY / SEEDANCE_BASE_URL', 401);
+    throw new UpstreamError('UNAUTHORIZED', 'seedance 缺少密钥或 Base URL（前端输入或服务端 .env 二选一）', 401);
   }
   const body = {
     prompt: req.prompt,
@@ -52,6 +53,7 @@ async function seedance(req) {
     size: req.size || '1024x1024',
     n: req.n || 1,
   };
+  if (req.model) body.model = req.model;
   const json = await withRetry(async () => {
     const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/images/edits`, {
       method: 'POST',
@@ -61,7 +63,7 @@ async function seedance(req) {
     if (!res.ok) {
       throw new UpstreamError(codeFromStatus(res.status), `seedance 返回 ${res.status}`, res.status);
     }
-    return res.json();
+    return parseJsonSafe(res);
   });
 
   // Long-task: poll if a task id is returned instead of images.
@@ -73,7 +75,7 @@ async function seedance(req) {
   return { images: pluckImages(json), raw: json };
 }
 
-async function pollSeedanceTask(base, key, taskId, maxMs = 60000) {
+async function pollSeedanceTask(base, key, taskId, maxMs = 180000) {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     await sleep(2000);
@@ -81,7 +83,7 @@ async function pollSeedanceTask(base, key, taskId, maxMs = 60000) {
       headers: { Authorization: `Bearer ${key}` },
     });
     if (!res.ok) continue;
-    const json = await res.json();
+    const json = await parseJsonSafe(res);
     const status = json.status || json.state;
     if (status === 'succeeded' || status === 'completed' || status === 'success') {
       return pluckImages(json);
@@ -94,24 +96,51 @@ async function pollSeedanceTask(base, key, taskId, maxMs = 60000) {
 }
 
 // ---------------------------------------------------------------------------
-// gpt-image — OpenAI gpt-image-1 generation endpoint.
+// gpt-image — OpenAI gpt-image-1. Uses the image-edit endpoint (multipart) when
+// an input image is present so the upload actually conditions the result;
+// falls back to text-only generations when no image was provided.
 // ---------------------------------------------------------------------------
 async function gptImage(req) {
-  const key = process.env.OPENAI_API_KEY;
-  const base = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+  const key = req.apiKey || process.env.OPENAI_API_KEY;
+  const base = req.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
   if (!key) {
-    throw new UpstreamError('UNAUTHORIZED', 'gpt-image 未配置 OPENAI_API_KEY', 401);
+    throw new UpstreamError('UNAUTHORIZED', 'gpt-image 缺少密钥（前端输入或服务端 OPENAI_API_KEY 二选一）', 401);
   }
-  // gpt-image-1 generations: prompt-driven (image input via the edits endpoint
-  // requires multipart; we use generations for broad compatibility).
-  const body = {
-    model: 'gpt-image-1',
-    prompt: req.prompt,
-    size: req.size || '1024x1024',
-    n: req.n || 1,
-  };
+  const model = req.model || 'gpt-image-1';
+  const size = req.size || '1024x1024';
+  const n = req.n || 1;
+  const root = base.replace(/\/$/, '');
+
+  // With an input image → /images/edits as multipart/form-data.
+  if (req.imageBase64) {
+    const buffer = Buffer.from(req.imageBase64, 'base64');
+    const blob = new Blob([buffer], { type: req.imageMime || 'image/png' });
+    const form = new FormData();
+    form.append('model', model);
+    form.append('prompt', req.prompt);
+    form.append('size', size);
+    form.append('n', String(n));
+    form.append('image', blob, 'image.png');
+
+    const json = await withRetry(async () => {
+      const res = await fetchWithTimeout(`${root}/images/edits`, {
+        method: 'POST',
+        // Do NOT set Content-Type — fetch adds the multipart boundary itself.
+        headers: { Authorization: `Bearer ${key}` },
+        body: form,
+      });
+      if (!res.ok) {
+        throw new UpstreamError(codeFromStatus(res.status), `gpt-image 返回 ${res.status}`, res.status);
+      }
+      return parseJsonSafe(res);
+    });
+    return { images: pluckImages(json), raw: json };
+  }
+
+  // No image → text-only generations.
+  const body = { model, prompt: req.prompt, size, n };
   const json = await withRetry(async () => {
-    const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/images/generations`, {
+    const res = await fetchWithTimeout(`${root}/images/generations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(body),
@@ -119,7 +148,7 @@ async function gptImage(req) {
     if (!res.ok) {
       throw new UpstreamError(codeFromStatus(res.status), `gpt-image 返回 ${res.status}`, res.status);
     }
-    return res.json();
+    return parseJsonSafe(res);
   });
   return { images: pluckImages(json), raw: json };
 }
@@ -138,10 +167,16 @@ async function customUrl(req) {
   if (req.customBodyTemplate) {
     const filled = req.customBodyTemplate
       .replaceAll('{prompt}', JSON.stringify(req.prompt).slice(1, -1))
-      .replaceAll('{image}', req.imageBase64 || '');
+      .replaceAll('{image}', req.imageBase64 || '')
+      .replaceAll('{model}', req.model || '');
     body = filled;
   } else {
-    body = JSON.stringify({ prompt: req.prompt, image: req.imageBase64, n: req.n || 1 });
+    body = JSON.stringify({
+      prompt: req.prompt,
+      image: req.imageBase64,
+      n: req.n || 1,
+      ...(req.model ? { model: req.model } : {}),
+    });
   }
 
   const json = await withRetry(async () => {
@@ -153,7 +188,7 @@ async function customUrl(req) {
     if (!res.ok) {
       throw new UpstreamError(codeFromStatus(res.status), `自定义端点返回 ${res.status}`, res.status);
     }
-    return res.json();
+    return parseJsonSafe(res);
   });
   return { images: pluckImages(json), raw: json };
 }

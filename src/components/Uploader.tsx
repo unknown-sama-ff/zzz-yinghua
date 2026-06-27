@@ -4,6 +4,7 @@ import { useToast } from '../store/useToast';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
 import { extractPalette } from '../lib/colorExtract';
 import { applyTheme, resetTheme } from '../lib/theme';
+import { SectionHeader } from './SectionHeader';
 
 /** Image upload with drag/drop, validation, preview and palette extraction. */
 export function Uploader() {
@@ -46,8 +47,8 @@ export function Uploader() {
   };
 
   return (
-    <section className="zzz-panel zzz-clip p-5">
-      <h2 className="zzz-heading mb-3 text-lg text-zzz-primary">01 · 上传立绘</h2>
+    <section className="glass p-6">
+      <SectionHeader step="01" title="上传立绘" />
 
       {!uploadedImage ? (
         <div
@@ -64,18 +65,19 @@ export function Uploader() {
           }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
-          className={`flex h-56 cursor-pointer flex-col items-center justify-center border-2 border-dashed transition-colors duration-300 ${
-            dragging ? 'border-zzz-magenta bg-zzz-ink/60' : 'border-zzz-primary/40'
+          className={`flex h-56 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed transition-colors duration-300 ${
+            dragging
+              ? 'border-zzz-magenta bg-zzz-text/5'
+              : 'border-zzz-text/20 hover:border-zzz-primary/60'
           }`}
-          style={{ borderRadius: 'var(--zzz-radius)' }}
         >
           <span className="mb-2 text-4xl text-zzz-primary">⬆</span>
           <p className="text-sm text-zzz-text">拖拽图片到此 // 或点击选择</p>
-          <p className="mt-1 font-mono text-xs text-zzz-muted">PNG · JPEG · WEBP · ≤10MB</p>
+          <p className="mt-1 font-mono text-xs text-zzz-text/50">PNG · JPEG · WEBP · ≤10MB</p>
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="relative overflow-hidden" style={{ borderRadius: 'var(--zzz-radius)' }}>
+          <div className="relative overflow-hidden rounded-xl">
             <img
               src={uploadedImage}
               alt={uploadedName ?? '已上传图片'}
@@ -84,17 +86,17 @@ export function Uploader() {
             />
           </div>
           <div className="flex items-center justify-between">
-            <span className="truncate font-mono text-xs text-zzz-muted">{uploadedName}</span>
+            <span className="truncate font-mono text-xs text-zzz-text/50">{uploadedName}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => inputRef.current?.click()}
-                className="zzz-clip border border-zzz-primary px-3 py-1 text-xs text-zzz-primary transition hover:bg-zzz-primary/20"
+                className="glass-btn px-3 py-1.5 text-xs text-zzz-text"
               >
                 更换
               </button>
               <button
                 onClick={onClear}
-                className="zzz-clip border border-zzz-muted px-3 py-1 text-xs text-zzz-muted transition hover:text-zzz-text"
+                className="glass-btn px-3 py-1.5 text-xs text-zzz-text/70"
               >
                 清除
               </button>
