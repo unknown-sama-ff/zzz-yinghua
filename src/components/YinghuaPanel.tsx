@@ -61,6 +61,7 @@ export function YinghuaPanel() {
       const bounds = await detectFace(parsed.base64, parsed.mime, {
         apiKey: visionCred.apiKey || undefined,
         baseUrl: visionCred.baseUrl || undefined,
+        model: visionCred.model || undefined,
       });
       setViewerClipRegions(computeClipRegions(bounds.faceTop, bounds.faceBottom));
     } catch (err) {
@@ -73,11 +74,26 @@ export function YinghuaPanel() {
       showError('请先上传角色正面图片');
       return;
     }
+    // Chain styles so the character stays in the same pose/position: 零命 (id=1)
+    // generates from the main portrait; 三命/六命 take 零命's output as their
+    // image-to-image input. Falls back to the main portrait if 零命 isn't ready.
+    let imageOverride: string | undefined;
+    if (id !== 1) {
+      const baseImg = yinghuaSlots[1].images[0];
+      if (!baseImg) {
+        showError('请先生成零命，三命/六命会以零命结果为基准锁定姿势');
+        return;
+      }
+      imageOverride = baseImg;
+    }
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
-      const images = await generate(buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE }));
+      const images = await generate(
+        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride }),
+      );
       setYinghuaSlot(id, { status: 'done', images });
-      if (id === 1 && images[0]) void runFaceDetect(images[0]);
+      // 六命是全彩完整图，脸部辨识度最高，优先用它做人脸检测
+      if ((id === 3 || (id === 1 && !yinghuaSlots[3].images[0])) && images[0]) void runFaceDetect(images[0]);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
       setYinghuaSlot(id, { status: 'error', error: msg });
@@ -88,8 +104,24 @@ export function YinghuaPanel() {
   return (
     <section className="glass p-6">
       <SectionHeader step="04" title="影画动作设计 · 三风格" />
+      <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
+        <p className="mb-1.5 text-zzz-primary/80">
+          ⛓ 先生成「零命」，三命/六命会自动以零命结果为基准锁定角色姿势与位置，三张构图保持一致。
+        </p>
+        <p>
+          默认不在图中生成文字（角色名由查看器自动叠加）。想在画面内生成文字的，把下方 prompt 里的
+          <span className="mx-1 rounded bg-zzz-text/10 px-1 text-zzz-text/80">画面整洁不含任何文字</span>
+          替换成下面这段（直接复制粘贴，把英文名改成你的角色名）：
+        </p>
+        <code className="mt-2 block select-all rounded bg-zzz-ink/50 px-2 py-1.5 text-zzz-primary/90">
+          图片顶部左侧超大做旧印刷体英文「YINGHUA」，图片底部右侧超大做旧印刷体英文「WORKSHOP」，角色脸部清晰不被文字遮挡，底部一行小字星级副标题信息
+        </code>
+      </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {YINGHUA_STYLES.map((style) => (
+        {YINGHUA_STYLES.map((style) => {
+          const baseReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
+          const needsBase = style.id !== 1 && !baseReady;
+          return (
           <div
             key={style.id}
             className="flex flex-col rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03] p-3"
@@ -104,17 +136,18 @@ export function YinghuaPanel() {
             />
             <button
               onClick={() => void run(style.id)}
-              disabled={yinghuaSlots[style.id].status === 'loading'}
-              className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text"
+              disabled={yinghuaSlots[style.id].status === 'loading' || needsBase}
+              className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
             >
-              生成
+              {needsBase ? '需先生成零命' : '生成'}
             </button>
             <ResultView
               slot={yinghuaSlots[style.id]}
               downloadPrefix={`yinghua-style${style.id}`}
             />
           </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

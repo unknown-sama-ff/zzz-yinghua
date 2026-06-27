@@ -31,6 +31,7 @@ export function YinghuaViewer() {
   const showError = useToast((s) => s.show);
   const [sweeping, setSweeping] = useState(false);
   const [glitch, setGlitch] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const timers = useRef<number[]>([]);
   const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null });
 
@@ -55,22 +56,26 @@ export function YinghuaViewer() {
   const runFaceDetect = useCallback(
     async (src: string) => {
       setDetectFaceError(null);
+      setDetecting(true);
       try {
         const parsed = parseDataUrl(src);
         const bounds = await detectFace(parsed.base64, parsed.mime, {
           apiKey: visionCred.apiKey || undefined,
           baseUrl: visionCred.baseUrl || undefined,
+          model: visionCred.model || undefined,
         });
         setViewerClipRegions(computeClipRegions(bounds.faceTop, bounds.faceBottom));
       } catch (err) {
         setDetectFaceError(err instanceof Error ? err.message : '人脸检测失败');
+      } finally {
+        setDetecting(false);
       }
     },
     [visionCred, setViewerClipRegions, setDetectFaceError],
   );
 
   const handleRefreshClip = useCallback(() => {
-    const src = yinghuaSlots[1].images[0];
+    const src = yinghuaSlots[3].images[0] || yinghuaSlots[1].images[0];
     if (src) void runFaceDetect(src);
   }, [yinghuaSlots, runFaceDetect]);
 
@@ -123,15 +128,6 @@ export function YinghuaViewer() {
             </span>
           </div>
 
-          {/* Diagonal accent block */}
-          <div
-            className="pointer-events-none absolute -right-10 top-0 h-full w-1/3"
-            style={{
-              background: 'linear-gradient(135deg, transparent 40%, color-mix(in srgb, var(--zzz-magenta) 35%, transparent) 60%)',
-              clipPath: 'polygon(30% 0, 100% 0, 100% 100%, 0 100%)',
-            }}
-          />
-
           {/* 零命 base layer — always visible when generated */}
           {baseImg && (
             <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />
@@ -174,21 +170,30 @@ export function YinghuaViewer() {
 
       {/* Legend + manual upload */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zzz-text/10 p-3">
-        {/* Face detection status */}
-        {detectFaceError && (
-          <div className="flex w-full items-center gap-2">
+        {/* Face detection status — refresh button always visible when 零命 exists */}
+        <div className="flex w-full items-center gap-2">
+          {detecting && (
+            <span className="font-mono text-[11px] text-zzz-text/60">裁切中…</span>
+          )}
+          {!detecting && detectFaceError && (
             <span className="font-mono text-[11px] text-red-400">{detectFaceError}</span>
+          )}
+          {!detecting && !detectFaceError && viewerClipRegions && (
+            <span className="font-mono text-[11px] text-zzz-primary/70">✓ 已动态裁切</span>
+          )}
+          {!detecting && !detectFaceError && !viewerClipRegions && hasBase && (
+            <span className="font-mono text-[11px] text-zzz-text/40">动态裁切未运行</span>
+          )}
+          {hasBase && (
             <button
               onClick={handleRefreshClip}
-              className="glass-btn px-2 py-0.5 font-mono text-[10px] text-zzz-magenta"
+              disabled={detecting}
+              className="glass-btn px-2 py-0.5 font-mono text-[10px] text-zzz-magenta disabled:opacity-40"
             >
-              刷新识图
+              {detecting ? '裁切中…' : '重新裁切'}
             </button>
-          </div>
-        )}
-        {!detectFaceError && viewerClipRegions && (
-          <span className="w-full font-mono text-[11px] text-zzz-primary/70">✓ 已动态裁切</span>
-        )}
+          )}
+        </div>
         {([
           { id: 1 as YinghuaStyleId, label: '零命 = 底图（始终显示）' },
           { id: 2 as YinghuaStyleId, label: '01–03 = 三命对角区域' },

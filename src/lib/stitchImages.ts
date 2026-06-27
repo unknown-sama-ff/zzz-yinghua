@@ -1,8 +1,14 @@
 /**
  * Stitch an array of image data URLs into a single horizontally-tiled PNG.
- * Null/undefined entries are skipped. All images are scaled to the tallest
- * image's height, then placed side-by-side at equal widths.
+ * Null/undefined entries are skipped. All images are scaled to a shared height,
+ * then placed side-by-side at equal widths.
+ *
+ * The shared height is capped at MAX_STITCH_HEIGHT so a few large uploads
+ * don't produce a multi-thousand-pixel canvas whose base64 PNG blows past the
+ * backend's JSON body limit (was causing 413s on three-view generation).
  */
+const MAX_STITCH_HEIGHT = 1536;
+
 export async function stitchImages(dataUrls: (string | null | undefined)[]): Promise<string> {
   const urls = dataUrls.filter((u): u is string => Boolean(u));
   if (urls.length === 0) throw new Error('stitchImages: no images provided');
@@ -20,7 +26,7 @@ export async function stitchImages(dataUrls: (string | null | undefined)[]): Pro
     ),
   );
 
-  const maxH = Math.max(...imgs.map((img) => img.naturalHeight));
+  const maxH = Math.min(Math.max(...imgs.map((img) => img.naturalHeight)), MAX_STITCH_HEIGHT);
   // Scale each image proportionally to match maxH, then tile.
   const scaledWidths = imgs.map((img) => Math.round((img.naturalWidth / img.naturalHeight) * maxH));
   const totalW = scaledWidths.reduce((a, b) => a + b, 0);

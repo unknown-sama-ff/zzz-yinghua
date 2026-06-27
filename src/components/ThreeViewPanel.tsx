@@ -133,7 +133,7 @@ export function ThreeViewPanel() {
       <SectionHeader step="03" title="三视图生成工作台" />
 
       <p className="mb-4 font-mono text-xs text-zzz-text/55">
-        上传正面（必填）+ 侧面/背面（可选），自动拼合后发给 AI 生成完整三视图。
+        上传正面（必填）+ 侧面/背面（可选），自动拼合后发给 AI 生成完整三视图。（建议上传 PNG 透明背景图；只上传正面可能效果不佳）
         生成完成后可将结果设为主立绘用于影画生成。
       </p>
 

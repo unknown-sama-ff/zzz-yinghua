@@ -47,7 +47,7 @@ export function Uploader() {
   };
 
   return (
-    <section className="glass p-6">
+    <section className="glass flex flex-col p-6">
       <SectionHeader step="01" title="上传三视图立绘" />
       <p className="mb-3 font-mono text-xs text-zzz-text/55">
         建议上传三视图成品以获得最佳生成效果。没有三视图？使用下方工作台生成 ↓
@@ -68,7 +68,7 @@ export function Uploader() {
           }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
-          className={`flex h-56 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed transition-colors duration-300 ${
+          className={`flex min-h-56 flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed transition-colors duration-300 ${
             dragging
               ? 'border-zzz-magenta bg-zzz-text/5'
               : 'border-zzz-text/20 hover:border-zzz-primary/60'
@@ -79,12 +79,12 @@ export function Uploader() {
           <p className="mt-1 font-mono text-xs text-zzz-text/50">PNG · JPEG · WEBP · ≤10MB</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="relative overflow-hidden rounded-xl">
+        <div className="flex flex-1 flex-col space-y-3">
+          <div className="relative flex-1 overflow-hidden rounded-xl">
             <img
               src={uploadedImage}
               alt={uploadedName ?? '已上传图片'}
-              className="max-h-72 w-full object-contain"
+              className="h-full max-h-72 w-full object-contain"
               loading="lazy"
             />
           </div>

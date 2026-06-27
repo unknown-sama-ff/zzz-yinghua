@@ -71,9 +71,13 @@ interface WorkshopState {
   setYinghuaSlot: (id: YinghuaStyleId, patch: Partial<GenSlot>) => void;
   setSlotManual: (id: YinghuaStyleId, dataUrl: string) => void;
 
+  // --- Poster (module 06) ---
+  posterSlot: GenSlot;
+  setPosterSlot: (patch: Partial<GenSlot>) => void;
+
   // --- Vision model credentials (in-memory only) ---
-  visionCred: { apiKey: string; baseUrl: string };
-  setVisionCred: (patch: Partial<{ apiKey: string; baseUrl: string }>) => void;
+  visionCred: { apiKey: string; baseUrl: string; model: string };
+  setVisionCred: (patch: Partial<{ apiKey: string; baseUrl: string; model: string }>) => void;
 
   // --- Viewer ---
   parts: LayerPart[];
@@ -133,6 +137,10 @@ export const useStore = create<WorkshopState>((set) => ({
       yinghuaSlots: { ...s.yinghuaSlots, [id]: { status: 'done', images: [dataUrl] } },
     })),
 
+  posterSlot: emptySlot(),
+  setPosterSlot: (patch) =>
+    set((s) => ({ posterSlot: { ...s.posterSlot, ...patch } })),
+
   parts: initialParts(),
   togglePart: (code) =>
     set((s) => ({
@@ -147,7 +155,7 @@ export const useStore = create<WorkshopState>((set) => ({
       parts: s.parts.map((p) => (p.stage === stage ? { ...p, visible } : p)),
     })),
 
-  visionCred: { apiKey: '', baseUrl: '' },
+  visionCred: { apiKey: '', baseUrl: '', model: '' },
   setVisionCred: (patch) =>
     set((s) => ({ visionCred: { ...s.visionCred, ...patch } })),
   viewerClipRegions: null,

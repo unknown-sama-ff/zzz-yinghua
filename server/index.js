@@ -18,8 +18,10 @@ app.use(
     origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   }),
 );
-// Large limit to accommodate base64 image uploads (spec: ~15MB ceiling).
-app.use(express.json({ limit: '15mb' }));
+// Large limit to accommodate base64 image uploads. Three-view stitching tiles
+// several images into one PNG, whose base64 is ~33% larger than the bytes —
+// hence the generous ceiling beyond any single 10MB upload.
+app.use(express.json({ limit: '25mb' }));
 
 const VALID_PROVIDERS = new Set(['seedance', 'gpt-image', 'custom-url']);
 
@@ -54,12 +56,12 @@ app.post('/api/generate', async (req, res) => {
       return fail(res, err.status, err.code, err.message);
     }
     console.error('[generate] unexpected error:', err);
-    return fail(res, 500, 'UNKNOWN', '服务端内部错误');
+    return fail(res, 500, 'UNKNOWN', `服务端内部错误: ${err?.message || err}`);
   }
 });
 
 app.post('/api/detect-face', async (req, res) => {
-  const { imageBase64, imageMime, apiKey, baseUrl } = req.body || {};
+  const { imageBase64, imageMime, apiKey, baseUrl, model } = req.body || {};
   if (!imageBase64) return fail(res, 400, 'INVALID_INPUT', '缺少图片');
   const key = apiKey || process.env.VISION_API_KEY;
   if (!key) return fail(res, 401, 'UNAUTHORIZED', '视觉模型缺少 API Key，请在前端填写');
@@ -67,12 +69,12 @@ app.post('/api/detect-face', async (req, res) => {
   const mime = imageMime || 'image/png';
 
   const body = {
-    model: 'gpt-4o-mini',
+    model: model || process.env.VISION_MODEL || 'gpt-4o-mini',
     messages: [{
       role: 'user',
       content: [
-        { type: 'image_url', image_url: { url: `data:${mime};base64,${imageBase64}`, detail: 'low' } },
-        { type: 'text', text: 'Detect the character\'s face in this image. Return ONLY a JSON object with keys faceTop and faceBottom, each a number between 0 and 1 representing the fraction of image height from the top. Example: {"faceTop":0.08,"faceBottom":0.42}' },
+        { type: 'image_url', image_url: { url: `data:${mime};base64,${imageBase64}`, detail: 'high' } },
+        { type: 'text', text: 'Find the character\'s face in this image. faceTop = the very top of the forehead / above eyebrows (both eyes must be below this line). faceBottom = bottom of chin. Return ONLY raw JSON: {"faceTop":0.05,"faceBottom":0.48} — values are 0-1 fractions of image height from the top edge. No markdown, no explanation.' },
       ],
     }],
     max_tokens: 60,
@@ -83,12 +85,13 @@ app.post('/api/detect-face', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(body),
-    }, 30000);
+    }, 120000);
     if (!response.ok) {
       throw new UpstreamError(codeFromStatus(response.status), `detect-face 返回 ${response.status}`, response.status);
     }
     const json = await parseJsonSafe(response);
     const text = json.choices?.[0]?.message?.content ?? '';
+    console.log(`[detect-face] raw response: ${text.slice(0, 200)}`);
     const match = text.match(/\{[^}]+\}/);
     if (!match) throw new UpstreamError('UPSTREAM_ERROR', '视觉模型未返回有效坐标');
     const coords = JSON.parse(match[0]);
@@ -109,7 +112,10 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 const distDir = path.resolve(__dirname, '..', 'dist');
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir));
-  app.get('*', (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
+  // SPA fallback for client-side routes only — never swallow /api/* so a
+  // mistyped method or unknown API path returns a real 404/JSON error instead
+  // of silently serving index.html.
+  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(distDir, 'index.html')));
 }
 
 function fail(res, status, code, message) {

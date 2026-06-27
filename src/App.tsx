@@ -5,6 +5,7 @@ import { ProviderSelect } from './components/ProviderSelect';
 import { ThreeViewPanel } from './components/ThreeViewPanel';
 import { YinghuaPanel } from './components/YinghuaPanel';
 import { YinghuaViewer } from './components/YinghuaViewer';
+import { PosterPanel } from './components/PosterPanel';
 import { Toast } from './components/Toast';
 
 export default function App() {
@@ -47,6 +48,7 @@ export default function App() {
         <ThreeViewPanel />
         <YinghuaPanel />
         <YinghuaViewer />
+        <PosterPanel />
       </main>
 
       <footer className="mx-auto max-w-6xl px-6 pb-8 text-center font-mono text-[11px] text-zzz-text/40">
