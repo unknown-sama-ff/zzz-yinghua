@@ -1,0 +1,128 @@
+/* ===========================================================================
+   Yinghua viewer transition effects — programmatic CSS replication of the
+   切换样式.mp4 look (scanline sweep, RGB glitch, energy glow). Applied to a
+   layer for the duration of one toggle, then removed.
+   =========================================================================== */
+
+.layer-part {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition:
+    opacity 360ms var(--zzz-ease),
+    filter 360ms var(--zzz-ease);
+}
+
+.layer-part[data-visible='false'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.layer-part[data-visible='true'] {
+  opacity: 1;
+}
+
+/* --- Energy glow + scanline sweep on enter --- */
+.fx-enter {
+  animation: fx-glow-in 420ms var(--zzz-ease);
+}
+.fx-exit {
+  animation: fx-glow-out 300ms var(--zzz-ease);
+}
+
+@keyframes fx-glow-in {
+  0% {
+    opacity: 0;
+    filter: brightness(2.2) drop-shadow(0 0 18px var(--zzz-primary));
+    clip-path: inset(0 0 100% 0);
+  }
+  45% {
+    filter: brightness(1.6) drop-shadow(0 0 12px var(--zzz-magenta));
+    clip-path: inset(0 0 0 0);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1) drop-shadow(0 0 0 transparent);
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes fx-glow-out {
+  0% {
+    opacity: 1;
+    filter: brightness(1);
+  }
+  100% {
+    opacity: 0;
+    filter: brightness(1.8) drop-shadow(0 0 14px var(--zzz-magenta));
+  }
+}
+
+/* --- RGB channel-split glitch overlay, driven on the sweep layer --- */
+.fx-sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  mix-blend-mode: screen;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--zzz-cyan) 60%, transparent) 48%,
+    color-mix(in srgb, var(--zzz-primary) 70%, transparent) 50%,
+    transparent 52%,
+    transparent 100%
+  );
+  animation: fx-sweep-move 420ms var(--zzz-ease) forwards;
+}
+
+@keyframes fx-sweep-move {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+.fx-glitch {
+  animation: fx-glitch-shake 220ms steps(2) 1;
+}
+
+@keyframes fx-glitch-shake {
+  0% {
+    transform: translate(0, 0);
+    filter: hue-rotate(0deg);
+  }
+  20% {
+    transform: translate(-3px, 1px);
+    filter: hue-rotate(15deg) saturate(1.4);
+  }
+  40% {
+    transform: translate(3px, -1px);
+    filter: hue-rotate(-15deg) saturate(1.4);
+  }
+  60% {
+    transform: translate(-2px, 0);
+  }
+  100% {
+    transform: translate(0, 0);
+    filter: none;
+  }
+}
+
+/* Reduced motion: replace sweeps/glitch with a plain fade. */
+@media (prefers-reduced-motion: reduce) {
+  .fx-enter,
+  .fx-exit,
+  .fx-glitch {
+    animation: none !important;
+  }
+  .fx-sweep {
+    display: none !important;
+  }
+}

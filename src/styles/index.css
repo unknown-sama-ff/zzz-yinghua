@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+   ZZZ design tokens — runtime CSS variables.
+   Defaults below are the fallback theme; the color extractor overrides
+   --zzz-primary / --zzz-magenta / --zzz-accent / --zzz-muted / --zzz-shadow
+   after an image is uploaded. The transition makes the swap animate (~300ms).
+   =========================================================================== */
+:root {
+  --zzz-bg: #0d0a14;
+  --zzz-ink: #16121f;
+  --zzz-panel: #1c1726;
+  --zzz-primary: #b026ff;
+  --zzz-magenta: #ff2d9b;
+  --zzz-cyan: #25f4ee;
+  --zzz-accent: #ff2d9b;
+  --zzz-muted: #16121f;
+  --zzz-text: #f5f0ff;
+  --zzz-text-on: #f5f0ff;
+  --zzz-radius: 4px;
+  --zzz-shadow: 0 0 12px rgba(176, 38, 255, 0.6);
+  --zzz-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  transition:
+    --zzz-primary 300ms var(--zzz-ease),
+    --zzz-magenta 300ms var(--zzz-ease),
+    --zzz-accent 300ms var(--zzz-ease);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--zzz-bg);
+  color: var(--zzz-text);
+  font-family: 'Oswald', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Subtle global noise + scanline overlay (the aged industrial ZZZ texture). */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.18) 0px,
+      rgba(0, 0, 0, 0.18) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+}
+
+/* Scrollbar styled to the active theme. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--zzz-ink);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--zzz-primary);
+  border-radius: var(--zzz-radius);
+}
+
+/* Color custom-property transitions need @property to animate in most engines;
+   where unsupported it simply snaps — acceptable graceful degradation. */
+@property --zzz-primary {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #b026ff;
+}
+@property --zzz-magenta {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ff2d9b;
+}
+@property --zzz-accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ff2d9b;
+}
+
+/* --- Reusable ZZZ component classes --- */
+@layer components {
+  .zzz-panel {
+    background: color-mix(in srgb, var(--zzz-ink) 92%, var(--zzz-primary) 8%);
+    border: 1px solid color-mix(in srgb, var(--zzz-primary) 35%, transparent);
+    border-radius: var(--zzz-radius);
+  }
+
+  .zzz-clip {
+    /* The signature diagonal-cut corner. */
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
+  }
+
+  .zzz-heading {
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+/* Respect reduced-motion: disable heavy transition effects globally. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

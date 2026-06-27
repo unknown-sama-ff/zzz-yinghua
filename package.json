@@ -1,0 +1,34 @@
+{
+  "name": "yinghua-workshop",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "绝区零「影画工坊」— upload a character image, generate three-views + ZZZ yinghua action art, and explore it in a faithful ZZZ-style layered viewer.",
+  "scripts": {
+    "dev": "concurrently -k -n web,api -c magenta,cyan \"vite\" \"npm:dev:server\"",
+    "dev:server": "node --watch server/index.js",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "start": "node server/index.js",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

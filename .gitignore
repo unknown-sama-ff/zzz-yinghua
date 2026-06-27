@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Env — secrets live here, never commit
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Reference / design ground-truth assets (not application source)
+六种样式/
+影画样式1/
+影画样式2/
+影画样式3/
+切换样式.mp4
+影画工坊-构建Prompt.md
