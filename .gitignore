@@ -1,8 +1,7 @@
 # Dependencies
 node_modules/
 
-# Build output
-dist/
+# Build output — committed for Railway deploy (avoids build timeout on free tier)
 
 # Env — secrets live here, never commit
 .env
