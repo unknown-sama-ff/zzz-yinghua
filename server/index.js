@@ -11,7 +11,10 @@ loadEnv();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = Number(process.env.PORT || 8787);
+// Railway (and most PaaS) inject PORT and route the public domain to it.
+// Fall back to 8080 — Railway's default target port — so a missing PORT var
+// still lands where the proxy forwards. Local dev sets PORT=8787 via .env.
+const PORT = Number(process.env.PORT || 8080);
 
 app.use(
   cors({
