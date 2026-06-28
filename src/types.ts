@@ -51,6 +51,9 @@ export interface Palette {
   textOn: string;
 }
 
+/** Name text placement mode for viewer overlay and AI prompt sync. */
+export type NamePlacement = 'auto' | 'top-left+bottom-right' | 'top-right+bottom-left';
+
 /** One of the three ZZZ yinghua art styles. */
 export type YinghuaStyleId = 1 | 2 | 3;
 

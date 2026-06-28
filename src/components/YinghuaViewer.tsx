@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { validateImageFile, fileToDataUrl, parseDataUrl } from '../lib/validation';
-import { splitName } from '../lib/prompts';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { ControlBar } from './ControlBar';
@@ -24,7 +23,7 @@ const prefersReducedMotion = () =>
  */
 export function YinghuaViewer() {
   const {
-    parts, togglePart, characterName, yinghuaSlots, setSlotManual,
+    parts, togglePart, yinghuaSlots, setSlotManual,
     visionCred, viewerClipRegions, setViewerClipRegions,
     detectFaceError, setDetectFaceError,
   } = useStore();
@@ -90,9 +89,6 @@ export function YinghuaViewer() {
     [setSlotManual, showError, runFaceDetect],
   );
 
-  const name = (characterName || 'YINGHUA').toUpperCase();
-  const [nameTop, nameBottom] = splitName(name);
-
   // The three generated tiers; first image of each yinghua style slot.
   const tierImage = (id: 1 | 2 | 3): string | undefined => yinghuaSlots[id].images[0];
   const baseImg = tierImage(1); // 零命
@@ -112,22 +108,6 @@ export function YinghuaViewer() {
         <div
           className={`relative aspect-[3/2] flex-1 overflow-hidden bg-zzz-bg ${glitch ? 'fx-glitch' : ''}`}
         >
-          {/* Text overlay — fixed above all image layers, matches style-1 typography layout */}
-          <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
-            <span
-              className="absolute left-4 top-2 select-none font-display font-black uppercase leading-none text-zzz-text/90 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
-              style={{ fontSize: 'clamp(2.5rem, 10vw, 7rem)', letterSpacing: '-0.03em' }}
-            >
-              {nameTop}
-            </span>
-            <span
-              className="absolute bottom-3 right-4 select-none font-display font-black uppercase leading-none text-zzz-text/90 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
-              style={{ fontSize: 'clamp(2.5rem, 10vw, 7rem)', letterSpacing: '-0.03em' }}
-            >
-              {nameBottom}
-            </span>
-          </div>
-
           {/* 零命 base layer — always visible when generated */}
           {baseImg && (
             <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />
@@ -194,6 +174,7 @@ export function YinghuaViewer() {
             </button>
           )}
         </div>
+
         {([
           { id: 1 as YinghuaStyleId, label: '零命 = 底图（始终显示）' },
           { id: 2 as YinghuaStyleId, label: '01–03 = 三命对角区域' },

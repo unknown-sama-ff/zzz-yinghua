@@ -77,7 +77,7 @@ app.post('/api/detect-face', async (req, res) => {
       role: 'user',
       content: [
         { type: 'image_url', image_url: { url: `data:${mime};base64,${imageBase64}`, detail: 'high' } },
-        { type: 'text', text: 'Find the character\'s face in this image. faceTop = the very top of the forehead / above eyebrows (both eyes must be below this line). faceBottom = bottom of chin. Return ONLY raw JSON: {"faceTop":0.05,"faceBottom":0.48} — values are 0-1 fractions of image height from the top edge. No markdown, no explanation.' },
+        { type: 'text', text: 'Find the character\'s face in this image. faceTop = top of forehead / above eyebrows (both eyes below this line). faceBottom = bottom of chin. faceLeft = leftmost edge of face (including hair framing the face). faceRight = rightmost edge of face. Return ONLY raw JSON: {"faceTop":0.05,"faceBottom":0.48,"faceLeft":0.10,"faceRight":0.55} — values are 0-1 fractions: top/bottom = fraction of image height from top, left/right = fraction of image width from left. No markdown, no explanation.' },
       ],
     }],
     max_tokens: 60,
@@ -100,8 +100,10 @@ app.post('/api/detect-face', async (req, res) => {
     const coords = JSON.parse(match[0]);
     const faceTop = Math.max(0, Math.min(1, Number(coords.faceTop)));
     const faceBottom = Math.max(0, Math.min(1, Number(coords.faceBottom)));
-    console.log(`[detect-face] faceTop=${faceTop} faceBottom=${faceBottom}`);
-    return res.json({ ok: true, faceTop, faceBottom });
+    const faceLeft = Math.max(0, Math.min(1, Number(coords.faceLeft ?? 0.25)));
+    const faceRight = Math.max(0, Math.min(1, Number(coords.faceRight ?? 0.75)));
+    console.log(`[detect-face] faceTop=${faceTop} faceBottom=${faceBottom} faceLeft=${faceLeft} faceRight=${faceRight}`);
+    return res.json({ ok: true, faceTop, faceBottom, faceLeft, faceRight });
   } catch (err) {
     if (err instanceof UpstreamError) return fail(res, err.status, err.code, err.message);
     console.error('[detect-face] unexpected error:', err);

@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import type {
   GenSlot,
   LayerPart,
+  NamePlacement,
   Palette,
   ProviderName,
   YinghuaStyleId,
 } from '../types';
 import { THREE_VIEW_PROMPT } from '../lib/prompts';
 import type { ClipRegions } from '../lib/clipRegions';
+import type { FaceBounds } from '../lib/detectFace';
 
 const emptySlot = (): GenSlot => ({ status: 'idle', images: [] });
 
@@ -88,6 +90,20 @@ interface WorkshopState {
   setViewerClipRegions: (r: ClipRegions | null) => void;
   detectFaceError: string | null;
   setDetectFaceError: (msg: string | null) => void;
+
+  // --- Yinghua text toggle ---
+  yinghuaShowText: boolean;
+  setYinghuaShowText: (show: boolean) => void;
+
+  // --- Yinghua action pose ---
+  yinghuaActionPose: string;
+  setYinghuaActionPose: (pose: string) => void;
+
+  // --- Name placement ---
+  namePlacement: NamePlacement;
+  setNamePlacement: (p: NamePlacement) => void;
+  faceBounds: FaceBounds | null;
+  setFaceBounds: (b: FaceBounds | null) => void;
 }
 
 export const useStore = create<WorkshopState>((set) => ({
@@ -162,4 +178,15 @@ export const useStore = create<WorkshopState>((set) => ({
   setViewerClipRegions: (r) => set({ viewerClipRegions: r }),
   detectFaceError: null,
   setDetectFaceError: (msg) => set({ detectFaceError: msg }),
+
+  yinghuaShowText: true,
+  setYinghuaShowText: (show) => set({ yinghuaShowText: show }),
+
+  yinghuaActionPose: '',
+  setYinghuaActionPose: (pose) => set({ yinghuaActionPose: pose }),
+
+  namePlacement: 'auto',
+  setNamePlacement: (p) => set({ namePlacement: p }),
+  faceBounds: null,
+  setFaceBounds: (b) => set({ faceBounds: b }),
 }));

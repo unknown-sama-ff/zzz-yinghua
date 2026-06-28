@@ -1,6 +1,8 @@
 export interface FaceBounds {
   faceTop: number;
   faceBottom: number;
+  faceLeft: number;
+  faceRight: number;
 }
 
 export async function detectFace(
@@ -15,5 +17,10 @@ export async function detectFace(
   });
   const json = await res.json();
   if (!json.ok) throw new Error(json.message ?? '人脸检测失败');
-  return { faceTop: json.faceTop, faceBottom: json.faceBottom };
+  return {
+    faceTop: json.faceTop,
+    faceBottom: json.faceBottom,
+    faceLeft: json.faceLeft,
+    faceRight: json.faceRight,
+  };
 }

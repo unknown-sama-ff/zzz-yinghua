@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
+import { combineImagesSideBySide } from '../lib/combineImages';
 import { parseDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
@@ -19,11 +20,16 @@ export function YinghuaPanel() {
     setYinghuaPrompt,
     yinghuaSlots,
     setYinghuaSlot,
+    yinghuaShowText,
+    setYinghuaShowText,
+    yinghuaActionPose,
+    setYinghuaActionPose,
     uploadedImage,
     palette,
     visionCred,
     setViewerClipRegions,
     setDetectFaceError,
+    setFaceBounds,
   } = useStore();
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
@@ -32,7 +38,7 @@ export function YinghuaPanel() {
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
       if (!yinghuaPrompts[style.id]) {
-        setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined));
+        setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -41,18 +47,26 @@ export function YinghuaPanel() {
   // Re-fill prompts when the name changes.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined));
+      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characterName]);
+  }, [characterName, yinghuaActionPose]);
 
   // Re-fill prompts when palette changes (new image uploaded).
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined));
+      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [palette]);
+  }, [palette, yinghuaActionPose]);
+
+  // Re-fill prompts when showText toggles.
+  useEffect(() => {
+    for (const style of YINGHUA_STYLES) {
+      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yinghuaShowText, yinghuaActionPose]);
 
   const runFaceDetect = async (src: string) => {
     setDetectFaceError(null);
@@ -64,6 +78,7 @@ export function YinghuaPanel() {
         model: visionCred.model || undefined,
       });
       setViewerClipRegions(computeClipRegions(bounds.faceTop, bounds.faceBottom));
+      setFaceBounds(bounds);
     } catch (err) {
       setDetectFaceError(err instanceof Error ? err.message : '人脸检测失败');
     }
@@ -74,17 +89,21 @@ export function YinghuaPanel() {
       showError('请先上传角色正面图片');
       return;
     }
-    // Chain styles so the character stays in the same pose/position: 零命 (id=1)
-    // generates from the main portrait; 三命/六命 take 零命's output as their
-    // image-to-image input. Falls back to the main portrait if 零命 isn't ready.
+    // 三命/六命 combine 零命 result (pose/text layout) + original upload (clothing
+    // colours) into a single side-by-side reference image. Requires 零命 done first.
     let imageOverride: string | undefined;
     if (id !== 1) {
       const baseImg = yinghuaSlots[1].images[0];
       if (!baseImg) {
-        showError('请先生成零命，三命/六命会以零命结果为基准锁定姿势');
+        showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
         return;
       }
-      imageOverride = baseImg;
+      try {
+        imageOverride = await combineImagesSideBySide(baseImg, uploadedImage);
+      } catch {
+        showError('参考图合成失败');
+        return;
+      }
     }
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
@@ -92,8 +111,7 @@ export function YinghuaPanel() {
         buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride }),
       );
       setYinghuaSlot(id, { status: 'done', images });
-      // 六命是全彩完整图，脸部辨识度最高，优先用它做人脸检测
-      if ((id === 3 || (id === 1 && !yinghuaSlots[3].images[0])) && images[0]) void runFaceDetect(images[0]);
+      if (id === 3 && images[0]) void runFaceDetect(images[0]);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
       setYinghuaSlot(id, { status: 'error', error: msg });
@@ -106,16 +124,33 @@ export function YinghuaPanel() {
       <SectionHeader step="04" title="影画动作设计 · 三风格" />
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 先生成「零命」，三命/六命会自动以零命结果为基准锁定角色姿势与位置，三张构图保持一致。
+          ⛓ 先生成「零命」，三命/六命会将零命结果（姿势/文字位置）与原始立绘（服饰配色）合成双参考图。
         </p>
-        <p>
-          默认不在图中生成文字（角色名由查看器自动叠加）。想在画面内生成文字的，把下方 prompt 里的
-          <span className="mx-1 rounded bg-zzz-text/10 px-1 text-zzz-text/80">画面整洁不含任何文字</span>
-          替换成下面这段（直接复制粘贴，把英文名改成你的角色名）：
+        <button
+          onClick={() => setYinghuaShowText(!yinghuaShowText)}
+          className={`glass-btn py-1.5 px-3 font-mono text-xs uppercase tracking-widest ${
+            yinghuaShowText ? 'text-zzz-primary' : 'text-zzz-text/50'
+          }`}
+        >
+          {yinghuaShowText ? '文字：开' : '文字：关'}
+        </button>
+        <p className="mt-1 text-zzz-text/50">
+          {yinghuaShowText
+            ? 'prompt 中会生成角色名英文文字，AI 根据角色动作自动分配到最空旷的角落'
+            : 'prompt 替换为"画面整洁不含任何文字"'}
         </p>
-        <code className="mt-2 block select-all rounded bg-zzz-ink/50 px-2 py-1.5 text-zzz-primary/90">
-          图片顶部左侧超大做旧印刷体英文「YINGHUA」，图片底部右侧超大做旧印刷体英文「WORKSHOP」，角色脸部清晰不被文字遮挡，底部一行小字星级副标题信息
-        </code>
+
+        {/* Action pose input */}
+        <div className="mt-3 flex items-center gap-2">
+          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">动作姿势</span>
+          <input
+            type="text"
+            value={yinghuaActionPose}
+            onChange={(e) => setYinghuaActionPose(e.target.value)}
+            placeholder="智能分析（留空自动生成）"
+            className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90 placeholder:text-zzz-text/30"
+          />
+        </div>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {YINGHUA_STYLES.map((style) => {

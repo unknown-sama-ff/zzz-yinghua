@@ -29,10 +29,14 @@ export function splitName(name: string): [string, string] {
 }
 
 /**
+ * Text instruction: two oversized English names auto-assigned to the two emptiest
+ * corners based on the character's pose and spatial distribution in the image.
+ */
+export const TEXT_INSTRUCTION =
+  '根据角色动作姿势与位置，超大做旧印刷体英文「{NAME_TOP}」和「{NAME_BOTTOM}」分别自动分配到四个角落中最空旷的两个位置（左上/右上/左下/右下各选一），确保不被角色遮挡；底部一行小字星级副标题信息';
+
+/**
  * The three ZZZ yinghua art styles.
- * {NAME_TOP} / {NAME_BOTTOM} are replaced with the split character name.
- * Layout: {NAME_TOP} as oversized print text at the top-left, {NAME_BOTTOM} at
- * the bottom-right, character body in the centre between them.
  */
 export const YINGHUA_STYLES: YinghuaStyle[] = [
   {
@@ -40,39 +44,51 @@ export const YINGHUA_STYLES: YinghuaStyle[] = [
     label: '零命 · 暗调角色 / 亮色背景',
     description: '角色压暗为深色剪影，背景填充明亮的角色主题色，强烈明暗反差。',
     promptTemplate:
-      '绝区零影画风格，角色动态动作姿势，角色整体压暗处理为深色暗调（仅保留极少高光与轮廓细节，近似深色剪影但保留五官辨识度），背景为明亮高饱和的「{DOMINANT_COLOR}」主题色平涂，角色与亮色背景形成强烈明暗反差，辅以「{ACCENT_COLOR}」点缀，斜切几何色块，胶带/贴纸做旧质感，噪点与扫描线，角色主体居中脸部清晰，画面整洁不含任何文字，无水印。',
+      '绝区零影画风格，{ACTION_POSE}，角色不强制居中、根据动作自然布局，角色占画面60%~80%、背景占20%~40%；角色整体为纯黑深色剪影（RGB<30，近全黑，仅保留五官轮廓辨别度，无杂色、无服装色彩），背景为明亮高饱和的「{DOMINANT_COLOR}」纯色平涂铺满整个画面、不允许出现任何第二种颜色或渐变过渡，辅以极少量「{ACCENT_COLOR}」作为细节点缀，斜切几何色块，胶带/贴纸做旧质感，噪点与扫描线，角色主体脸部清晰，' + TEXT_INSTRUCTION + '。',
   },
   {
     id: 2,
     label: '三命 · 暗色背景 / 亮色主角',
     description: '深黑背景，角色为明亮浅色调主体，清晰线稿 + 半赛璐珞。',
     promptTemplate:
-      '绝区零影画风格，保持与参考图完全相同的角色姿势、构图、取景与位置，背景改为深黑色暗调，角色为明亮浅色调主体（清晰线稿 + 中等饱和半赛璐珞上色，肤色与发色明亮突出），以「{DOMINANT_COLOR}」为点缀，辅以「{ACCENT_COLOR}」，柔和阴影与体积感，角色与暗背景形成强烈对比，工业贴纸 UI 质感，斜切色块，角色主体居中脸部清晰，画面整洁不含任何文字，无水印。',
+      '参考图为左右拼合双图：左侧为零命成图（姿势构图与文字位置参考），右侧为原始角色立绘（服饰配色参考）。绝区零影画风格，依照左侧零命参考图保持完全相同的角色姿势、构图、取景与文字位置，服饰颜色严格参照右侧原始立绘完整还原不做改动，背景改为深黑色暗调，角色肤色与裸露身体部分为浅灰至中灰色调（亮度100-180，去饱和、低彩度，不可纯白也不可纯黑），但所有穿着的服饰必须严格参照右侧参考图完整保留原配色、不做任何去饱和或变色，清晰线稿勾勒轮廓，半赛璐珞柔和阴影与体积感；仅角色眼睛虹膜保留鲜明「{DOMINANT_COLOR}」（不可去饱和），部分特色装饰（如徽章、纹饰、领结等）保留完整「{ACCENT_COLOR}」；角色与深黑背景形成强烈明暗对比，工业贴纸 UI 质感，斜切色块，角色主体脸部清晰，' + TEXT_INSTRUCTION + '。',
   },
   {
     id: 3,
     label: '六命 · 全彩 / 肤色高光',
     description: '全彩完整上色，真实肤色质感，适度增加肌肤展现、减少服饰遮挡（保持服饰原风格）。',
     promptTemplate:
-      '绝区零影画风格，保持与参考图完全相同的角色姿势、构图、取景与位置，全彩赛璐珞完整上色，真实自然的肌肤质感与健康肤色，高饱和鲜明配色，以「{DOMINANT_COLOR}」为主色调配合「{ACCENT_COLOR}」辉光；在内容合规、非露骨的前提下适度增加肌肤展现、减少服饰遮挡面积（如露肩、露臂、露背等），但完整保留服饰原有的设计样式、剪裁风格与配色不做改动；强烈明暗对比，做旧噪点，斜切几何，角色主体居中脸部清晰，细节高精度，画面整洁不含任何文字，无水印。',
+      '参考图为左右拼合双图：左侧为零命成图（姿势构图与文字位置参考），右侧为原始角色立绘（服饰配色参考）。绝区零影画风格，依照左侧零命参考图保持完全相同的角色姿势、构图、取景与文字位置，服饰颜色严格参照右侧原始立绘完整还原不做改动，全彩高饱和赛璐珞完整上色，角色必须色彩鲜艳饱满、明亮夺目（不可暗淡或灰蒙），真实自然的肤色质感；以「{DOMINANT_COLOR}」为主色调配合「{ACCENT_COLOR}」辉光提高色彩冲击力，完整保留原角色服饰设计样式与配色不做改动；在内容合规、非露骨的前提下适度增加肌肤展现（如露肩、露臂、露背等），但完整保留服饰原有的设计样式、剪裁风格与配色不做改动；背景为纯白色（#FFFFFF）铺满整个画面背景区域，无任何渐变、无噪点、无杂色；强烈明暗对比，做旧噪点，斜切几何，角色主体脸部清晰，细节高精度，' + TEXT_INSTRUCTION + '。',
   },
 ];
 
-/**
- * Fill name and palette placeholders, then prepend the fidelity prefix.
- * {DOMINANT_COLOR}/{ACCENT_COLOR} are replaced with hex values from palette,
- * falling back to ZZZ defaults when no palette is available.
- */
-export function fillName(template: string, name: string, palette?: Palette): string {
+export function fillName(
+  template: string,
+  name: string,
+  palette?: Palette,
+  showText?: boolean,
+  actionPose?: string,
+): string {
   const upper = (name || 'CHARACTER').toUpperCase();
   const [top, bottom] = splitName(upper);
   const dominant = palette?.dominant ?? '#b026ff';
   const accent = palette?.accent ?? '#ff2d9b';
-  const filled = template
+
+  // Replace name/color markers first, then handle text toggle.
+  let filled = template
+    .replaceAll('{ACTION_POSE}', actionPose || '自然动态的动作姿势')
     .replaceAll('{NAME_TOP}', top)
     .replaceAll('{NAME_BOTTOM}', bottom)
     .replaceAll('{NAME}', upper)
     .replaceAll('{DOMINANT_COLOR}', dominant)
     .replaceAll('{ACCENT_COLOR}', accent);
+  // Text toggle: replace the auto-placement instruction with a no-text directive.
+  // Use a regex that matches regardless of which names were filled in.
+  if (showText === false) {
+    filled = filled.replace(
+      /根据角色动作姿势与位置，超大做旧印刷体英文「[^」]+」和「[^」]+」分别自动分配到四个角落中最空旷的两个位置（左上\/右上\/左下\/右下各选一），确保不被角色遮挡；底部一行小字星级副标题信息/,
+      '画面整洁不含任何文字，无水印',
+    );
+  }
   return FIDELITY_PREFIX + filled;
 }
