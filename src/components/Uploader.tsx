@@ -154,8 +154,17 @@ export function Uploader() {
           <div className="flex-1">
             {costumeChangeHistory.length > 0 ? (
               <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
-                {costumeChangeHistory.map((src, i) => (
-                  <div key={i} className="group relative overflow-hidden rounded-lg">
+                {costumeChangeHistory.map((src, i) => {
+                  const isActive = src === uploadedImage;
+                  return (
+                  <div
+                    key={i}
+                    className={`group relative overflow-hidden rounded-lg transition-shadow duration-300 ${
+                      isActive
+                        ? 'ring-2 ring-zzz-primary shadow-[0_0_24px_color-mix(in_srgb,var(--zzz-primary)_45%,transparent)]'
+                        : ''
+                    }`}
+                  >
                     <img
                       src={src}
                       alt={`换装结果 ${costumeChangeHistory.length - i}`}
@@ -182,7 +191,8 @@ export function Uploader() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-zzz-text/20">

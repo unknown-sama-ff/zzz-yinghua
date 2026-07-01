@@ -38,7 +38,7 @@ export function splitName(name: string): [string, string] {
  * corners based on the character's pose and spatial distribution in the image.
  */
 export const TEXT_INSTRUCTION =
-  '根据角色动作姿势与位置，超大做旧印刷体英文「{NAME_TOP}」和「{NAME_BOTTOM}」分别自动分配到四个角落中最空旷的两个位置（左上/右上/左下/右下各选一），确保不被角色遮挡；底部一行小字星级副标题信息';
+  '根据角色动作姿势与位置，超大做旧印刷体英文「{NAME_TOP}」和「{NAME_BOTTOM}」分别自动分配到四个角落中最空旷的两个位置（左上/右上/左下/右下各选一），确保不被角色遮挡';
 
 /**
  * The three ZZZ yinghua art styles.
