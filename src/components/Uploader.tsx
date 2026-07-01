@@ -168,7 +168,7 @@ export function Uploader() {
                     <img
                       src={src}
                       alt={`换装结果 ${costumeChangeHistory.length - i}`}
-                      className="w-full object-contain bg-zzz-ink/40"
+                      className={`w-full object-contain bg-zzz-ink/40 ${isActive ? 'rounded-md' : 'rounded-lg'}`}
                       loading="lazy"
                     />
                     <div className="absolute bottom-0 right-0 flex gap-1 p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
