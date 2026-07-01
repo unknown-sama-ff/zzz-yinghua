@@ -161,7 +161,7 @@ export function Uploader() {
                     key={i}
                     className={`group relative overflow-hidden rounded-lg transition-shadow duration-300 ${
                       isActive
-                        ? 'ring-2 ring-zzz-primary shadow-[0_0_24px_color-mix(in_srgb,var(--zzz-primary)_45%,transparent)]'
+                        ? 'ring-[3px] ring-zzz-primary shadow-[0_0_40px_color-mix(in_srgb,var(--zzz-primary)_70%,transparent),inset_0_0_20px_color-mix(in_srgb,var(--zzz-primary)_25%,transparent)]'
                         : ''
                     }`}
                   >
