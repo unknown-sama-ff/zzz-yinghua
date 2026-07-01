@@ -161,7 +161,7 @@ export function Uploader() {
                     key={i}
                     className={`group relative rounded-lg transition-shadow duration-300 ${
                       isActive
-                        ? 'ring-[3px] ring-zzz-primary shadow-[0_0_40px_color-mix(in_srgb,var(--zzz-primary)_70%,transparent),inset_0_0_20px_color-mix(in_srgb,var(--zzz-primary)_25%,transparent)]'
+                        ? 'shadow-[inset_0_0_30px_color-mix(in_srgb,var(--zzz-primary)_65%,transparent),inset_0_0_8px_color-mix(in_srgb,var(--zzz-text)_30%,transparent)] ring-[3px] ring-zzz-primary'
                         : ''
                     }`}
                   >
