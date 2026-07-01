@@ -31,21 +31,23 @@ export default function App() {
             </span>
           </h1>
           <p className="mt-2 font-mono text-xs text-zzz-text/55">
-            上传立绘 → 补全三视图 → 生成影画三风格 → ZZZ 风格图层查看器
+            补全三视图 → 上传立绘 → 生成影画三风格 → ZZZ 风格图层查看器
             {palette && <span className="ml-2 text-zzz-cyan">// 主题已跟随立绘取色</span>}
           </p>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 px-6 pb-10">
-        {/* Setup row: upload + provider side by side, balanced. */}
+        {/* Step 01: three-view generation workbench — first. */}
+        <ThreeViewPanel />
+
+        {/* Setup row: upload + provider side by side. */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Uploader />
           <ProviderSelect />
         </div>
 
         {/* Generation steps, full width, stacked in order. */}
-        <ThreeViewPanel />
         <YinghuaPanel />
         <YinghuaViewer />
         <PosterPanel />

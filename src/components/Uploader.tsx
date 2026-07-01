@@ -4,14 +4,36 @@ import { useToast } from '../store/useToast';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
 import { extractPalette } from '../lib/colorExtract';
 import { applyTheme, resetTheme } from '../lib/theme';
+import { generate, ApiError } from '../lib/apiClient';
+import { YINGHUA_SIZE } from '../lib/prompts';
+import { downloadImage } from '../lib/download';
+import { combineImagesSideBySide } from '../lib/combineImages';
+import { useBuildRequest } from './useBuildRequest';
 import { SectionHeader } from './SectionHeader';
 
 /** Image upload with drag/drop, validation, preview and palette extraction. */
 export function Uploader() {
-  const { uploadedImage, uploadedName, setUpload, setPalette, clearUpload } = useStore();
+  const {
+    uploadedImage,
+    uploadedName,
+    setUpload,
+    setPalette,
+    clearUpload,
+    costumeChangePrompt,
+    setCostumeChangePrompt,
+    costumeChangeSlot,
+    setCostumeChangeSlot,
+    costumeChangeHistory,
+    addCostumeChangeImages,
+    clearCostumeChangeHistory,
+    costumeChangeRefImage,
+    setCostumeChangeRefImage,
+  } = useStore();
   const showError = useToast((s) => s.show);
+  const buildRequest = useBuildRequest();
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const refInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -22,6 +44,7 @@ export function Uploader() {
       }
       const dataUrl = await fileToDataUrl(file);
       setUpload(dataUrl, file.name);
+      addCostumeChangeImages([dataUrl]);
       // Extract palette and theme the UI to the character's art.
       const palette = await extractPalette(dataUrl);
       setPalette(palette);
@@ -42,15 +65,18 @@ export function Uploader() {
 
   const onClear = () => {
     clearUpload();
+    clearCostumeChangeHistory();
+    setCostumeChangeRefImage(null);
     resetTheme();
     if (inputRef.current) inputRef.current.value = '';
+    if (refInputRef.current) refInputRef.current.value = '';
   };
 
   return (
     <section className="glass flex flex-col p-6">
-      <SectionHeader step="01" title="上传三视图立绘" />
+      <SectionHeader step="02" title="上传三视图立绘" />
       <p className="mb-3 font-mono text-xs text-zzz-text/55">
-        建议上传三视图成品以获得最佳生成效果。没有三视图？使用下方工作台生成 ↓
+        建议上传三视图成品以获得最佳生成效果。没有三视图？使用上方工作台生成 ↑
       </p>
 
       {!uploadedImage ? (
@@ -118,6 +144,155 @@ export function Uploader() {
           if (file) void handleFile(file);
         }}
       />
+
+      {/* Costume-change three-view section */}
+      <div className="mt-4 border-t border-zzz-text/10 pt-4">
+        <h3 className="mb-2 font-mono text-sm font-semibold text-zzz-text/80">角色换装三视图</h3>
+
+        <div className="flex flex-col gap-4 sm:flex-row">
+          {/* Left: image history */}
+          <div className="flex-1">
+            {costumeChangeHistory.length > 0 ? (
+              <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                {costumeChangeHistory.map((src, i) => (
+                  <div key={i} className="group relative overflow-hidden rounded-lg">
+                    <img
+                      src={src}
+                      alt={`换装结果 ${costumeChangeHistory.length - i}`}
+                      className="w-full object-contain bg-zzz-ink/40"
+                      loading="lazy"
+                    />
+                    <div className="absolute bottom-0 right-0 flex gap-1 p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={async () => {
+                          setUpload(src, 'history-pick.png');
+                          const p = await extractPalette(src);
+                          setPalette(p);
+                          applyTheme(p);
+                        }}
+                        className="glass-btn px-2 py-1 text-[10px] text-zzz-cyan"
+                      >
+                        用作主立绘
+                      </button>
+                      <button
+                        onClick={() => void downloadImage(src, `costume-change-${costumeChangeHistory.length - i}.png`)}
+                        className="glass-btn px-2 py-1 text-[10px] text-zzz-text"
+                      >
+                        下载
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-zzz-text/20">
+                <span className="font-mono text-xs text-zzz-text/40">
+                  上传立绘或生成后图片将显示在此处
+                </span>
+              </div>
+            )}
+            {costumeChangeSlot.status === 'loading' && (
+              <div className="mt-2 flex h-10 items-center justify-center rounded-lg border border-zzz-text/10 bg-zzz-text/[0.03]">
+                <span className="font-mono text-xs tracking-widest text-zzz-primary animate-pulse">
+                  GENERATING…
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Right: ref image + prompt + button */}
+          <div className="w-full sm:w-56 sm:shrink-0">
+            {/* Clothing reference image upload */}
+            <div className="mb-2">
+              <span className="font-mono text-[10px] text-zzz-text/45">服装参考</span>
+              {costumeChangeRefImage ? (
+                <div className="relative mt-1 overflow-hidden rounded-lg">
+                  <img
+                    src={costumeChangeRefImage}
+                    alt="服装参考"
+                    className="h-16 w-full object-contain bg-zzz-ink/40"
+                  />
+                  <button
+                    onClick={() => {
+                      setCostumeChangeRefImage(null);
+                      if (refInputRef.current) refInputRef.current.value = '';
+                    }}
+                    className="glass-btn absolute right-0.5 top-0.5 px-1.5 py-0 text-xs text-zzz-text/70"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => refInputRef.current?.click()}
+                  className="mt-1 flex h-16 w-full flex-col items-center justify-center rounded-lg border border-dashed border-zzz-text/20 text-[10px] text-zzz-text/40 transition-colors hover:border-zzz-primary/50 hover:text-zzz-text/60"
+                >
+                  <span className="text-lg">⬆</span>
+                  上传参考图
+                </button>
+              )}
+              <input
+                ref={refInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const check = validateImageFile(file);
+                  if (!check.ok) {
+                    showError(check.message ?? '文件校验失败');
+                    return;
+                  }
+                  const dataUrl = await fileToDataUrl(file);
+                  setCostumeChangeRefImage(dataUrl);
+                }}
+              />
+            </div>
+
+            <textarea
+              value={costumeChangePrompt}
+              onChange={(e) => setCostumeChangePrompt(e.target.value)}
+              rows={4}
+              className="glass-input mb-2 w-full resize-y px-3 py-2 text-sm leading-relaxed"
+            />
+
+            <button
+              onClick={async () => {
+                if (!uploadedImage) {
+                  showError('请先上传角色立绘');
+                  return;
+                }
+                setCostumeChangeSlot({ status: 'loading', error: undefined, images: [] });
+                let imageOverride: string | undefined;
+                if (costumeChangeRefImage) {
+                  try {
+                    imageOverride = await combineImagesSideBySide(uploadedImage, costumeChangeRefImage);
+                  } catch {
+                    showError('参考图合成失败');
+                    setCostumeChangeSlot({ status: 'error', error: '参考图合成失败', images: [] });
+                    return;
+                  }
+                }
+                generate(buildRequest(costumeChangePrompt, { size: YINGHUA_SIZE, imageOverride }))
+                  .then((images) => {
+                    setCostumeChangeSlot({ status: 'done', images });
+                    addCostumeChangeImages(images);
+                  })
+                  .catch((err) => {
+                    const msg = err instanceof ApiError ? err.message : '生成失败';
+                    setCostumeChangeSlot({ status: 'error', error: msg, images: [] });
+                    showError(msg);
+                  });
+              }}
+              disabled={!uploadedImage || costumeChangeSlot.status === 'loading'}
+              className="glass-btn w-full py-2 font-mono text-sm uppercase tracking-widest text-zzz-text disabled:opacity-40"
+            >
+              {costumeChangeSlot.status === 'loading' ? '生成中…' : '生成换装三视图'}
+            </button>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

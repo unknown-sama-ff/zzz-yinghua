@@ -77,7 +77,7 @@ app.post('/api/detect-face', async (req, res) => {
       role: 'user',
       content: [
         { type: 'image_url', image_url: { url: `data:${mime};base64,${imageBase64}`, detail: 'high' } },
-        { type: 'text', text: 'Find the character\'s face in this image. faceTop = top of forehead / above eyebrows (both eyes below this line). faceBottom = bottom of chin. faceLeft = leftmost edge of face (including hair framing the face). faceRight = rightmost edge of face. Return ONLY raw JSON: {"faceTop":0.05,"faceBottom":0.48,"faceLeft":0.10,"faceRight":0.55} — values are 0-1 fractions: top/bottom = fraction of image height from top, left/right = fraction of image width from left. No markdown, no explanation.' },
+        { type: 'text', text: 'Detect the character\'s facial region. The character may be human, robot, animal, or any creature — adapt to their anatomy:\n\nfaceTop = top of the facial feature area (human: above eyebrows; robot: top of visor/screen/faceplate; animal: above eyes)\nfaceBottom = bottom of the facial feature area (human: bottom of chin; robot: bottom of faceplate; animal: bottom of muzzle/snout)\nfaceLeft = leftmost edge of the facial feature cluster\nfaceRight = rightmost edge of the facial feature cluster\n\nReturn ONLY raw JSON: {"faceTop":0.05,"faceBottom":0.48,"faceLeft":0.10,"faceRight":0.55}\nValues are 0-1 fractions: top/bottom = fraction of image height from top, left/right = fraction of image width from left. No markdown, no explanation.' },
       ],
     }],
     max_tokens: 60,

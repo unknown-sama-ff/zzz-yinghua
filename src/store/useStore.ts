@@ -7,7 +7,7 @@ import type {
   ProviderName,
   YinghuaStyleId,
 } from '../types';
-import { THREE_VIEW_PROMPT } from '../lib/prompts';
+import { THREE_VIEW_PROMPT, COSTUME_CHANGE_PROMPT } from '../lib/prompts';
 import type { ClipRegions } from '../lib/clipRegions';
 import type { FaceBounds } from '../lib/detectFace';
 
@@ -73,6 +73,17 @@ interface WorkshopState {
   setYinghuaSlot: (id: YinghuaStyleId, patch: Partial<GenSlot>) => void;
   setSlotManual: (id: YinghuaStyleId, dataUrl: string) => void;
 
+  // --- Costume change three-view ---
+  costumeChangePrompt: string;
+  setCostumeChangePrompt: (p: string) => void;
+  costumeChangeSlot: GenSlot;
+  setCostumeChangeSlot: (patch: Partial<GenSlot>) => void;
+  costumeChangeHistory: string[];
+  addCostumeChangeImages: (urls: string[]) => void;
+  clearCostumeChangeHistory: () => void;
+  costumeChangeRefImage: string | null;
+  setCostumeChangeRefImage: (dataUrl: string | null) => void;
+
   // --- Poster (module 06) ---
   posterSlot: GenSlot;
   setPosterSlot: (patch: Partial<GenSlot>) => void;
@@ -98,6 +109,10 @@ interface WorkshopState {
   // --- Yinghua action pose ---
   yinghuaActionPose: string;
   setYinghuaActionPose: (pose: string) => void;
+
+  // --- Yinghua character traits ---
+  yinghuaCharacterTraits: string;
+  setYinghuaCharacterTraits: (t: string) => void;
 
   // --- Name placement ---
   namePlacement: NamePlacement;
@@ -153,6 +168,18 @@ export const useStore = create<WorkshopState>((set) => ({
       yinghuaSlots: { ...s.yinghuaSlots, [id]: { status: 'done', images: [dataUrl] } },
     })),
 
+  costumeChangePrompt: COSTUME_CHANGE_PROMPT,
+  setCostumeChangePrompt: (p) => set({ costumeChangePrompt: p }),
+  costumeChangeSlot: emptySlot(),
+  setCostumeChangeSlot: (patch) =>
+    set((s) => ({ costumeChangeSlot: { ...s.costumeChangeSlot, ...patch } })),
+  costumeChangeHistory: [],
+  addCostumeChangeImages: (urls) =>
+    set((s) => ({ costumeChangeHistory: [...urls, ...s.costumeChangeHistory] })),
+  clearCostumeChangeHistory: () => set({ costumeChangeHistory: [] }),
+  costumeChangeRefImage: null,
+  setCostumeChangeRefImage: (dataUrl) => set({ costumeChangeRefImage: dataUrl }),
+
   posterSlot: emptySlot(),
   setPosterSlot: (patch) =>
     set((s) => ({ posterSlot: { ...s.posterSlot, ...patch } })),
@@ -184,6 +211,9 @@ export const useStore = create<WorkshopState>((set) => ({
 
   yinghuaActionPose: '',
   setYinghuaActionPose: (pose) => set({ yinghuaActionPose: pose }),
+
+  yinghuaCharacterTraits: '',
+  setYinghuaCharacterTraits: (t) => set({ yinghuaCharacterTraits: t }),
 
   namePlacement: 'auto',
   setNamePlacement: (p) => set({ namePlacement: p }),

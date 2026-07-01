@@ -80,6 +80,7 @@ export function ThreeViewPanel() {
     setThreeViewSlot,
     setUpload,
     setPalette,
+    addCostumeChangeImages,
   } = useStore();
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
@@ -113,6 +114,7 @@ export function ThreeViewPanel() {
         buildRequest(threeViewPrompt, { imageOverride: stitched, size: YINGHUA_SIZE }),
       );
       setThreeViewSlot({ status: 'done', images });
+      addCostumeChangeImages(images);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
       setThreeViewSlot({ status: 'error', error: msg, images: [] });
@@ -130,7 +132,7 @@ export function ThreeViewPanel() {
 
   return (
     <section className="glass p-6">
-      <SectionHeader step="03" title="三视图生成工作台" />
+      <SectionHeader step="01" title="三视图生成工作台（有三视图直接跳到02）" />
 
       <p className="mb-4 font-mono text-xs text-zzz-text/55">
         上传正面（必填）+ 侧面/背面（可选），自动拼合后发给 AI 生成完整三视图。（建议上传 PNG 透明背景图；只上传正面可能效果不佳）

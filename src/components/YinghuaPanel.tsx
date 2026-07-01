@@ -24,6 +24,8 @@ export function YinghuaPanel() {
     setYinghuaShowText,
     yinghuaActionPose,
     setYinghuaActionPose,
+    yinghuaCharacterTraits,
+    setYinghuaCharacterTraits,
     uploadedImage,
     palette,
     visionCred,
@@ -38,7 +40,7 @@ export function YinghuaPanel() {
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
       if (!yinghuaPrompts[style.id]) {
-        setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose));
+        setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -47,26 +49,26 @@ export function YinghuaPanel() {
   // Re-fill prompts when the name changes.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose));
+      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characterName, yinghuaActionPose]);
+  }, [characterName, yinghuaActionPose, yinghuaCharacterTraits]);
 
   // Re-fill prompts when palette changes (new image uploaded).
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose));
+      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [palette, yinghuaActionPose]);
+  }, [palette, yinghuaActionPose, yinghuaCharacterTraits]);
 
   // Re-fill prompts when showText toggles.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose));
+      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yinghuaShowText, yinghuaActionPose]);
+  }, [yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits]);
 
   const runFaceDetect = async (src: string) => {
     setDetectFaceError(null);
@@ -148,6 +150,18 @@ export function YinghuaPanel() {
             value={yinghuaActionPose}
             onChange={(e) => setYinghuaActionPose(e.target.value)}
             placeholder="智能分析（留空自动生成）"
+            className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90 placeholder:text-zzz-text/30"
+          />
+        </div>
+
+        {/* Character traits input */}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">角色特点</span>
+          <input
+            type="text"
+            value={yinghuaCharacterTraits}
+            onChange={(e) => setYinghuaCharacterTraits(e.target.value)}
+            placeholder="性格、特性等（留空不注入）"
             className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90 placeholder:text-zzz-text/30"
           />
         </div>

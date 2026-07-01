@@ -31,7 +31,7 @@ export function ProviderSelect() {
 
   return (
     <section className="glass p-6">
-      <SectionHeader step="02" title="接口与角色" />
+      <SectionHeader step="03" title="接口与角色" />
 
       <label className="mb-1 block font-mono text-xs text-zzz-text/60">角色英文名</label>
       <input
