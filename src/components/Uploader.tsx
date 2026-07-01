@@ -153,13 +153,13 @@ export function Uploader() {
           {/* Left: image history */}
           <div className="flex-1">
             {costumeChangeHistory.length > 0 ? (
-              <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+              <div className="max-h-96 space-y-3 overflow-y-auto pr-3">
                 {costumeChangeHistory.map((src, i) => {
                   const isActive = src === uploadedImage;
                   return (
                   <div
                     key={i}
-                    className={`group relative overflow-hidden rounded-lg transition-shadow duration-300 ${
+                    className={`group relative rounded-lg transition-shadow duration-300 ${
                       isActive
                         ? 'ring-[3px] ring-zzz-primary shadow-[0_0_40px_color-mix(in_srgb,var(--zzz-primary)_70%,transparent),inset_0_0_20px_color-mix(in_srgb,var(--zzz-primary)_25%,transparent)]'
                         : ''
