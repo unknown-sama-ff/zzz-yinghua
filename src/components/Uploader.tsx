@@ -153,7 +153,7 @@ export function Uploader() {
           {/* Left: image history */}
           <div className="flex-1">
             {costumeChangeHistory.length > 0 ? (
-              <div className="max-h-96 space-y-3 overflow-y-auto px-1 pr-3">
+              <div className="max-h-96 space-y-3 overflow-y-auto px-1 py-1 pr-3">
                 {costumeChangeHistory.map((src, i) => {
                   const isActive = src === uploadedImage;
                   return (
