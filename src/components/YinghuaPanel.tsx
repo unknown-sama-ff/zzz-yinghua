@@ -246,11 +246,9 @@ export function YinghuaPanel() {
             >
               {style.id === 1 && !sixReady
                 ? '需先生成六命'
-                : style.id === 2 && !sixReady
-                  ? '需先生成六命'
-                  : style.id === 2 && !oneReady
-                    ? '需先生成零命'
-                    : '生成'}
+                : style.id === 2 && (!sixReady || !oneReady)
+                  ? '需先生成六命、零命'
+                  : '生成'}
             </button>
             <ResultView
               slot={yinghuaSlots[style.id]}
