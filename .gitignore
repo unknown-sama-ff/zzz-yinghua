@@ -22,5 +22,11 @@ npm-debug.log*
 影画样式1/
 影画样式2/
 影画样式3/
+!public/影画样式1/
+!public/影画样式1/**
+!public/影画样式2/
+!public/影画样式2/**
+!public/影画样式3/
+!public/影画样式3/**
 切换样式.mp4
 影画工坊-构建Prompt.md

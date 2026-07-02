@@ -114,6 +114,10 @@ interface WorkshopState {
   yinghuaCharacterTraits: string;
   setYinghuaCharacterTraits: (t: string) => void;
 
+  // --- Yinghua addon image ---
+  yinghuaAddonImage: string | null;
+  setYinghuaAddonImage: (dataUrl: string | null) => void;
+
   // --- Name placement ---
   namePlacement: NamePlacement;
   setNamePlacement: (p: NamePlacement) => void;
@@ -214,6 +218,9 @@ export const useStore = create<WorkshopState>((set) => ({
 
   yinghuaCharacterTraits: '',
   setYinghuaCharacterTraits: (t) => set({ yinghuaCharacterTraits: t }),
+
+  yinghuaAddonImage: null,
+  setYinghuaAddonImage: (dataUrl) => set({ yinghuaAddonImage: dataUrl }),
 
   namePlacement: 'auto',
   setNamePlacement: (p) => set({ namePlacement: p }),

@@ -4,7 +4,9 @@ import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
 import { combineImagesSideBySide } from '../lib/combineImages';
-import { parseDataUrl } from '../lib/validation';
+import { stitchImages } from '../lib/stitchImages';
+import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
+import { parseDataUrl, validateImageFile, fileToDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { useBuildRequest } from './useBuildRequest';
@@ -26,6 +28,8 @@ export function YinghuaPanel() {
     setYinghuaActionPose,
     yinghuaCharacterTraits,
     setYinghuaCharacterTraits,
+    yinghuaAddonImage,
+    setYinghuaAddonImage,
     uploadedImage,
     palette,
     visionCred,
@@ -70,6 +74,12 @@ export function YinghuaPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits]);
 
+  // Warm the style reference sheets on mount so the first generate click
+  // doesn't pay the cold-start fetch/decode/stitch cost.
+  useEffect(() => {
+    void preloadStyleReferenceSheets();
+  }, []);
+
   const runFaceDetect = async (src: string) => {
     setDetectFaceError(null);
     try {
@@ -91,21 +101,26 @@ export function YinghuaPanel() {
       showError('请先上传角色正面图片');
       return;
     }
-    // 三命/六命 combine 零命 result (pose/text layout) + original upload (clothing
-    // colours) into a single side-by-side reference image. Requires 零命 done first.
+    // 零命/三命 combine 六命 result (pose/text layout) + original upload (identity
+    // and clothing colours) into a single side-by-side reference image. Then append
+    // the matching style reference sheet so the model sees the target Mindscape visual language.
     let imageOverride: string | undefined;
-    if (id !== 1) {
-      const baseImg = yinghuaSlots[1].images[0];
-      if (!baseImg) {
-        showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
-        return;
+    try {
+      const styleSheet = await buildStyleReferenceSheet(id);
+      if (id === 3) {
+        imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
+      } else {
+        const baseImg = yinghuaSlots[3].images[0];
+        if (!baseImg) {
+          showError('请先生成六命，零命/三命需要六命结果锁定姿势与文字位置');
+          return;
+        }
+        const paired = await combineImagesSideBySide(baseImg, uploadedImage);
+        imageOverride = await stitchImages([paired, yinghuaAddonImage, styleSheet]);
       }
-      try {
-        imageOverride = await combineImagesSideBySide(baseImg, uploadedImage);
-      } catch {
-        showError('参考图合成失败');
-        return;
-      }
+    } catch {
+      showError('风格参考图合成失败');
+      return;
     }
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
@@ -126,7 +141,7 @@ export function YinghuaPanel() {
       <SectionHeader step="04" title="影画动作设计 · 三风格" />
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 先生成「零命」，三命/六命会将零命结果（姿势/文字位置）与原始立绘（服饰配色）合成双参考图。
+          ⛓ 先生成「六命」，再生成「零命」，最后生成「三命」。零命会将六命结果（姿势/构图/取景）与原始立绘（身份/服饰配色）合成双参考图；三命会在此基础上继续参考零命的服装覆盖范围。三种风格都会自动附加对应影画样式参考图，样张只用于风格，不用于角色身份。
         </p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}
@@ -165,11 +180,52 @@ export function YinghuaPanel() {
             className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90 placeholder:text-zzz-text/30"
           />
         </div>
+
+        {/* Addon element image */}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">附加元素</span>
+          {yinghuaAddonImage ? (
+            <div className="relative flex-1 overflow-hidden rounded-lg border border-zzz-text/10 bg-zzz-text/[0.03]">
+              <img src={yinghuaAddonImage} alt="附加元素" className="h-12 w-full object-contain" />
+              <button
+                onClick={() => setYinghuaAddonImage(null)}
+                className="glass-btn absolute right-1 top-1 px-2 py-0 text-[10px] text-zzz-text/70"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <label className="glass-input flex-1 cursor-pointer rounded px-2 py-2 font-mono text-[11px] text-zzz-text/45 hover:border-zzz-primary/45">
+              上传元素图（武器/道具等）
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const check = validateImageFile(file);
+                  if (!check.ok) {
+                    showError(check.message ?? '文件校验失败');
+                    return;
+                  }
+                  const dataUrl = await fileToDataUrl(file);
+                  setYinghuaAddonImage(dataUrl);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
+        </div>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {YINGHUA_STYLES.map((style) => {
-          const baseReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
-          const needsBase = style.id !== 1 && !baseReady;
+          const sixReady = yinghuaSlots[3].status === 'done' && Boolean(yinghuaSlots[3].images[0]);
+          const oneReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
+          const needsBase =
+            (style.id === 1 && !sixReady) ||
+            (style.id === 2 && (!sixReady || !oneReady)) ||
+            false;
           return (
           <div
             key={style.id}
@@ -188,7 +244,13 @@ export function YinghuaPanel() {
               disabled={yinghuaSlots[style.id].status === 'loading' || needsBase}
               className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
             >
-              {needsBase ? '需先生成零命' : '生成'}
+              {style.id === 1 && !sixReady
+                ? '需先生成六命'
+                : style.id === 2 && !sixReady
+                  ? '需先生成六命'
+                  : style.id === 2 && !oneReady
+                    ? '需先生成零命'
+                    : '生成'}
             </button>
             <ResultView
               slot={yinghuaSlots[style.id]}
