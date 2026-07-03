@@ -103,18 +103,18 @@ export function YinghuaPanel() {
       showError('请先上传角色正面图片');
       return;
     }
-    // 零命/三命 combine 六命 result (pose/text layout) + original upload (identity
+    // 三命/六命 combine 零命 result (pose/text layout) + original upload (identity
     // and clothing colours) into a single side-by-side reference image. Then append
     // the matching style reference sheet so the model sees the target Mindscape visual language.
     let imageOverride: string | undefined;
     try {
       const styleSheet = await buildStyleReferenceSheet(id);
-      if (id === 3) {
+      if (id === 1) {
         imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
       } else {
-        const baseImg = yinghuaSlots[3].images[0];
+        const baseImg = yinghuaSlots[1].images[0];
         if (!baseImg) {
-          showError('请先生成六命，零命/三命需要六命结果锁定姿势与文字位置');
+          showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
           return;
         }
         const paired = await combineImagesSideBySide(baseImg, uploadedImage);
@@ -143,7 +143,7 @@ export function YinghuaPanel() {
       <SectionHeader step="04" title="影画动作设计 · 三风格" />
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 先生成「六命」，再生成「零命」，最后生成「三命」。零命会将六命结果（姿势/构图/取景）与原始立绘（身份/服饰配色）合成双参考图；三命会在此基础上继续参考零命的服装覆盖范围。三种风格都会自动附加对应影画样式参考图，样张只用于风格，不用于角色身份。
+          ⛓ 先生成「零命」，三命/六命会将零命结果（姿势/构图/文字位置）与原始立绘（身份/服饰配色）合成双参考图；三种风格都会自动附加对应影画样式参考图，样张只用于风格，不用于角色身份。
         </p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}
@@ -222,12 +222,8 @@ export function YinghuaPanel() {
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {YINGHUA_STYLES.map((style) => {
-          const sixReady = yinghuaSlots[3].status === 'done' && Boolean(yinghuaSlots[3].images[0]);
           const oneReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
-          const needsBase =
-            (style.id === 1 && !sixReady) ||
-            (style.id === 2 && (!sixReady || !oneReady)) ||
-            false;
+          const needsBase = style.id !== 1 && !oneReady;
           return (
           <div
             key={style.id}
@@ -246,11 +242,7 @@ export function YinghuaPanel() {
               disabled={yinghuaSlots[style.id].status === 'loading' || needsBase}
               className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
             >
-              {style.id === 1 && !sixReady
-                ? '需先生成六命'
-                : style.id === 2 && (!sixReady || !oneReady)
-                  ? '需先生成六命、零命'
-                  : '生成'}
+              {needsBase ? '需先生成零命' : '生成'}
             </button>
             <ResultView
               slot={yinghuaSlots[style.id]}

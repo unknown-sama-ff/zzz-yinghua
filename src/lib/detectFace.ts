@@ -1,3 +1,5 @@
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+
 export interface FaceBounds {
   faceTop: number;
   faceBottom: number;
@@ -10,7 +12,7 @@ export async function detectFace(
   imageMime: string,
   opts?: { apiKey?: string; baseUrl?: string; model?: string },
 ): Promise<FaceBounds> {
-  const res = await fetch('/api/detect-face', {
+  const res = await fetch(`${API_BASE_URL}/api/detect-face`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageBase64, imageMime, ...opts }),
