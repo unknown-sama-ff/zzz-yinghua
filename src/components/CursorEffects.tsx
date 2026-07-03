@@ -4,8 +4,11 @@ import { useCursorEffectsPref } from '../lib/useCursorEffectsPref';
 const THEME_VARS = ['--zzz-primary', '--zzz-magenta', '--zzz-cyan'] as const;
 const MAX_PARTICLES = 150;
 const TRAIL_MIN_DIST = 14;
+const TRAIL_MIN_DIST_TOUCH = 8;
 const SCROLL_PULSE_THROTTLE_MS = 150;
+const EDGE_GLOW_FADE_MS = 300;
 const SPOTLIGHT_RADIUS = 60;
+const SPOTLIGHT_RADIUS_TOUCH = 120;
 const THEME_REFRESH_INTERVAL_MS = 150;
 const THEME_TRANSITION_TAU_MS = 100;
 const THEME_TRANSITION_EPSILON = 0.5;
@@ -113,6 +116,7 @@ export function CursorEffects() {
   const { enabled, reduced, setEnabled } = useCursorEffectsPref();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);
+  const edgeGlowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -128,6 +132,9 @@ export function CursorEffects() {
     let mouseX: number | null = null;
     let mouseY: number | null = null;
     let frameScheduled = false;
+    const spotlightRadius = matchMedia('(pointer: coarse)').matches ? SPOTLIGHT_RADIUS_TOUCH : SPOTLIGHT_RADIUS;
+    let edgeGlowTimeout: ReturnType<typeof setTimeout> | undefined;
+    let lastTouchY = 0;
     const themeColors = createThemeColorCache();
 
     const resize = () => {
@@ -209,13 +216,13 @@ export function CursorEffects() {
       // Persistent spotlight: follows the cursor anywhere on the page, not
       // gated to any particular element.
       if (mouseX !== null && mouseY !== null) {
-        const gradient = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, SPOTLIGHT_RADIUS);
+        const gradient = ctx.createRadialGradient(mouseX, mouseY, 0, mouseX, mouseY, spotlightRadius);
         gradient.addColorStop(0, themeColors.primary());
         gradient.addColorStop(1, 'transparent');
         ctx.globalAlpha = 0.35;
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.arc(mouseX, mouseY, SPOTLIGHT_RADIUS, 0, Math.PI * 2);
+        ctx.arc(mouseX, mouseY, spotlightRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
       }
@@ -273,11 +280,19 @@ export function CursorEffects() {
       if (now - lastScrollPulse < SCROLL_PULSE_THROTTLE_MS) return;
       lastScrollPulse = now;
       const pulse = pulseRef.current;
-      if (!pulse) return;
-      pulse.classList.remove('scroll-pulse-active');
-      void pulse.offsetWidth; // force reflow so the animation can restart
-      pulse.style.setProperty('--pulse-color', themeColors.random());
-      pulse.classList.add('scroll-pulse-active');
+      if (pulse) {
+        pulse.classList.remove('scroll-pulse-active');
+        void pulse.offsetWidth;
+        pulse.style.setProperty('--pulse-color', themeColors.random());
+        pulse.classList.add('scroll-pulse-active');
+      }
+      const edge = edgeGlowRef.current;
+      if (edge) {
+        edge.style.setProperty('--edge-color', themeColors.random());
+        edge.classList.add('active');
+        clearTimeout(edgeGlowTimeout);
+        edgeGlowTimeout = setTimeout(() => edge.classList.remove('active'), EDGE_GLOW_FADE_MS);
+      }
     };
 
     const onMouseLeave = () => {
@@ -295,9 +310,10 @@ export function CursorEffects() {
       mouseX = tx;
       mouseY = ty;
       requestTick();
+      // Touch trail: denser, faster-fading particles that feel tighter to the finger.
       const dx = tx - lastTrailX;
       const dy = ty - lastTrailY;
-      if (dx * dx + dy * dy < TRAIL_MIN_DIST * TRAIL_MIN_DIST) return;
+      if (dx * dx + dy * dy < TRAIL_MIN_DIST_TOUCH * TRAIL_MIN_DIST_TOUCH) return;
       lastTrailX = tx;
       lastTrailY = ty;
       if (particles.length >= MAX_PARTICLES) particles.shift();
@@ -305,11 +321,20 @@ export function CursorEffects() {
         kind: 'trail',
         x: tx,
         y: ty,
-        r: 2 + Math.random() * 2,
+        r: 3 + Math.random() * 3,
         life: 0,
-        maxLife: 500 + Math.random() * 300,
+        maxLife: 300 + Math.random() * 200,
         color: themeColors.random(),
       });
+      // Edge glow on vertical scroll: light up left/right viewport edges.
+      const edge = edgeGlowRef.current;
+      if (edge && Math.abs(ty - lastTouchY) > 4) {
+        edge.style.setProperty('--edge-color', themeColors.random());
+        edge.classList.add('active');
+        clearTimeout(edgeGlowTimeout);
+        edgeGlowTimeout = setTimeout(() => edge.classList.remove('active'), EDGE_GLOW_FADE_MS);
+      }
+      lastTouchY = ty;
     };
 
     // Reset the trail origin on touchstart so the first frame of a drag
@@ -352,6 +377,7 @@ export function CursorEffects() {
 
     return () => {
       cancelAnimationFrame(rafId);
+      clearTimeout(edgeGlowTimeout);
       window.removeEventListener('resize', resize);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('click', onClick);
@@ -372,9 +398,10 @@ export function CursorEffects() {
   return (
     <>
       {enabled && (
-        <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[10000]" aria-hidden="true" />
+        <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[10000]" style={{ willChange: 'transform' }} aria-hidden="true" />
       )}
       <div ref={pulseRef} className="scroll-pulse-overlay pointer-events-none fixed inset-0 z-[9998]" aria-hidden="true" />
+      <div ref={edgeGlowRef} className="scroll-edge-glow pointer-events-none fixed inset-0 z-[9997]" aria-hidden="true" />
       <button
         onClick={() => setEnabled(!enabled)}
         aria-pressed={enabled}
