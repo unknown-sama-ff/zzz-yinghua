@@ -5,8 +5,9 @@
 /* ===========================================================================
    ZZZ design tokens — runtime CSS variables.
    Defaults below are the fallback theme; the color extractor overrides
-   --zzz-primary / --zzz-magenta / --zzz-accent / --zzz-muted / --zzz-shadow
-   after an image is uploaded. The transition makes the swap animate (~300ms).
+   --zzz-primary / --zzz-magenta / --zzz-accent / --zzz-muted / --zzz-text-on
+   after an image is uploaded (--zzz-shadow derives from --zzz-primary below,
+   not set directly). The transition makes the swap animate (~300ms).
    =========================================================================== */
 :root {
   --zzz-bg: #0d0a14;
@@ -21,13 +22,19 @@
   --zzz-text-on: #f5f0ff;
   --zzz-radius: 4px;
   --zzz-radius-lg: 18px;
-  --zzz-shadow: 0 0 12px rgba(176, 38, 255, 0.6);
+  /* Derived from --zzz-primary (which already transitions) rather than set
+     directly by JS, so the glow color rides along with the same animation
+     instead of needing its own — box-shadow values can't be typed via
+     @property, so this is the only way to make it transition smoothly. */
+  --zzz-shadow: 0 0 12px color-mix(in srgb, var(--zzz-primary) 60%, transparent);
   --zzz-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
   transition:
     --zzz-primary 300ms var(--zzz-ease),
     --zzz-magenta 300ms var(--zzz-ease),
-    --zzz-accent 300ms var(--zzz-ease);
+    --zzz-accent 300ms var(--zzz-ease),
+    --zzz-muted 300ms var(--zzz-ease),
+    --zzz-text-on 300ms var(--zzz-ease);
 }
 
 * {
@@ -115,6 +122,16 @@ body::before {
   syntax: '<color>';
   inherits: true;
   initial-value: #ff2d9b;
+}
+@property --zzz-muted {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #16121f;
+}
+@property --zzz-text-on {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #f5f0ff;
 }
 
 /* --- Reusable ZZZ component classes --- */
@@ -271,6 +288,26 @@ body::before {
       color-mix(in srgb, var(--zzz-magenta) 60%, transparent)
     );
     box-shadow: 0 0 14px color-mix(in srgb, var(--zzz-primary) 45%, transparent);
+  }
+}
+
+/* Scroll feedback pulse: a brief themed glow from the viewport edges,
+   restarted (via CursorEffects.tsx toggling this class) on each wheel tick. */
+.scroll-pulse-overlay {
+  opacity: 0;
+  box-shadow: inset 0 0 0 0 transparent;
+}
+.scroll-pulse-overlay.scroll-pulse-active {
+  animation: scroll-pulse 550ms ease-out;
+}
+@keyframes scroll-pulse {
+  0% {
+    opacity: 0.55;
+    box-shadow: inset 0 0 0 0 var(--pulse-color, var(--zzz-primary));
+  }
+  100% {
+    opacity: 0;
+    box-shadow: inset 0 0 120px -20px var(--pulse-color, var(--zzz-primary));
   }
 }
 

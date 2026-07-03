@@ -7,6 +7,7 @@ import { YinghuaPanel } from './components/YinghuaPanel';
 import { YinghuaViewer } from './components/YinghuaViewer';
 import { PosterPanel } from './components/PosterPanel';
 import { Toast } from './components/Toast';
+import { CursorEffects } from './components/CursorEffects';
 
 export default function App() {
   const palette = useStore((s) => s.palette);
@@ -14,6 +15,8 @@ export default function App() {
 
   return (
     <div className="min-h-full">
+      <CursorEffects />
+
       {/* Header */}
       <header className="relative overflow-hidden px-6 py-8">
         <div
