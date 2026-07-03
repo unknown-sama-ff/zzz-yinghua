@@ -12,6 +12,7 @@ import { computeClipRegions } from '../lib/clipRegions';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
+import type { GallerySaveInfo } from './GallerySaveButton';
 import type { YinghuaStyleId } from '../types';
 
 /** Section 2.4 — generate the three ZZZ yinghua action styles. */
@@ -32,6 +33,7 @@ export function YinghuaPanel() {
     setYinghuaAddonImage,
     uploadedImage,
     palette,
+    provider,
     visionCred,
     setViewerClipRegions,
     setDetectFaceError,
@@ -253,6 +255,17 @@ export function YinghuaPanel() {
             <ResultView
               slot={yinghuaSlots[style.id]}
               downloadPrefix={`yinghua-style${style.id}`}
+              saveInfo={
+                yinghuaSlots[style.id].images[0]
+                  ? ({
+                      imageUrl: yinghuaSlots[style.id].images[0],
+                      style: style.label,
+                      characterName,
+                      prompt: yinghuaPrompts[style.id],
+                      provider,
+                    } satisfies GallerySaveInfo)
+                  : undefined
+              }
             />
           </div>
           );

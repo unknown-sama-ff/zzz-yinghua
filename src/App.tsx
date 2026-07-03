@@ -6,6 +6,7 @@ import { ThreeViewPanel } from './components/ThreeViewPanel';
 import { YinghuaPanel } from './components/YinghuaPanel';
 import { YinghuaViewer } from './components/YinghuaViewer';
 import { PosterPanel } from './components/PosterPanel';
+import { GalleryPanel } from './components/GalleryPanel';
 import { Toast } from './components/Toast';
 import { CursorEffects } from './components/CursorEffects';
 
@@ -54,6 +55,7 @@ export default function App() {
         <YinghuaPanel />
         <YinghuaViewer />
         <PosterPanel />
+        <GalleryPanel />
       </main>
 
       <footer className="mx-auto max-w-6xl px-6 pb-8 text-center font-mono text-[11px] text-zzz-text/40">

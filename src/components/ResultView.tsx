@@ -1,4 +1,5 @@
 import { downloadImage } from '../lib/download';
+import { GallerySaveButton, type GallerySaveInfo } from './GallerySaveButton';
 import type { GenSlot } from '../types';
 
 interface ResultViewProps {
@@ -7,10 +8,12 @@ interface ResultViewProps {
   /** Optional action when an image is clicked (e.g. send to viewer). */
   onPick?: (src: string) => void;
   pickLabel?: string;
+  /** When provided, a "save to gallery" button appears next to the download button. */
+  saveInfo?: GallerySaveInfo;
 }
 
 /** Renders a generation slot: skeleton while loading, images + downloads done. */
-export function ResultView({ slot, downloadPrefix, onPick, pickLabel }: ResultViewProps) {
+export function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo }: ResultViewProps) {
   if (slot.status === 'idle') return null;
 
   if (slot.status === 'loading') {
@@ -42,6 +45,7 @@ export function ResultView({ slot, downloadPrefix, onPick, pickLabel }: ResultVi
             className="w-full object-contain"
           />
           <figcaption className="absolute bottom-0 right-0 flex gap-2 p-2 opacity-0 transition-opacity group-hover:opacity-100">
+            {saveInfo && <GallerySaveButton saveInfo={saveInfo} />}
             {onPick && (
               <button
                 onClick={() => onPick(src)}
