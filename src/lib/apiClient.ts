@@ -1,7 +1,5 @@
 import type { ApiResponse, GenRequest } from '../types';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-
 /**
  * Call the Node proxy to generate images. The proxy handles upstream auth,
  * retries, timeouts and long-task polling, then returns the unified envelope.
@@ -9,7 +7,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, ''
 export async function generate(req: GenRequest): Promise<string[]> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/api/generate`, {
+    res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
