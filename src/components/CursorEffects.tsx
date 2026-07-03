@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useCursorEffectsPref } from '../lib/useCursorEffectsPref';
 
 const THEME_VARS = ['--zzz-primary', '--zzz-magenta', '--zzz-cyan'] as const;
@@ -7,6 +7,7 @@ const MAX_PARTICLES_TOUCH = 80;
 const TRAIL_MIN_DIST = 14;
 const TRAIL_MIN_DIST_TOUCH = 8;
 const SCROLL_PULSE_THROTTLE_MS = 150;
+const SCROLL_PULSE_TOUCH_MS = 400;
 const SCROLL_PULSE_TOUCH_DIST = 20;
 const SPOTLIGHT_RADIUS = 60;
 const SPOTLIGHT_RADIUS_TOUCH = 120;
@@ -120,7 +121,7 @@ export function CursorEffects() {
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -136,6 +137,7 @@ export function CursorEffects() {
     const spotlightRadius = matchMedia('(pointer: coarse)').matches ? SPOTLIGHT_RADIUS_TOUCH : SPOTLIGHT_RADIUS;
     const maxParticles = matchMedia('(pointer: coarse)').matches ? MAX_PARTICLES_TOUCH : MAX_PARTICLES;
     let lastScrollTouchY = 0;
+    let lastScrollPulseTouch = 0;
     const themeColors = createThemeColorCache();
 
     let resizeTimer: ReturnType<typeof setTimeout>;
@@ -330,14 +332,25 @@ export function CursorEffects() {
       // Trigger the same desktop scroll-pulse on vertical touch scroll.
       if (Math.abs(ty - lastScrollTouchY) > SCROLL_PULSE_TOUCH_DIST) {
         lastScrollTouchY = ty;
-        const pulse = pulseRef.current;
-        if (pulse) {
-          pulse.classList.remove('scroll-pulse-active');
-          void pulse.offsetWidth;
-          pulse.style.setProperty('--pulse-color', themeColors.random());
-          pulse.classList.add('scroll-pulse-active');
+        const now = performance.now();
+        if (now - lastScrollPulseTouch >= SCROLL_PULSE_TOUCH_MS) {
+          lastScrollPulseTouch = now;
+          const pulse = pulseRef.current;
+          if (pulse) {
+            pulse.classList.remove('scroll-pulse-active');
+            pulse.style.setProperty('--pulse-color', themeColors.random());
+            requestAnimationFrame(() => pulse.classList.add('scroll-pulse-active'));
+          }
         }
       }
+    };
+
+    // Reset the trail origin on touchstart so the first frame of a drag
+    // doesn't draw a line from wherever the mouse cursor last was.
+    const onTouchEnd = () => {
+      mouseX = null;
+      mouseY = null;
+      requestTick();
     };
 
     // Reset the trail origin on touchstart so the first frame of a drag
@@ -375,6 +388,7 @@ export function CursorEffects() {
     window.addEventListener('blur', onBlur);
     window.addEventListener('touchmove', onTouchMove, { passive: true });
     window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd);
     document.addEventListener('mouseleave', onMouseLeave);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
@@ -388,6 +402,7 @@ export function CursorEffects() {
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('mouseleave', onMouseLeave);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       themeObserver.disconnect();
@@ -395,6 +410,19 @@ export function CursorEffects() {
       themeColors.dispose();
     };
   }, []);
+
+  // Recover canvas dimensions when re-enabled — display:none → block
+  // can leave the backing store at 0×0 in some browsers.
+  useEffect(() => {
+    if (!enabled) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+  }, [enabled]);
 
   if (reduced) return null;
 
