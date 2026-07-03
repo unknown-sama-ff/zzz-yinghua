@@ -293,8 +293,9 @@ export function CursorEffects() {
       const pulse = pulseRef.current;
       if (!pulse) return;
       pulse.classList.remove('scroll-pulse-active');
+      void pulse.offsetWidth;
       pulse.style.setProperty('--pulse-color', themeColors.random());
-      requestAnimationFrame(() => pulse.classList.add('scroll-pulse-active'));
+      pulse.classList.add('scroll-pulse-active');
     };
 
     const onMouseLeave = () => {
@@ -338,8 +339,9 @@ export function CursorEffects() {
           const pulse = pulseRef.current;
           if (pulse) {
             pulse.classList.remove('scroll-pulse-active');
+            void pulse.offsetWidth;
             pulse.style.setProperty('--pulse-color', themeColors.random());
-            requestAnimationFrame(() => pulse.classList.add('scroll-pulse-active'));
+            pulse.classList.add('scroll-pulse-active');
           }
         }
       }
