@@ -286,10 +286,69 @@ export function CursorEffects() {
       requestTick();
     };
 
+    // Mobile touch support: mirror the pointermove trail logic for touchmove
+    // so drag-scrolling also produces particle trails.
+    const onTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      const tx = touch.clientX;
+      const ty = touch.clientY;
+      mouseX = tx;
+      mouseY = ty;
+      requestTick();
+      const dx = tx - lastTrailX;
+      const dy = ty - lastTrailY;
+      if (dx * dx + dy * dy < TRAIL_MIN_DIST * TRAIL_MIN_DIST) return;
+      lastTrailX = tx;
+      lastTrailY = ty;
+      if (particles.length >= MAX_PARTICLES) particles.shift();
+      particles.push({
+        kind: 'trail',
+        x: tx,
+        y: ty,
+        r: 2 + Math.random() * 2,
+        life: 0,
+        maxLife: 500 + Math.random() * 300,
+        color: themeColors.random(),
+      });
+    };
+
+    // Reset the trail origin on touchstart so the first frame of a drag
+    // doesn't draw a line from wherever the mouse cursor last was.
+    const onTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      lastTrailX = touch.clientX;
+      lastTrailY = touch.clientY;
+    };
+
+    // Clear particles when the page is hidden (tab switch, minimise, etc.)
+    // otherwise they pile up during the idle rAF pause and burst on refocus.
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        particles = [];
+        mouseX = null;
+        mouseY = null;
+        requestTick();
+      }
+    };
+
+    // Extra guard: some desktop environments don't fire visibilitychange on
+    // every focus loss (e.g. clicking into a native dialog or file manager),
+    // leaving stale particles that burst when the browser regains focus.
+    const onBlur = () => {
+      particles = [];
+      mouseX = null;
+      mouseY = null;
+      requestTick();
+    };
+
     window.addEventListener('pointermove', onPointerMove, { passive: true });
     window.addEventListener('click', onClick);
     window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
     document.addEventListener('mouseleave', onMouseLeave);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       cancelAnimationFrame(rafId);
@@ -297,7 +356,11 @@ export function CursorEffects() {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('click', onClick);
       window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchstart', onTouchStart);
       document.removeEventListener('mouseleave', onMouseLeave);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       themeObserver.disconnect();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       themeColors.dispose();
