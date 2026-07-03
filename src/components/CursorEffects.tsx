@@ -3,6 +3,7 @@ import { useCursorEffectsPref } from '../lib/useCursorEffectsPref';
 
 const THEME_VARS = ['--zzz-primary', '--zzz-magenta', '--zzz-cyan'] as const;
 const MAX_PARTICLES = 150;
+const MAX_PARTICLES_TOUCH = 80;
 const TRAIL_MIN_DIST = 14;
 const TRAIL_MIN_DIST_TOUCH = 8;
 const SCROLL_PULSE_THROTTLE_MS = 150;
@@ -116,9 +117,10 @@ export function CursorEffects() {
   const { enabled, reduced, setEnabled } = useCursorEffectsPref();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
 
   useEffect(() => {
-    if (!enabled) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -132,17 +134,22 @@ export function CursorEffects() {
     let mouseY: number | null = null;
     let frameScheduled = false;
     const spotlightRadius = matchMedia('(pointer: coarse)').matches ? SPOTLIGHT_RADIUS_TOUCH : SPOTLIGHT_RADIUS;
+    const maxParticles = matchMedia('(pointer: coarse)').matches ? MAX_PARTICLES_TOUCH : MAX_PARTICLES;
     let lastScrollTouchY = 0;
     const themeColors = createThemeColorCache();
 
+    let resizeTimer: ReturnType<typeof setTimeout>;
     const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-      canvas.style.width = `${window.innerWidth}px`;
-      canvas.style.height = `${window.innerHeight}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      requestTick();
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        canvas.style.width = `${window.innerWidth}px`;
+        canvas.style.height = `${window.innerHeight}px`;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        requestTick();
+      }, 200);
     };
 
     // Only animates while there's a reason to: active particles, or a fresh
@@ -177,6 +184,7 @@ export function CursorEffects() {
 
     let lastFrame = performance.now();
     const tick = (now: number) => {
+      if (!enabledRef.current) { frameScheduled = false; return; }
       frameScheduled = false;
       // Clamp dt: besides the idle-wake case (handled by resetting
       // lastFrame in requestTick), a backgrounded tab also pauses rAF and
@@ -238,6 +246,7 @@ export function CursorEffects() {
     window.addEventListener('resize', resize);
 
     const onPointerMove = (e: PointerEvent) => {
+      if (!enabledRef.current) return;
       mouseX = e.clientX;
       mouseY = e.clientY;
       requestTick();
@@ -246,7 +255,7 @@ export function CursorEffects() {
       if (dx * dx + dy * dy < TRAIL_MIN_DIST * TRAIL_MIN_DIST) return;
       lastTrailX = e.clientX;
       lastTrailY = e.clientY;
-      if (particles.length >= MAX_PARTICLES) particles.shift();
+      if (particles.length >= maxParticles) particles.shift();
       particles.push({
         kind: 'trail',
         x: e.clientX,
@@ -259,7 +268,8 @@ export function CursorEffects() {
     };
 
     const onClick = (e: MouseEvent) => {
-      if (particles.length >= MAX_PARTICLES) particles.shift();
+      if (!enabledRef.current) return;
+      if (particles.length >= maxParticles) particles.shift();
       particles.push({
         kind: 'ripple',
         x: e.clientX,
@@ -274,15 +284,15 @@ export function CursorEffects() {
     };
 
     const onWheel = () => {
+      if (!enabledRef.current) return;
       const now = performance.now();
       if (now - lastScrollPulse < SCROLL_PULSE_THROTTLE_MS) return;
       lastScrollPulse = now;
       const pulse = pulseRef.current;
       if (!pulse) return;
       pulse.classList.remove('scroll-pulse-active');
-      void pulse.offsetWidth;
       pulse.style.setProperty('--pulse-color', themeColors.random());
-      pulse.classList.add('scroll-pulse-active');
+      requestAnimationFrame(() => pulse.classList.add('scroll-pulse-active'));
     };
 
     const onMouseLeave = () => {
@@ -294,6 +304,7 @@ export function CursorEffects() {
     // Mobile touch support: mirror the pointermove trail logic for touchmove
     // so drag-scrolling also produces particle trails.
     const onTouchMove = (e: TouchEvent) => {
+      if (!enabledRef.current) return;
       const touch = e.touches[0];
       const tx = touch.clientX;
       const ty = touch.clientY;
@@ -306,7 +317,7 @@ export function CursorEffects() {
       if (dx * dx + dy * dy < TRAIL_MIN_DIST_TOUCH * TRAIL_MIN_DIST_TOUCH) return;
       lastTrailX = tx;
       lastTrailY = ty;
-      if (particles.length >= MAX_PARTICLES) particles.shift();
+      if (particles.length >= maxParticles) particles.shift();
       particles.push({
         kind: 'trail',
         x: tx,
@@ -369,6 +380,7 @@ export function CursorEffects() {
 
     return () => {
       cancelAnimationFrame(rafId);
+      clearTimeout(resizeTimer);
       window.removeEventListener('resize', resize);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('click', onClick);
@@ -382,15 +394,13 @@ export function CursorEffects() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       themeColors.dispose();
     };
-  }, [enabled]);
+  }, []);
 
   if (reduced) return null;
 
   return (
     <>
-      {enabled && (
-        <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[10000]" style={{ willChange: 'transform' }} aria-hidden="true" />
-      )}
+      <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[10000]" style={{ willChange: 'transform', display: enabled ? undefined : 'none' }} aria-hidden="true" />
       <div ref={pulseRef} className="scroll-pulse-overlay pointer-events-none fixed inset-0 z-[9998]" aria-hidden="true" />
       <button
         onClick={() => setEnabled(!enabled)}
