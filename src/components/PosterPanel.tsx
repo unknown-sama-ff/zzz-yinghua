@@ -41,7 +41,7 @@ function fillPoster(template: string, name: string, dominant: string, accent: st
 
 /** Section 06 — one-click ZZZ poster generation, author-recommended prompt. */
 export function PosterPanel() {
-  const { characterName, uploadedImage, palette, posterSlot, setPosterSlot } = useStore();
+  const { characterName, uploadedImage, palette, posterSlot, setPosterSlot, provider } = useStore();
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [variant, setVariant] = useState<string>(POSTER_VARIANTS[1].id);
@@ -115,7 +115,17 @@ export function PosterPanel() {
         一键生成海报
       </button>
 
-      <ResultView slot={posterSlot} downloadPrefix="zzz-poster" />
+      <ResultView
+        slot={posterSlot}
+        downloadPrefix="zzz-poster"
+        saveInfo={posterSlot.images[0] ? {
+          imageUrl: posterSlot.images[0],
+          style: current.label,
+          characterName,
+          prompt,
+          provider,
+        } : undefined}
+      />
 
       {/* Lightbox overlay */}
       {lightbox && (
