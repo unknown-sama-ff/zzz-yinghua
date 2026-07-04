@@ -24,4 +24,17 @@ CREATE POLICY "anon_select"
 ON gallery FOR SELECT
 TO anon
 USING (true);
+
+CREATE POLICY "anon_delete"
+ON gallery FOR DELETE
+TO anon
+USING (true);
 ```
+
+## Storage
+
+- Bucket name: `gallery-images`
+- Bucket type: public
+- `gallery.image_url` should store the Supabase Storage public URL, not a `data:image/...` base64 string.
+
+Anonymous upload/delete/read policies on `storage.objects` should allow access to the `gallery-images` bucket.

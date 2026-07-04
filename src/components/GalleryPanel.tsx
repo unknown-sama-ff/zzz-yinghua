@@ -32,22 +32,54 @@ export function GalleryPanel() {
   const [rows, setRows] = useState<GalleryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const loadGallery = async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (mode === 'initial') setLoading(true);
+    else setRefreshing(true);
+    setError(null);
+    try {
+      const data = await fetchGallery();
+      setRows(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败');
+    } finally {
+      if (mode === 'initial') setLoading(false);
+      else setRefreshing(false);
+    }
+  };
+
+  const deleteRow = async (id: number) => {
+    setDeletingId(id);
+    setError(null);
+    try {
+      const { error } = await supabase.from('gallery').delete().eq('id', id);
+      if (error) throw error;
+      await loadGallery('refresh');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除失败');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
-    fetchGallery()
-      .then((data) => {
-        setRows(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : '加载失败');
-        setLoading(false);
-      });
+    void loadGallery();
   }, []);
 
   return (
     <section className="glass p-6">
-      <SectionHeader step="07" title="画廊 · 生成作品" />
+      <div className="flex items-center justify-between gap-3">
+        <SectionHeader step="07" title="画廊 · 生成作品" />
+        <button
+          onClick={() => void loadGallery('refresh')}
+          disabled={refreshing || loading}
+          className="glass-btn px-3 py-1.5 font-mono text-xs text-zzz-text disabled:opacity-40"
+        >
+          {refreshing ? '刷新中…' : '刷新画廊'}
+        </button>
+      </div>
 
       {loading && (
         <p className="mt-2 font-mono text-xs text-zzz-text/50">加载中…</p>
@@ -79,6 +111,13 @@ export function GalleryPanel() {
                 {row.character_name && <div>角色：{row.character_name}</div>}
                 {row.provider && <div className="text-zzz-text/35">提供方：{row.provider}</div>}
                 <div className="text-zzz-text/35">{formatTime(row.created_at)}</div>
+                <button
+                  onClick={() => void deleteRow(row.id)}
+                  disabled={deletingId === row.id}
+                  className="glass-btn mt-2 px-2 py-1 text-[10px] text-zzz-magenta disabled:opacity-40"
+                >
+                  {deletingId === row.id ? '删除中…' : '删除'}
+                </button>
               </div>
             </div>
           ))}
