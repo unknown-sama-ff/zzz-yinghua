@@ -133,6 +133,38 @@ async function gptImage(req) {
   const n = req.n || 1;
   const root = base.replace(/\/$/, '');
 
+  // Multiple independent reference images → chat completions so the model
+  // sees each reference separately (zero result / original art / style sheet)
+  // instead of one stitched composite.
+  if (Array.isArray(req.refImages) && req.refImages.length > 0) {
+    const content = [
+      { type: 'text', text: req.prompt },
+      ...req.refImages.map((ref) => ({
+        type: 'image_url',
+        image_url: { url: `data:${ref.mime || 'image/png'};base64,${ref.base64}`, detail: 'high' },
+      })),
+    ];
+    const json = await withRetry(async () => {
+      const res = await fetchWithTimeout(`${root}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content }], max_tokens: 4096 }),
+      });
+      if (!res.ok) {
+        throw new UpstreamError(codeFromStatus(res.status), `gpt-image 多参考图返回 ${res.status}`, res.status);
+      }
+      return parseJsonSafe(res);
+    });
+    const text = json.choices?.[0]?.message?.content ?? '';
+    // Try to extract generated image URLs from the response.
+    const imgs = pluckImages(json);
+    if (imgs.length > 0) return { images: imgs, raw: json };
+    // Fallback: the model may have returned an image markdown or URL in the text.
+    const urlMatch = text.match(/https?:\/\/[^\s"'>]+\.(?:png|jpg|jpeg|webp)/gi);
+    if (urlMatch) return { images: urlMatch, raw: json };
+    throw new UpstreamError('UPSTREAM_ERROR', 'gpt-image 多参考图未返回可用的图片');
+  }
+
   // With an input image → /images/edits as multipart/form-data so the upload
   // strictly conditions the result (true image-to-image). No fallback: if the
   // endpoint doesn't support edits we surface a clear error rather than silently

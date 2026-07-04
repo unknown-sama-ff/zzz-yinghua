@@ -8,6 +8,8 @@ export interface GenRequest {
   prompt: string;
   imageBase64?: string;
   imageMime?: string;
+  /** Multiple independent reference images (zero-style result, original art, style sheet). */
+  refImages?: { base64: string; mime: string }[];
   size?: string;
   n?: number;
   useServerPreset?: boolean;

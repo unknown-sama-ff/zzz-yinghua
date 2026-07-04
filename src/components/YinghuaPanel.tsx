@@ -3,7 +3,6 @@ import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
-import { combineImagesSideBySide } from '../lib/combineImages';
 import { stitchImages } from '../lib/stitchImages';
 import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
 import { parseDataUrl, validateImageFile, fileToDataUrl } from '../lib/validation';
@@ -106,10 +105,12 @@ export function YinghuaPanel() {
       showError('请先上传角色正面图片');
       return;
     }
-    // 三命/六命 combine 零命 result (pose/text layout) + original upload (identity
-    // and clothing colours) into a single side-by-side reference image. Then append
-    // the matching style reference sheet so the model sees the target Mindscape visual language.
+    // 零命 uses the original upload + addon + style sheet as a single reference.
+    // 三命/六命 send three independent reference images so the model can
+    // distinguish pose/layout (zero result) from identity (original art) from
+    // style (style sheet).
     let imageOverride: string | undefined;
+    let refImages: { base64: string; mime: string }[] | undefined;
     try {
       const styleSheet = await buildStyleReferenceSheet(id);
       if (id === 1) {
@@ -120,8 +121,19 @@ export function YinghuaPanel() {
           showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
           return;
         }
-        const paired = await combineImagesSideBySide(baseImg, uploadedImage);
-        imageOverride = await stitchImages([paired, yinghuaAddonImage, styleSheet]);
+        const identityRef = yinghuaAddonImage
+          ? await stitchImages([uploadedImage, yinghuaAddonImage])
+          : uploadedImage;
+        const parsed = parseDataUrl(baseImg);
+        refImages = [
+          { base64: parsed.base64, mime: parsed.mime },
+          ...(await Promise.all(
+            [identityRef, styleSheet].map(async (url) => {
+              const p = parseDataUrl(url);
+              return { base64: p.base64, mime: p.mime };
+            }),
+          )),
+        ];
       }
     } catch {
       showError('风格参考图合成失败');
@@ -130,7 +142,7 @@ export function YinghuaPanel() {
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
       const images = await generate(
-        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride }),
+        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride, refImages }),
       );
       setYinghuaSlot(id, { status: 'done', images });
       if (id === 3 && images[0]) void runFaceDetect(images[0]);
