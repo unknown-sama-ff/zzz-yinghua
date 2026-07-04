@@ -120,6 +120,9 @@ export function CursorEffects() {
   const { freeloadEnabled, setFreeloadEnabled } = useStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);
+  const particlesRef = useRef<Particle[]>([]);
+  const mousePosRef = useRef<{ x: number | null; y: number | null }>({ x: null, y: null });
+  const lastTrailRef = useRef<{ x: number; y: number }>({ x: -Infinity, y: -Infinity });
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
@@ -128,13 +131,13 @@ export function CursorEffects() {
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
 
-    let particles: Particle[] = [];
+    let particles = particlesRef.current;
     let rafId = 0;
-    let lastTrailX = -Infinity;
-    let lastTrailY = -Infinity;
+    let lastTrailX = lastTrailRef.current.x;
+    let lastTrailY = lastTrailRef.current.y;
     let lastScrollPulse = 0;
-    let mouseX: number | null = null;
-    let mouseY: number | null = null;
+    let mouseX: number | null = mousePosRef.current.x;
+    let mouseY: number | null = mousePosRef.current.y;
     let frameScheduled = false;
     const spotlightRadius = matchMedia('(pointer: coarse)').matches ? SPOTLIGHT_RADIUS_TOUCH : SPOTLIGHT_RADIUS;
     const maxParticles = matchMedia('(pointer: coarse)').matches ? MAX_PARTICLES_TOUCH : MAX_PARTICLES;
@@ -253,12 +256,14 @@ export function CursorEffects() {
       if (!enabledRef.current) return;
       mouseX = e.clientX;
       mouseY = e.clientY;
+      mousePosRef.current = { x: mouseX, y: mouseY };
       requestTick();
       const dx = e.clientX - lastTrailX;
       const dy = e.clientY - lastTrailY;
       if (dx * dx + dy * dy < TRAIL_MIN_DIST * TRAIL_MIN_DIST) return;
       lastTrailX = e.clientX;
       lastTrailY = e.clientY;
+      lastTrailRef.current = { x: lastTrailX, y: lastTrailY };
       if (particles.length >= maxParticles) particles.shift();
       particles.push({
         kind: 'trail',
@@ -315,6 +320,7 @@ export function CursorEffects() {
       const ty = touch.clientY;
       mouseX = tx;
       mouseY = ty;
+      mousePosRef.current = { x: mouseX, y: mouseY };
       requestTick();
       // Touch trail: denser, faster-fading particles that feel tighter to the finger.
       const dx = tx - lastTrailX;
@@ -322,6 +328,7 @@ export function CursorEffects() {
       if (dx * dx + dy * dy < TRAIL_MIN_DIST_TOUCH * TRAIL_MIN_DIST_TOUCH) return;
       lastTrailX = tx;
       lastTrailY = ty;
+      lastTrailRef.current = { x: lastTrailX, y: lastTrailY };
       if (particles.length >= maxParticles) particles.shift();
       particles.push({
         kind: 'trail',
@@ -363,6 +370,7 @@ export function CursorEffects() {
       const touch = e.touches[0];
       lastTrailX = touch.clientX;
       lastTrailY = touch.clientY;
+      lastTrailRef.current = { x: lastTrailX, y: lastTrailY };
     };
 
     // Clear particles when the page is hidden (tab switch, minimise, etc.)
@@ -415,17 +423,29 @@ export function CursorEffects() {
     };
   }, []);
 
-  // Recover canvas dimensions when re-enabled — display:none → block
-  // can leave the backing store at 0×0 in some browsers.
   useEffect(() => {
-    if (!enabled) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    if (!enabled) {
+      particlesRef.current = [];
+      mousePosRef.current = { x: null, y: null };
+      lastTrailRef.current = { x: -Infinity, y: -Infinity };
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
     const dpr = window.devicePixelRatio || 1;
     canvas.width = window.innerWidth * dpr;
     canvas.height = window.innerHeight * dpr;
     canvas.style.width = `${window.innerWidth}px`;
     canvas.style.height = `${window.innerHeight}px`;
+    particlesRef.current = [];
+    mousePosRef.current = { x: null, y: null };
+    lastTrailRef.current = { x: -Infinity, y: -Infinity };
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }, [enabled]);
 
   if (reduced) return null;
@@ -440,7 +460,7 @@ export function CursorEffects() {
         data-active={freeloadEnabled}
         className="glass-btn fixed bottom-[3.5rem] right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
       >
-        白嫖作者😋 {freeloadEnabled ? 'ON' : 'OFF'}
+        白嫖作者 {freeloadEnabled ? '😋' : '😐'}
       </button>
       <button
         onClick={() => setEnabled(!enabled)}
