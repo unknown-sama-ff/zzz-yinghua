@@ -168,6 +168,11 @@ export function CursorEffects() {
     const requestTick = () => {
       if (frameScheduled) return;
       frameScheduled = true;
+      // Always refresh theme colours when waking from idle, in case a
+      // palette change landed while the loop was asleep (MutationObserver
+      // depends on style-attribute timing, which may miss the first frame
+      // after an upload when variables haven't been applied yet).
+      themeColors.markDirty();
       // Waking from idle: reset the clock so the first tick's dt is a
       // normal frame interval, not however long the loop was idle for.
       // Without this, themeColors.step(dt) and particle life both jump by
