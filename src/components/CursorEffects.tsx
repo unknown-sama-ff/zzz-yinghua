@@ -193,6 +193,13 @@ export function CursorEffects() {
     const tick = (now: number) => {
       if (!enabledRef.current) { frameScheduled = false; return; }
       frameScheduled = false;
+      // Re-sync from refs so a quick disable→enable cycle picks up the
+      // freshly-cleared state instead of stale closure variables.
+      particles = particlesRef.current;
+      lastTrailX = lastTrailRef.current.x;
+      lastTrailY = lastTrailRef.current.y;
+      mouseX = mousePosRef.current.x;
+      mouseY = mousePosRef.current.y;
       // Clamp dt: besides the idle-wake case (handled by resetting
       // lastFrame in requestTick), a backgrounded tab also pauses rAF and
       // can hand back an arbitrarily large gap on the first frame after
@@ -224,6 +231,7 @@ export function CursorEffects() {
         }
         return true;
       });
+      particlesRef.current = particles;
       ctx.globalAlpha = 1;
 
       // Persistent spotlight: follows the cursor anywhere on the page, not
@@ -264,8 +272,8 @@ export function CursorEffects() {
       lastTrailX = e.clientX;
       lastTrailY = e.clientY;
       lastTrailRef.current = { x: lastTrailX, y: lastTrailY };
-      if (particles.length >= maxParticles) particles.shift();
-      particles.push({
+      if (particlesRef.current.length >= maxParticles) particlesRef.current.shift();
+      particlesRef.current.push({
         kind: 'trail',
         x: e.clientX,
         y: e.clientY,
@@ -278,8 +286,8 @@ export function CursorEffects() {
 
     const onClick = (e: MouseEvent) => {
       if (!enabledRef.current) return;
-      if (particles.length >= maxParticles) particles.shift();
-      particles.push({
+      if (particlesRef.current.length >= maxParticles) particlesRef.current.shift();
+      particlesRef.current.push({
         kind: 'ripple',
         x: e.clientX,
         y: e.clientY,
@@ -306,8 +314,7 @@ export function CursorEffects() {
     };
 
     const onMouseLeave = () => {
-      mouseX = null;
-      mouseY = null;
+      mousePosRef.current = { x: null, y: null };
       requestTick();
     };
 
@@ -329,8 +336,8 @@ export function CursorEffects() {
       lastTrailX = tx;
       lastTrailY = ty;
       lastTrailRef.current = { x: lastTrailX, y: lastTrailY };
-      if (particles.length >= maxParticles) particles.shift();
-      particles.push({
+      if (particlesRef.current.length >= maxParticles) particlesRef.current.shift();
+      particlesRef.current.push({
         kind: 'trail',
         x: tx,
         y: ty,
@@ -359,8 +366,7 @@ export function CursorEffects() {
     // Reset the trail origin on touchstart so the first frame of a drag
     // doesn't draw a line from wherever the mouse cursor last was.
     const onTouchEnd = () => {
-      mouseX = null;
-      mouseY = null;
+      mousePosRef.current = { x: null, y: null };
       requestTick();
     };
 
@@ -377,9 +383,8 @@ export function CursorEffects() {
     // otherwise they pile up during the idle rAF pause and burst on refocus.
     const onVisibilityChange = () => {
       if (document.hidden) {
-        particles = [];
-        mouseX = null;
-        mouseY = null;
+        particlesRef.current = [];
+        mousePosRef.current = { x: null, y: null };
         requestTick();
       }
     };
@@ -388,9 +393,8 @@ export function CursorEffects() {
     // every focus loss (e.g. clicking into a native dialog or file manager),
     // leaving stale particles that burst when the browser regains focus.
     const onBlur = () => {
-      particles = [];
-      mouseX = null;
-      mouseY = null;
+      particlesRef.current = [];
+      mousePosRef.current = { x: null, y: null };
       requestTick();
     };
 

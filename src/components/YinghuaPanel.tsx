@@ -143,7 +143,7 @@ export function YinghuaPanel() {
 
   return (
     <section className="glass p-6">
-      <SectionHeader step="04" title="影画动作设计 · 三风格" />
+      <SectionHeader step="04" title="影画动作设计 · 三风格（生图时间可能较长，耐心等待）" />
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
           ⛓ 先生成「零命」，三命/六命会将零命结果（姿势/构图/文字位置）与原始立绘（身份/服饰配色）合成双参考图；三种风格都会自动附加对应影画样式参考图，样张只用于风格，不用于角色身份。
