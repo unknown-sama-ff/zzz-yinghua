@@ -68,19 +68,25 @@ app.post('/api/detect-face', async (req, res) => {
   if (!imageBase64) return fail(res, 400, 'INVALID_INPUT', '缺少图片');
 
   const usingPreset = useServerPreset === true;
-  const key = usingPreset ? process.env.VISION_API_KEY : (apiKey || process.env.VISION_API_KEY);
+  const key = usingPreset ? process.env.VISION_API_KEY : apiKey;
   if (!key) {
     console.warn(`[detect-face] missing key useServerPreset=${Boolean(useServerPreset)} usingPreset=${usingPreset} frontHasKey=${Boolean(apiKey)} envHasKey=${Boolean(process.env.VISION_API_KEY)}`);
-    return fail(res, 401, 'UNAUTHORIZED', '视觉模型缺少 API Key，请在前端填写');
+    return fail(res, 401, 'UNAUTHORIZED', usingPreset ? '视觉模型服务端预设缺少 API Key' : '视觉模型缺少 API Key，请在前端填写');
   }
   const root = (usingPreset
     ? (process.env.VISION_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1')
-    : (baseUrl || process.env.VISION_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1')).replace(/\/$/, '');
+    : baseUrl).replace(/\/$/, '');
+  if (!root) {
+    return fail(res, 401, 'UNAUTHORIZED', usingPreset ? '视觉模型服务端预设缺少 Base URL' : '视觉模型缺少 Base URL，请在前端填写');
+  }
   const mime = imageMime || 'image/png';
 
   const resolvedModel = usingPreset
     ? (process.env.VISION_MODEL || 'gpt-4o-mini')
-    : (model || process.env.VISION_MODEL || 'gpt-4o-mini');
+    : model;
+  if (!resolvedModel) {
+    return fail(res, 401, 'UNAUTHORIZED', usingPreset ? '视觉模型服务端预设缺少模型名称' : '视觉模型缺少模型名称，请在前端填写');
+  }
   console.log(`[detect-face] useServerPreset=${Boolean(useServerPreset)} usingPreset=${usingPreset} frontHasKey=${Boolean(apiKey)} envHasKey=${Boolean(process.env.VISION_API_KEY)} root=${root} model=${resolvedModel}`);
 
   const body = {

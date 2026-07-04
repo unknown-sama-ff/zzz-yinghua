@@ -42,10 +42,13 @@ function pluckImages(json) {
 // seedance — image-to-image / edit endpoint, may return a task_id to poll.
 // ---------------------------------------------------------------------------
 async function seedance(req) {
-  const key = req.apiKey || process.env.SEEDANCE_API_KEY;
-  const base = req.baseUrl || process.env.SEEDANCE_BASE_URL;
+  const useServerPreset = req.useServerPreset === true;
+  const key = useServerPreset ? process.env.SEEDANCE_API_KEY : req.apiKey;
+  const base = useServerPreset ? process.env.SEEDANCE_BASE_URL : req.baseUrl;
   if (!key || !base) {
-    throw new UpstreamError('UNAUTHORIZED', 'seedance 缺少密钥或 Base URL（前端输入或服务端 .env 二选一）', 401);
+    throw new UpstreamError('UNAUTHORIZED', useServerPreset
+      ? 'seedance 服务端预设缺少密钥或 Base URL'
+      : 'seedance 缺少密钥或 Base URL（请在前端填写）', 401);
   }
   const body = {
     prompt: req.prompt,
@@ -53,7 +56,7 @@ async function seedance(req) {
     size: req.size || '1024x1024',
     n: req.n || 1,
   };
-  if (req.model) body.model = req.model;
+  if (useServerPreset ? process.env.SEEDANCE_MODEL : req.model) body.model = useServerPreset ? process.env.SEEDANCE_MODEL : req.model;
   const json = await withRetry(async () => {
     const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/images/edits`, {
       method: 'POST',
@@ -104,16 +107,28 @@ async function gptImage(req) {
   const useServerPreset = req.useServerPreset === true;
   const key = useServerPreset
     ? process.env.GPT_IMAGE_API_KEY
-    : (req.apiKey || process.env.OPENAI_API_KEY);
+    : req.apiKey;
   const base = useServerPreset
     ? (process.env.GPT_IMAGE_BASE_URL || 'https://api.openai.com/v1')
-    : (req.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1');
+    : req.baseUrl;
   if (!key) {
-    throw new UpstreamError('UNAUTHORIZED', 'gpt-image 缺少密钥（前端输入或服务端 OPENAI_API_KEY / GPT_IMAGE_API_KEY 二选一）', 401);
+    throw new UpstreamError('UNAUTHORIZED', useServerPreset
+      ? 'gpt-image 服务端预设缺少密钥'
+      : 'gpt-image 缺少密钥（请在前端填写）', 401);
+  }
+  if (!base) {
+    throw new UpstreamError('UNAUTHORIZED', useServerPreset
+      ? 'gpt-image 服务端预设缺少 Base URL'
+      : 'gpt-image 缺少 Base URL（请在前端填写）', 401);
   }
   const model = useServerPreset
     ? (process.env.GPT_IMAGE_MODEL || 'gpt-image-2')
-    : (req.model || 'gpt-image-2');
+    : req.model;
+  if (!model) {
+    throw new UpstreamError('UNAUTHORIZED', useServerPreset
+      ? 'gpt-image 服务端预设缺少模型名称'
+      : 'gpt-image 缺少模型名称（请在前端填写）', 401);
+  }
   const size = req.size || '1024x1024';
   const n = req.n || 1;
   const root = base.replace(/\/$/, '');
