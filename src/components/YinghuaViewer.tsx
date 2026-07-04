@@ -72,7 +72,7 @@ export function YinghuaViewer() {
         setDetecting(false);
       }
     },
-    [visionCred, setViewerClipRegions, setDetectFaceError],
+    [visionCred, freeloadEnabled, setViewerClipRegions, setDetectFaceError],
   );
 
   const handleRefreshClip = useCallback(() => {
