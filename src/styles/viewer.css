@@ -51,11 +51,14 @@
 
 @keyframes fx-glow-in {
   0% {
-    opacity: 0;
-    filter: brightness(2.2) drop-shadow(0 0 18px var(--zzz-primary));
+    opacity: 0.3;
+    filter: brightness(3.0) drop-shadow(0 0 28px var(--zzz-primary)) drop-shadow(0 0 56px var(--zzz-magenta));
   }
-  45% {
-    filter: brightness(1.6) drop-shadow(0 0 12px var(--zzz-magenta));
+  25% {
+    filter: brightness(2.0) drop-shadow(0 0 20px var(--zzz-magenta)) drop-shadow(0 0 40px var(--zzz-primary));
+  }
+  60% {
+    filter: brightness(1.3) drop-shadow(0 0 8px var(--zzz-primary));
   }
   100% {
     opacity: 1;
@@ -66,11 +69,11 @@
 @keyframes fx-glow-out {
   0% {
     opacity: 1;
-    filter: brightness(1);
+    filter: brightness(1) drop-shadow(0 0 8px var(--zzz-primary));
   }
   100% {
     opacity: 0;
-    filter: brightness(1.8) drop-shadow(0 0 14px var(--zzz-magenta));
+    filter: brightness(2.0) drop-shadow(0 0 24px var(--zzz-magenta)) drop-shadow(0 0 48px var(--zzz-primary));
   }
 }
 
