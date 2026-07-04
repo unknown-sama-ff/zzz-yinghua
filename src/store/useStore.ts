@@ -49,6 +49,8 @@ interface WorkshopState {
   // --- Provider ---
   provider: ProviderName;
   setProvider: (p: ProviderName) => void;
+  freeloadEnabled: boolean;
+  setFreeloadEnabled: (enabled: boolean) => void;
   custom: CustomProviderConfig;
   setCustom: (patch: Partial<CustomProviderConfig>) => void;
   // Per-provider credentials, kept in memory only (never persisted to disk).
@@ -139,6 +141,8 @@ export const useStore = create<WorkshopState>((set) => ({
 
   provider: 'seedance',
   setProvider: (p) => set({ provider: p }),
+  freeloadEnabled: false,
+  setFreeloadEnabled: (enabled) => set({ freeloadEnabled: enabled, ...(enabled ? { provider: 'gpt-image' as const } : {}) }),
   custom: { endpoint: '', headers: '', bodyTemplate: '' },
   setCustom: (patch) => set((s) => ({ custom: { ...s.custom, ...patch } })),
   creds: {

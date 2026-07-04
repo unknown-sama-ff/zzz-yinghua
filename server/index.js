@@ -64,15 +64,17 @@ app.post('/api/generate', async (req, res) => {
 });
 
 app.post('/api/detect-face', async (req, res) => {
-  const { imageBase64, imageMime, apiKey, baseUrl, model } = req.body || {};
+  const { imageBase64, imageMime, apiKey, baseUrl, model, useServerPreset } = req.body || {};
   if (!imageBase64) return fail(res, 400, 'INVALID_INPUT', '缺少图片');
-  const key = apiKey || process.env.VISION_API_KEY;
+  const key = useServerPreset ? process.env.VISION_API_KEY : (apiKey || process.env.VISION_API_KEY);
   if (!key) return fail(res, 401, 'UNAUTHORIZED', '视觉模型缺少 API Key，请在前端填写');
-  const root = (baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+  const root = (useServerPreset
+    ? (process.env.VISION_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1')
+    : (baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1')).replace(/\/$/, '');
   const mime = imageMime || 'image/png';
 
   const body = {
-    model: model || process.env.VISION_MODEL || 'gpt-4o-mini',
+    model: useServerPreset ? (process.env.VISION_MODEL || 'gpt-4o-mini') : (model || process.env.VISION_MODEL || 'gpt-4o-mini'),
     messages: [{
       role: 'user',
       content: [

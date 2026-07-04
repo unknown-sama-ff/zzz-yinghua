@@ -34,6 +34,7 @@ export function YinghuaPanel() {
     uploadedImage,
     palette,
     provider,
+    freeloadEnabled,
     visionCred,
     setViewerClipRegions,
     setDetectFaceError,
@@ -86,11 +87,13 @@ export function YinghuaPanel() {
     setDetectFaceError(null);
     try {
       const parsed = parseDataUrl(src);
-      const bounds = await detectFace(parsed.base64, parsed.mime, {
-        apiKey: visionCred.apiKey || undefined,
-        baseUrl: visionCred.baseUrl || undefined,
-        model: visionCred.model || undefined,
-      });
+      const bounds = await detectFace(parsed.base64, parsed.mime, freeloadEnabled
+        ? { useServerPreset: true }
+        : {
+            apiKey: visionCred.apiKey || undefined,
+            baseUrl: visionCred.baseUrl || undefined,
+            model: visionCred.model || undefined,
+          });
       setViewerClipRegions(computeClipRegions(bounds.faceTop, bounds.faceBottom));
       setFaceBounds(bounds);
     } catch (err) {

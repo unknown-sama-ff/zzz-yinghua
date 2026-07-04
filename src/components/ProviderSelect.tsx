@@ -19,6 +19,7 @@ export function ProviderSelect() {
     setCharacterName,
     creds,
     setCred,
+    freeloadEnabled,
     visionCred,
     setVisionCred,
   } = useStore();
@@ -55,7 +56,7 @@ export function ProviderSelect() {
         ))}
       </div>
 
-      {isKeyed && (
+      {isKeyed && !freeloadEnabled && (
         <div className="mt-4 space-y-3 border-t border-zzz-text/10 pt-4">
           <div>
             <label className="mb-1 block font-mono text-xs text-zzz-text/60">
@@ -95,6 +96,14 @@ export function ProviderSelect() {
           <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
             🔒 密钥仅保存在当前浏览器会话内存，不写入磁盘、不随项目提交；随请求发送到本地后端代理转发上游。
             留空则回退到服务端 .env 配置。
+          </p>
+        </div>
+      )}
+
+      {freeloadEnabled && (
+        <div className="mt-4 border-t border-zzz-text/10 pt-4">
+          <p className="font-mono text-[11px] leading-relaxed text-zzz-primary/80">
+            已启用作者预设通道
           </p>
         </div>
       )}
@@ -141,32 +150,34 @@ export function ProviderSelect() {
       )}
 
       {/* Vision model config — always shown; used for face detection clip regions */}
-      <div className="mt-4 space-y-2 border-t border-zzz-text/10 pt-4">
-        <label className="font-mono text-xs text-zzz-text/60">视觉模型 // 人脸识别裁切</label>
-        <input
-          type="password"
-          autoComplete="off"
-          value={visionCred.apiKey}
-          onChange={(e) => setVisionCred({ apiKey: e.target.value })}
-          placeholder="API Key（留空则使用服务端 VISION_API_KEY）"
-          className="glass-input w-full px-3 py-2 font-mono text-sm"
-        />
-        <input
-          value={visionCred.baseUrl}
-          onChange={(e) => setVisionCred({ baseUrl: e.target.value })}
-          placeholder="Base URL（可选，默认 api.openai.com）"
-          className="glass-input w-full px-3 py-2 font-mono text-sm"
-        />
-        <input
-          value={visionCred.model}
-          onChange={(e) => setVisionCred({ model: e.target.value })}
-          placeholder="模型名称（可选，默认 gpt-4o-mini）"
-          className="glass-input w-full px-3 py-2 font-mono text-sm"
-        />
-        <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
-          用于零命图片生成后自动检测人脸位置，动态计算切割区域。Key 留空时使用服务端 .env 的 VISION_API_KEY；若均未配置则报错。
-        </p>
-      </div>
+      {!freeloadEnabled && (
+        <div className="mt-4 space-y-2 border-t border-zzz-text/10 pt-4">
+          <label className="font-mono text-xs text-zzz-text/60">视觉模型 // 人脸识别裁切</label>
+          <input
+            type="password"
+            autoComplete="off"
+            value={visionCred.apiKey}
+            onChange={(e) => setVisionCred({ apiKey: e.target.value })}
+            placeholder="API Key（留空则使用服务端 VISION_API_KEY）"
+            className="glass-input w-full px-3 py-2 font-mono text-sm"
+          />
+          <input
+            value={visionCred.baseUrl}
+            onChange={(e) => setVisionCred({ baseUrl: e.target.value })}
+            placeholder="Base URL（可选，默认 api.openai.com）"
+            className="glass-input w-full px-3 py-2 font-mono text-sm"
+          />
+          <input
+            value={visionCred.model}
+            onChange={(e) => setVisionCred({ model: e.target.value })}
+            placeholder="模型名称（可选，默认 gpt-4o-mini）"
+            className="glass-input w-full px-3 py-2 font-mono text-sm"
+          />
+          <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
+            用于零命图片生成后自动检测人脸位置，动态计算切割区域。Key 留空时使用服务端 .env 的 VISION_API_KEY；若均未配置则报错。
+          </p>
+        </div>
+      )}
     </section>
   );
 }

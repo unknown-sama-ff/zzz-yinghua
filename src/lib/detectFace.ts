@@ -8,7 +8,7 @@ export interface FaceBounds {
 export async function detectFace(
   imageBase64: string,
   imageMime: string,
-  opts?: { apiKey?: string; baseUrl?: string; model?: string },
+  opts?: { apiKey?: string; baseUrl?: string; model?: string; useServerPreset?: boolean },
 ): Promise<FaceBounds> {
   const res = await fetch('/api/detect-face', {
     method: 'POST',

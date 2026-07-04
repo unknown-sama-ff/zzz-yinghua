@@ -10,6 +10,7 @@ export interface GenRequest {
   imageMime?: string;
   size?: string;
   n?: number;
+  useServerPreset?: boolean;
   // Optional per-request credentials (override server .env when provided).
   // Kept in memory only on the client; never persisted.
   apiKey?: string;

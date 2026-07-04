@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useCursorEffectsPref } from '../lib/useCursorEffectsPref';
+import { useStore } from '../store/useStore';
 
 const THEME_VARS = ['--zzz-primary', '--zzz-magenta', '--zzz-cyan'] as const;
 const MAX_PARTICLES = 150;
@@ -116,6 +117,7 @@ function createThemeColorCache() {
  */
 export function CursorEffects() {
   const { enabled, reduced, setEnabled } = useCursorEffectsPref();
+  const { freeloadEnabled, setFreeloadEnabled } = useStore();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);
   const enabledRef = useRef(enabled);
@@ -432,6 +434,14 @@ export function CursorEffects() {
     <>
       <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[10000]" style={{ willChange: 'transform', display: enabled ? undefined : 'none' }} aria-hidden="true" />
       <div ref={pulseRef} className="scroll-pulse-overlay pointer-events-none fixed inset-0 z-[9998]" aria-hidden="true" />
+      <button
+        onClick={() => setFreeloadEnabled(!freeloadEnabled)}
+        aria-pressed={freeloadEnabled}
+        data-active={freeloadEnabled}
+        className="glass-btn fixed bottom-[3.5rem] right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
+      >
+        白嫖作者😋 {freeloadEnabled ? 'ON' : 'OFF'}
+      </button>
       <button
         onClick={() => setEnabled(!enabled)}
         aria-pressed={enabled}

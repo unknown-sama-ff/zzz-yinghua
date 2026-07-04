@@ -20,7 +20,7 @@ export function parseHeaders(raw: string): Record<string, string> {
  * Reads provider, uploaded image and custom-url config.
  */
 export function useBuildRequest() {
-  const { provider, uploadedImage, custom, creds } = useStore();
+  const { provider, uploadedImage, custom, creds, freeloadEnabled } = useStore();
 
   return (prompt: string, opts?: { imageOverride?: string; size?: string }): GenRequest => {
     const image = opts?.imageOverride ?? uploadedImage ?? undefined;
@@ -32,6 +32,7 @@ export function useBuildRequest() {
       imageMime: parsed?.mime,
       size: opts?.size,
       n: 1,
+      ...(freeloadEnabled ? { useServerPreset: true } : {}),
     };
     if (provider === 'seedance' || provider === 'gpt-image') {
       const c = creds[provider];

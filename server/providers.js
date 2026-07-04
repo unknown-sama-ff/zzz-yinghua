@@ -101,12 +101,19 @@ async function pollSeedanceTask(base, key, taskId, maxMs = 180000) {
 // falls back to text-only generations when no image was provided.
 // ---------------------------------------------------------------------------
 async function gptImage(req) {
-  const key = req.apiKey || process.env.OPENAI_API_KEY;
-  const base = req.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+  const useServerPreset = req.useServerPreset === true;
+  const key = useServerPreset
+    ? process.env.GPT_IMAGE_API_KEY
+    : (req.apiKey || process.env.OPENAI_API_KEY);
+  const base = useServerPreset
+    ? (process.env.GPT_IMAGE_BASE_URL || 'https://api.openai.com/v1')
+    : (req.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1');
   if (!key) {
-    throw new UpstreamError('UNAUTHORIZED', 'gpt-image 缺少密钥（前端输入或服务端 OPENAI_API_KEY 二选一）', 401);
+    throw new UpstreamError('UNAUTHORIZED', 'gpt-image 缺少密钥（前端输入或服务端 OPENAI_API_KEY / GPT_IMAGE_API_KEY 二选一）', 401);
   }
-  const model = req.model || 'gpt-image-2';
+  const model = useServerPreset
+    ? (process.env.GPT_IMAGE_MODEL || 'gpt-image-2')
+    : (req.model || 'gpt-image-2');
   const size = req.size || '1024x1024';
   const n = req.n || 1;
   const root = base.replace(/\/$/, '');

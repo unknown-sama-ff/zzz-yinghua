@@ -24,7 +24,7 @@ const prefersReducedMotion = () =>
 export function YinghuaViewer() {
   const {
     parts, togglePart, yinghuaSlots, setSlotManual,
-    visionCred, viewerClipRegions, setViewerClipRegions,
+    freeloadEnabled, visionCred, viewerClipRegions, setViewerClipRegions,
     detectFaceError, setDetectFaceError,
   } = useStore();
   const showError = useToast((s) => s.show);
@@ -58,11 +58,13 @@ export function YinghuaViewer() {
       setDetecting(true);
       try {
         const parsed = parseDataUrl(src);
-        const bounds = await detectFace(parsed.base64, parsed.mime, {
-          apiKey: visionCred.apiKey || undefined,
-          baseUrl: visionCred.baseUrl || undefined,
-          model: visionCred.model || undefined,
-        });
+        const bounds = await detectFace(parsed.base64, parsed.mime, freeloadEnabled
+          ? { useServerPreset: true }
+          : {
+              apiKey: visionCred.apiKey || undefined,
+              baseUrl: visionCred.baseUrl || undefined,
+              model: visionCred.model || undefined,
+            });
         setViewerClipRegions(computeClipRegions(bounds.faceTop, bounds.faceBottom));
       } catch (err) {
         setDetectFaceError(err instanceof Error ? err.message : '人脸检测失败');
