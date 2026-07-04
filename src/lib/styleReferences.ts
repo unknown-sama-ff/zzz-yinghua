@@ -2,7 +2,11 @@ import type { YinghuaStyleId } from '../types';
 import { stitchImages } from './stitchImages';
 
 const STYLE_REFERENCE_URLS: Record<YinghuaStyleId, string[]> = {
-  1: ['/影画样式1/DM_20260627161836_002.PNG'],
+  1: [
+    '/影画样式1/DM_20260627161836_002.PNG',
+    '/影画样式1/DM_20260627161836_005.PNG',
+    '/影画样式1/DM_20260627161836_008.PNG',
+  ],
   2: ['/影画样式2/DM_20260627161836_003.PNG'],
   3: ['/影画样式3/DM_20260627161836_004.PNG'],
 };
