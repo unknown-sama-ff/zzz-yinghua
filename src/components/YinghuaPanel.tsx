@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
-import { stitchImages } from '../lib/stitchImages';
+import { stitchImages, embedThumbnail } from '../lib/stitchImages';
 import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
 import { parseDataUrl, validateImageFile, fileToDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
@@ -42,6 +42,7 @@ export function YinghuaPanel() {
     setViewerClipRegions,
     setDetectFaceError,
     setFaceBounds,
+    threeViewSlot,
   } = useStore();
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
@@ -118,11 +119,9 @@ export function YinghuaPanel() {
       return;
     }
     // 零命 uses the original upload + addon + style sheet.
-    // 三命/六命: zero result is the sole positional anchor (imageOverride).
-    // Only the original character art is passed as a single refImage for
-    // color sampling — no style sheet to minimize stitching distortion.
+    // 三命/六命: zero result + three-view thumbnail embedded in corner
+    // as a single imageOverride — perfect position lock with color reference.
     let imageOverride: string | undefined;
-    let refImages: { base64: string; mime: string }[] | undefined;
     try {
       if (id === 1) {
         const styleSheet = await buildStyleReferenceSheet(id);
@@ -133,11 +132,10 @@ export function YinghuaPanel() {
           showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
           return;
         }
-        imageOverride = baseImg;
-        const identityParsed = parseDataUrl(uploadedImage);
-        refImages = [
-          { base64: identityParsed.base64, mime: identityParsed.mime },
-        ];
+        const threeView = threeViewSlot.images[0];
+        imageOverride = threeView
+          ? await embedThumbnail(baseImg, threeView)
+          : baseImg;
       }
     } catch {
       showError('风格参考图合成失败');
@@ -146,7 +144,7 @@ export function YinghuaPanel() {
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
       const images = await generate(
-        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride, refImages }),
+        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride }),
       );
       setYinghuaSlot(id, { status: 'done', images });
       if (id === 3 && images[0]) {

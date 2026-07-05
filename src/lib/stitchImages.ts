@@ -45,3 +45,50 @@ export async function stitchImages(dataUrls: (string | null | undefined)[]): Pro
 
   return canvas.toDataURL('image/png');
 }
+
+/**
+ * Embed a small thumbnail in the bottom-right corner of a base image.
+ * Used for 三命/六命: zero-fate result as base + three-view thumbnail as
+ * color reference, combined into a single imageOverride so position lock
+ * is perfect and no refImages are needed.
+ */
+export async function embedThumbnail(
+  base: string,
+  thumb: string,
+  size: number = 0.2,
+): Promise<string> {
+  const [baseImg, thumbImg] = await Promise.all(
+    [base, thumb].map(
+      (url) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error('Failed to load image for thumbnail'));
+          img.src = url;
+        }),
+    ),
+  );
+
+  const canvas = document.createElement('canvas');
+  canvas.width = baseImg.naturalWidth;
+  canvas.height = baseImg.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('embedThumbnail: canvas 2d context unavailable');
+
+  // Draw base image at full size.
+  ctx.drawImage(baseImg, 0, 0);
+
+  // Draw thumbnail in bottom-right corner.
+  const thumbH = Math.round(baseImg.naturalHeight * size);
+  const thumbW = Math.round((thumbImg.naturalWidth / thumbImg.naturalHeight) * thumbH);
+  const margin = Math.round(baseImg.naturalHeight * 0.02);
+  const tx = canvas.width - thumbW - margin;
+  const ty = canvas.height - thumbH - margin;
+
+  // Semi-transparent background behind thumbnail so it's readable.
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(tx - 4, ty - 4, thumbW + 8, thumbH + 8);
+  ctx.drawImage(thumbImg, tx, ty, thumbW, thumbH);
+
+  return canvas.toDataURL('image/png');
+}
