@@ -15,6 +15,9 @@ const DEFAULT_PALETTE: Palette = {
   accent: '#ff2d9b',
   muted: '#16121f',
   textOn: '#f5f0ff',
+  textTop: '#1a1a2e',
+  textBottom: '#cc66ff',
+  textTopBright: '#e099ff',
 };
 
 /**
@@ -60,6 +63,9 @@ export async function extractPalette(imageSrc: string): Promise<Palette> {
       accent: toHex(accent),
       muted: toHex(darken(muted, 0.4)),
       textOn: readableText(dominant),
+      textTop: darkenHex(toHex(dominant), 0.85),
+      textBottom: brightenHex(toHex(dominant), 0.25),
+      textTopBright: brightenHex(toHex(dominant), 0.4),
     };
   } catch {
     return DEFAULT_PALETTE;
@@ -166,6 +172,29 @@ function colorDistance(a: RGB, b: RGB): number {
 
 function toHex([r, g, b]: RGB): string {
   return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToRgb(hex: string): RGB {
+  const h = hex.replace('#', '');
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+/** Brighten a hex color by factor (0-1). 0.25 = ~25% toward white. */
+export function brightenHex(hex: string, factor: number): string {
+  const rgb = hexToRgb(hex);
+  const b = rgb.map((v) => Math.min(255, Math.round(v + (255 - v) * factor)));
+  return toHex(b as RGB);
+}
+
+/** Darken a hex color by factor (0-1). 0.6 = ~60% toward black. */
+export function darkenHex(hex: string, factor: number): string {
+  const rgb = hexToRgb(hex);
+  const d = rgb.map((v) => Math.round(v * (1 - factor)));
+  return toHex(d as RGB);
 }
 
 function darken([r, g, b]: RGB, amount: number): RGB {

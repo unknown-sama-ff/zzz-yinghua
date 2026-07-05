@@ -52,6 +52,12 @@ export interface Palette {
   muted: string;
   /** '#000' or '#fff', whichever reads better on `dominant`. */
   textOn: string;
+  /** Near-black print tone for TOP text (background darkened). */
+  textTop: string;
+  /** Brightened dominant for BOTTOM text. */
+  textBottom: string;
+  /** Extra-brightened dominant for TOP text in 六命 (distinct from BOTTOM). */
+  textTopBright: string;
 }
 
 /** Name text placement mode for viewer overlay and AI prompt sync. */

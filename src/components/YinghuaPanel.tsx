@@ -152,7 +152,15 @@ export function YinghuaPanel() {
         buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride, refImages }),
       );
       setYinghuaSlot(id, { status: 'done', images });
-      if (id === 3 && images[0]) void runFaceDetect(images[0]);
+      if (id === 3 && images[0]) {
+        void runFaceDetect(images[0]);
+        if (palette) {
+          const root = document.documentElement.style;
+          root.setProperty('--zzz-primary', palette.textTopBright);
+          root.setProperty('--zzz-magenta', palette.textBottom);
+          root.setProperty('--zzz-accent', palette.textBottom);
+        }
+      }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
       setYinghuaSlot(id, { status: 'error', error: msg });
