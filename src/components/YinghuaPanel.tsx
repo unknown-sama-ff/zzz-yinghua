@@ -106,9 +106,10 @@ export function YinghuaPanel() {
       return;
     }
     // 零命 uses the original upload + addon + style sheet as a single reference.
-    // 三命/六命 prepare three independent reference images: zero result,
-    // original art(+addon), and the style sheet. The server stitches them into
-    // one board before uploading to the upstream image-edit endpoint.
+    // 三命/六命 use the zero-style result as the sole image input so the model
+    // transforms the rendering style on top of it — positions are pixel-preserved.
+    // The style reference sheet is passed as a separate ref for server-side stitching
+    // alongside the zero result, giving the model style cues without breaking alignment.
     let imageOverride: string | undefined;
     let refImages: { base64: string; mime: string }[] | undefined;
     try {
@@ -121,13 +122,11 @@ export function YinghuaPanel() {
           showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
           return;
         }
-        const identityRef = yinghuaAddonImage
-          ? await stitchImages([uploadedImage, yinghuaAddonImage])
-          : uploadedImage;
-        refImages = [baseImg, identityRef, styleSheet].map((url) => {
-          const p = parseDataUrl(url);
-          return { base64: p.base64, mime: p.mime };
-        });
+        // Zero-style result as the sole image — the model transforms it.
+        imageOverride = baseImg;
+        // Attach style sheet as reference for server-side stitching.
+        const styleParsed = parseDataUrl(styleSheet);
+        refImages = [{ base64: styleParsed.base64, mime: styleParsed.mime }];
       }
     } catch {
       showError('风格参考图合成失败');

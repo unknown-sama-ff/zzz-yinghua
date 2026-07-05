@@ -171,7 +171,23 @@ async function gptImage(req) {
   if (Array.isArray(req.refImages) && req.refImages.length > 0) {
     try {
       const stitched = await stitchRefImages(req.refImages);
-      req.imageBase64 = stitched.toString('base64');
+      // If a main image is already provided, composite the refs next to it.
+      if (req.imageBase64) {
+        const main = Buffer.from(req.imageBase64, 'base64');
+        const mainResized = await sharp(main).resize({ height: 1024, withoutEnlargement: true }).png().toBuffer();
+        const mainMeta = await sharp(mainResized).metadata();
+        const stitchedMeta = await sharp(stitched).metadata();
+        const totalWidth = (mainMeta.width || 1024) + (stitchedMeta.width || 0);
+        const result = await sharp({
+          create: { width: totalWidth, height: 1024, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } }
+        }).composite([
+          { input: mainResized, left: 0, top: 0 },
+          { input: stitched, left: mainMeta.width || 1024, top: 0 }
+        ]).png().toBuffer();
+        req.imageBase64 = result.toString('base64');
+      } else {
+        req.imageBase64 = stitched.toString('base64');
+      }
       req.imageMime = 'image/png';
     } catch (err) {
       throw new UpstreamError('UPSTREAM_ERROR', `参考图拼板失败: ${err?.message || err}`);
