@@ -106,9 +106,9 @@ export function YinghuaPanel() {
       return;
     }
     // 零命 uses the original upload + addon + style sheet as a single reference.
-    // 三命/六命 send three independent reference images so the model can
-    // distinguish pose/layout (zero result) from identity (original art) from
-    // style (style sheet).
+    // 三命/六命 prepare three independent reference images: zero result,
+    // original art(+addon), and the style sheet. The server stitches them into
+    // one board before uploading to the upstream image-edit endpoint.
     let imageOverride: string | undefined;
     let refImages: { base64: string; mime: string }[] | undefined;
     try {
@@ -124,16 +124,10 @@ export function YinghuaPanel() {
         const identityRef = yinghuaAddonImage
           ? await stitchImages([uploadedImage, yinghuaAddonImage])
           : uploadedImage;
-        const parsed = parseDataUrl(baseImg);
-        refImages = [
-          { base64: parsed.base64, mime: parsed.mime },
-          ...(await Promise.all(
-            [identityRef, styleSheet].map(async (url) => {
-              const p = parseDataUrl(url);
-              return { base64: p.base64, mime: p.mime };
-            }),
-          )),
-        ];
+        refImages = [baseImg, identityRef, styleSheet].map((url) => {
+          const p = parseDataUrl(url);
+          return { base64: p.base64, mime: p.mime };
+        });
       }
     } catch {
       showError('风格参考图合成失败');

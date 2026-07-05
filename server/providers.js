@@ -7,6 +7,7 @@ import {
   sleep,
   parseJsonSafe,
 } from './http.js';
+import sharp from 'sharp';
 
 /**
  * Each provider implements: async generate(req) -> { images: string[], raw }
@@ -36,6 +37,32 @@ function pluckImages(json) {
   if (typeof json?.output === 'string') out.push(json.output);
   if (Array.isArray(json?.output)) out.push(...json.output.filter((v) => typeof v === 'string'));
   return out;
+}
+
+async function stitchRefImages(refImages) {
+  const decoded = await Promise.all(refImages.map(async (ref) => {
+    const input = Buffer.from(ref.base64, 'base64');
+    const resized = await sharp(input).resize({ height: 1024, withoutEnlargement: true }).png().toBuffer();
+    const meta = await sharp(resized).metadata();
+    return { buffer: resized, width: meta.width || 1024 };
+  }));
+
+  const totalWidth = decoded.reduce((sum, img) => sum + img.width, 0);
+  let x = 0;
+  const composite = decoded.map((img) => {
+    const out = { input: img.buffer, left: x, top: 0 };
+    x += img.width;
+    return out;
+  });
+
+  return sharp({
+    create: {
+      width: totalWidth,
+      height: 1024,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  }).composite(composite).png().toBuffer();
 }
 
 // ---------------------------------------------------------------------------
@@ -133,36 +160,12 @@ async function gptImage(req) {
   const n = req.n || 1;
   const root = base.replace(/\/$/, '');
 
-  // Multiple independent reference images → chat completions so the model
-  // sees each reference separately (zero result / original art / style sheet)
-  // instead of one stitched composite.
+  // With multiple independent refs → stitch server-side, then upload the
+  // resulting board to /images/edits so upstream still receives one image.
   if (Array.isArray(req.refImages) && req.refImages.length > 0) {
-    const content = [
-      { type: 'text', text: req.prompt },
-      ...req.refImages.map((ref) => ({
-        type: 'image_url',
-        image_url: { url: `data:${ref.mime || 'image/png'};base64,${ref.base64}`, detail: 'high' },
-      })),
-    ];
-    const json = await withRetry(async () => {
-      const res = await fetchWithTimeout(`${root}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content }], max_tokens: 4096 }),
-      });
-      if (!res.ok) {
-        throw new UpstreamError(codeFromStatus(res.status), `gpt-image 多参考图返回 ${res.status}`, res.status);
-      }
-      return parseJsonSafe(res);
-    });
-    const text = json.choices?.[0]?.message?.content ?? '';
-    // Try to extract generated image URLs from the response.
-    const imgs = pluckImages(json);
-    if (imgs.length > 0) return { images: imgs, raw: json };
-    // Fallback: the model may have returned an image markdown or URL in the text.
-    const urlMatch = text.match(/https?:\/\/[^\s"'>]+\.(?:png|jpg|jpeg|webp)/gi);
-    if (urlMatch) return { images: urlMatch, raw: json };
-    throw new UpstreamError('UPSTREAM_ERROR', 'gpt-image 多参考图未返回可用的图片');
+    const stitched = await stitchRefImages(req.refImages);
+    req.imageBase64 = stitched.toString('base64');
+    req.imageMime = 'image/png';
   }
 
   // With an input image → /images/edits as multipart/form-data so the upload
