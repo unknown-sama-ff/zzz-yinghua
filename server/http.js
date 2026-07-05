@@ -26,8 +26,8 @@ export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIME
       console.warn(`[upstream] TIMEOUT after ${Date.now() - started}ms → ${url}`);
       throw new UpstreamError('UPSTREAM_TIMEOUT', `上游请求超时 (${timeout}ms)`, 504);
     }
-    console.warn(`[upstream] FAILED ${err.message} → ${url}`);
-    throw new UpstreamError('UPSTREAM_ERROR', `上游连接失败: ${err.message}`);
+    console.warn('[upstream] FAILED to reach upstream endpoint');
+    throw new UpstreamError('UPSTREAM_ERROR', '上游连接失败，请检查 Base URL / 端点是否正确');
   } finally {
     clearTimeout(timer);
   }
