@@ -24,7 +24,7 @@ app.use(
 // Large limit to accommodate base64 image uploads. Three-view stitching tiles
 // several images into one PNG, whose base64 is ~33% larger than the bytes —
 // hence the generous ceiling beyond any single 10MB upload.
-app.use(express.json({ limit: '25mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 const VALID_PROVIDERS = new Set(['seedance', 'gpt-image', 'custom-url']);
 
