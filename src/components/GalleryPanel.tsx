@@ -34,6 +34,7 @@ export function GalleryPanel() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   const loadGallery = async (mode: 'initial' | 'refresh' = 'initial') => {
     if (mode === 'initial') setLoading(true);
@@ -104,7 +105,8 @@ export function GalleryPanel() {
                 src={row.image_url}
                 alt={row.style}
                 loading="lazy"
-                className="w-full object-contain"
+                className="w-full cursor-pointer object-contain"
+                onClick={() => setLightbox(row.image_url)}
               />
               <div className="p-2 font-mono text-[10px] text-zzz-text/55 leading-relaxed">
                 <div className="text-zzz-primary/80 truncate">{row.style}</div>
@@ -121,6 +123,19 @@ export function GalleryPanel() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <img
+            src={lightbox}
+            alt="画廊大图"
+            className="max-h-full max-w-full rounded-lg object-contain"
+          />
         </div>
       )}
     </section>

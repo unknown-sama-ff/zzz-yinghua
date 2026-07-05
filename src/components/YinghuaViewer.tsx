@@ -99,7 +99,7 @@ export function YinghuaViewer() {
 
   return (
     <section className={`${fullscreen ? 'fixed inset-0 z-50 flex flex-col' : ''} glass overflow-hidden`}>
-      <h2 className="zzz-heading flex items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text">
+      <h2 className={`zzz-heading flex items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text ${fullscreen ? 'hidden' : ''}`}>
         <span className="step-badge">05</span>
         影画查看器
         {hasBase && (
@@ -112,12 +112,12 @@ export function YinghuaViewer() {
         )}
       </h2>
 
-      <div className="flex flex-col md:flex-row">
+      <div className={`flex flex-col md:flex-row ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
         <ControlBar onToggle={handleToggle} />
 
         {/* Main stage */}
         <div
-          className={`relative aspect-[3/2] flex-1 overflow-hidden bg-zzz-bg ${glitch ? 'fx-glitch' : ''}`}
+          className={`relative flex-1 overflow-hidden bg-zzz-bg ${fullscreen ? 'min-h-0' : 'aspect-[3/2]'} ${glitch ? 'fx-glitch' : ''}`}
         >
           {/* 零命 base layer — always visible when generated */}
           {baseImg && (
