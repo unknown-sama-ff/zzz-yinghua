@@ -63,7 +63,7 @@ function StageGroup({
 }) {
   const allVisible = parts.every((p) => p.visible);
   return (
-    <div className={`flex w-full ${fullscreen ? 'gap-1' : 'flex-col gap-2'}`}>
+    <div className="flex w-full flex-col gap-2">
       {parts.map((p) => (
         <PartButton key={p.code} part={p} onToggle={onToggle} fullscreen={fullscreen} />
       ))}
