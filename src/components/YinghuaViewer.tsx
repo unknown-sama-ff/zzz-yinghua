@@ -31,6 +31,7 @@ export function YinghuaViewer() {
   const [sweeping, setSweeping] = useState(false);
   const [glitch, setGlitch] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const timers = useRef<number[]>([]);
   const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null });
 
@@ -97,10 +98,18 @@ export function YinghuaViewer() {
   const hasBase = Boolean(baseImg);
 
   return (
-    <section className="glass overflow-hidden">
+    <section className={`${fullscreen ? 'fixed inset-0 z-50 flex flex-col' : ''} glass overflow-hidden`}>
       <h2 className="zzz-heading flex items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text">
         <span className="step-badge">05</span>
         影画查看器
+        {hasBase && (
+          <button
+            onClick={() => setFullscreen(!fullscreen)}
+            className="glass-btn ml-auto px-3 py-1 font-mono text-[10px] tracking-widest text-zzz-text"
+          >
+            {fullscreen ? '退出全屏' : '全屏'}
+          </button>
+        )}
       </h2>
 
       <div className="flex flex-col md:flex-row">
