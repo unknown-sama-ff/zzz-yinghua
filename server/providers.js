@@ -163,9 +163,13 @@ async function gptImage(req) {
   // With multiple independent refs → stitch server-side, then upload the
   // resulting board to /images/edits so upstream still receives one image.
   if (Array.isArray(req.refImages) && req.refImages.length > 0) {
-    const stitched = await stitchRefImages(req.refImages);
-    req.imageBase64 = stitched.toString('base64');
-    req.imageMime = 'image/png';
+    try {
+      const stitched = await stitchRefImages(req.refImages);
+      req.imageBase64 = stitched.toString('base64');
+      req.imageMime = 'image/png';
+    } catch (err) {
+      throw new UpstreamError('UPSTREAM_ERROR', `参考图拼板失败: ${err?.message || err}`);
+    }
   }
 
   // With an input image → /images/edits as multipart/form-data so the upload
