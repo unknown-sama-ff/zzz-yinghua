@@ -41,7 +41,7 @@ function fillPoster(template: string, name: string, dominant: string, accent: st
 
 /** Section 06 — one-click ZZZ poster generation, author-recommended prompt. */
 export function PosterPanel() {
-  const { characterName, uploadedImage, palette, posterSlot, setPosterSlot, provider } = useStore();
+  const { characterName, palette, posterSlot, setPosterSlot, provider, threeViewSlot } = useStore();
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [variant, setVariant] = useState<string>(POSTER_VARIANTS[1].id);
@@ -53,14 +53,15 @@ export function PosterPanel() {
   const prompt = fillPoster(current.template, characterName, dominant, accent);
 
   const run = async () => {
-    if (!uploadedImage) {
-      showError('请先上传角色正面图片');
+    const threeViewImg = threeViewSlot.images[0];
+    if (!threeViewImg) {
+      showError('请先在 01 模块生成三视图');
       return;
     }
     setPosterSlot({ status: 'loading', error: undefined });
     try {
       const images = await generate(
-        buildRequest(prompt, { size: YINGHUA_SIZE }),
+        buildRequest(prompt, { size: YINGHUA_SIZE, imageOverride: threeViewImg }),
       );
       setPosterSlot({ status: 'done', images });
     } catch (err) {
