@@ -119,14 +119,13 @@ export function YinghuaPanel() {
     }
     // 零命 uses the original upload + addon + style sheet.
     // 三命/六命: zero result is the sole positional anchor (imageOverride).
-    // Original character art + style sheet are passed as refImages for
-    // server-side stitching alongside the zero result — identity and style
-    // cues without breaking the position lock.
+    // Only the original character art is passed as a single refImage for
+    // color sampling — no style sheet to minimize stitching distortion.
     let imageOverride: string | undefined;
     let refImages: { base64: string; mime: string }[] | undefined;
     try {
-      const styleSheet = await buildStyleReferenceSheet(id);
       if (id === 1) {
+        const styleSheet = await buildStyleReferenceSheet(id);
         imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
       } else {
         const baseImg = yinghuaSlots[1].images[0];
@@ -136,10 +135,8 @@ export function YinghuaPanel() {
         }
         imageOverride = baseImg;
         const identityParsed = parseDataUrl(uploadedImage);
-        const styleParsed = parseDataUrl(styleSheet);
         refImages = [
           { base64: identityParsed.base64, mime: identityParsed.mime },
-          { base64: styleParsed.base64, mime: styleParsed.mime },
         ];
       }
     } catch {
