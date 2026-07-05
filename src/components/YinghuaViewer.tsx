@@ -32,6 +32,7 @@ export function YinghuaViewer() {
   const [glitch, setGlitch] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const isMobile = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
   const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null });
@@ -79,24 +80,28 @@ export function YinghuaViewer() {
 
   const toggleFullscreen = useCallback(async () => {
     if (fullscreen) {
-      try { if ('orientation' in screen) (screen.orientation as any).unlock?.(); } catch {}
-      try { await document.exitFullscreen(); } catch {}
+      if (isMobile) {
+        try { if ('orientation' in screen) (screen.orientation as any).unlock?.(); } catch {}
+        try { await document.exitFullscreen(); } catch {}
+      }
       setFullscreen(false);
     } else {
-      const el = sectionRef.current;
-      if (!el) return;
-      try {
-        await el.requestFullscreen();
-        // Lock orientation AFTER fullscreen is active
-        if ('orientation' in screen && (screen.orientation as any).lock) {
-          await (screen.orientation as any).lock('landscape');
-        }
-      } catch {}
+      if (isMobile) {
+        const el = sectionRef.current;
+        if (!el) return;
+        try {
+          await el.requestFullscreen();
+          if ('orientation' in screen && (screen.orientation as any).lock) {
+            await (screen.orientation as any).lock('landscape');
+          }
+        } catch {}
+      }
       setFullscreen(true);
     }
-  }, [fullscreen]);
+  }, [fullscreen, isMobile]);
 
   useEffect(() => {
+    if (!isMobile) return;
     const onFsChange = () => {
       if (!document.fullscreenElement) {
         setFullscreen(false);
@@ -105,7 +110,7 @@ export function YinghuaViewer() {
     };
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
+  }, [isMobile]);
 
   const handleRefreshClip = useCallback(() => {
     const src = yinghuaSlots[3].images[0] || yinghuaSlots[1].images[0];
