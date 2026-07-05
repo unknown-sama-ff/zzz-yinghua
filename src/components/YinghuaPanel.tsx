@@ -48,7 +48,7 @@ export function YinghuaPanel() {
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
       if (!yinghuaPrompts[style.id]) {
-        setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+        setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -57,7 +57,7 @@ export function YinghuaPanel() {
   // Re-fill prompts when the name changes.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterName, yinghuaActionPose, yinghuaCharacterTraits]);
@@ -65,7 +65,7 @@ export function YinghuaPanel() {
   // Re-fill prompts when palette changes (new image uploaded).
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [palette, yinghuaActionPose, yinghuaCharacterTraits]);
@@ -73,7 +73,7 @@ export function YinghuaPanel() {
   // Re-fill prompts when showText toggles.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits]);
@@ -87,7 +87,7 @@ export function YinghuaPanel() {
   // Re-fill prompts when language toggles.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yinghuaLang]);

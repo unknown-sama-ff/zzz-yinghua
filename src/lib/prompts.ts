@@ -77,6 +77,7 @@ export function fillName(
   showText?: boolean,
   actionPose?: string,
   characterTraits?: string,
+  lang?: 'zh' | 'en',
 ): string {
   const upper = (name || 'CHARACTER').toUpperCase();
   const [top, bottom] = splitName(upper);
@@ -98,5 +99,5 @@ export function fillName(
       '画面整洁不含任何文字，无水印',
     );
   }
-  return FIDELITY_PREFIX + filled;
+  return (lang === 'en' ? '' : FIDELITY_PREFIX) + filled;
 }
