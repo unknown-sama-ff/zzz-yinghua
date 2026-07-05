@@ -32,6 +32,7 @@ export function YinghuaViewer() {
   const [glitch, setGlitch] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
   const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null });
 
@@ -76,6 +77,36 @@ export function YinghuaViewer() {
     [visionCred, freeloadEnabled, setViewerClipRegions, setDetectFaceError],
   );
 
+  const toggleFullscreen = useCallback(async () => {
+    if (fullscreen) {
+      try { if ('orientation' in screen) (screen.orientation as any).unlock?.(); } catch {}
+      try { await document.exitFullscreen(); } catch {}
+      setFullscreen(false);
+    } else {
+      const el = sectionRef.current;
+      if (!el) return;
+      try {
+        await el.requestFullscreen();
+        // Lock orientation AFTER fullscreen is active
+        if ('orientation' in screen && (screen.orientation as any).lock) {
+          await (screen.orientation as any).lock('landscape');
+        }
+      } catch {}
+      setFullscreen(true);
+    }
+  }, [fullscreen]);
+
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) {
+        setFullscreen(false);
+        try { if ('orientation' in screen) (screen.orientation as any).unlock?.(); } catch {}
+      }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
   const handleRefreshClip = useCallback(() => {
     const src = yinghuaSlots[3].images[0] || yinghuaSlots[1].images[0];
     if (src) void runFaceDetect(src);
@@ -98,13 +129,13 @@ export function YinghuaViewer() {
   const hasBase = Boolean(baseImg);
 
   return (
-    <section className={`${fullscreen ? 'fixed inset-0 z-50 flex flex-col' : ''} glass overflow-hidden`}>
+    <section ref={sectionRef} className={`${fullscreen ? 'fixed inset-0 z-50 flex flex-col' : ''} glass overflow-hidden`}>
       <h2 className={`zzz-heading flex items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text ${fullscreen ? 'hidden' : ''}`}>
         <span className="step-badge">05</span>
         影画查看器
         {hasBase && (
           <button
-            onClick={() => setFullscreen(!fullscreen)}
+            onClick={toggleFullscreen}
             className="glass-btn ml-auto px-3 py-1 font-mono text-[10px] tracking-widest text-zzz-text"
           >
             {fullscreen ? '退出全屏' : '全屏'}
@@ -150,7 +181,7 @@ export function YinghuaViewer() {
           {/* Fullscreen exit button */}
           {fullscreen && (
             <button
-              onClick={() => setFullscreen(false)}
+              onClick={toggleFullscreen}
               className="glass-btn absolute right-3 top-3 z-10 px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
             >
               退出全屏
