@@ -148,7 +148,7 @@ export function YinghuaViewer() {
 
         {/* Main stage */}
         <div
-          className={`relative flex-1 overflow-hidden bg-zzz-bg ${fullscreen ? 'min-h-0' : 'aspect-[3/2]'} ${glitch ? 'fx-glitch' : ''}`}
+          className={`relative flex-1 overflow-hidden bg-zzz-bg ${fullscreen ? 'min-h-0 aspect-[3/2] max-h-full max-w-full m-auto' : 'aspect-[3/2]'} ${glitch ? 'fx-glitch' : ''}`}
         >
           {/* 零命 base layer — always visible when generated */}
           {baseImg && (
