@@ -6,18 +6,48 @@ export interface FaceBounds {
   bodyAxisAngle: number;
 }
 
+/**
+ * Resize a data URL image to fit within maxDim (longest side), keeping aspect ratio.
+ * Returns a much smaller base64 for faster vision-model processing.
+ */
+function resizeDataUrl(dataUrl: string, maxDim: number = 384): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error('resizeDataUrl: no 2d context'));
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => reject(new Error('resizeDataUrl: image load failed'));
+    img.src = dataUrl;
+  });
+}
+
 export async function detectFace(
   imageBase64: string,
   imageMime: string,
   opts?: { apiKey?: string; baseUrl?: string; model?: string; useServerPreset?: boolean },
 ): Promise<FaceBounds> {
+  // Resize to max 384px before sending for fast vision-model turnaround.
+  const small = await resizeDataUrl(`data:${imageMime};base64,${imageBase64}`, 384);
+  const parsed = small.split(',');
+  const smallBase64 = parsed[1] || imageBase64;
+  const smallMime = small.startsWith('data:image/jpeg') ? 'image/jpeg' : imageMime;
+
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90000);
+  const timer = setTimeout(() => controller.abort(), 60000);
   try {
     const res = await fetch('/api/detect-face', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageBase64, imageMime, ...opts }),
+      body: JSON.stringify({ imageBase64: smallBase64, imageMime: smallMime, ...opts }),
       signal: controller.signal,
     });
     const json = await res.json();
