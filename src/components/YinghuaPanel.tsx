@@ -30,6 +30,8 @@ export function YinghuaPanel() {
     setYinghuaCharacterTraits,
     yinghuaAddonImage,
     setYinghuaAddonImage,
+    yinghuaLang,
+    setYinghuaLang,
     uploadedImage,
     palette,
     provider,
@@ -46,7 +48,7 @@ export function YinghuaPanel() {
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
       if (!yinghuaPrompts[style.id]) {
-        setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+        setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,7 +57,7 @@ export function YinghuaPanel() {
   // Re-fill prompts when the name changes.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterName, yinghuaActionPose, yinghuaCharacterTraits]);
@@ -63,7 +65,7 @@ export function YinghuaPanel() {
   // Re-fill prompts when palette changes (new image uploaded).
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [palette, yinghuaActionPose, yinghuaCharacterTraits]);
@@ -71,7 +73,7 @@ export function YinghuaPanel() {
   // Re-fill prompts when showText toggles.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits]);
@@ -81,6 +83,14 @@ export function YinghuaPanel() {
   useEffect(() => {
     void preloadStyleReferenceSheets();
   }, []);
+
+  // Re-fill prompts when language toggles.
+  useEffect(() => {
+    for (const style of YINGHUA_STYLES) {
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yinghuaLang]);
 
   const runFaceDetect = async (src: string) => {
     setDetectFaceError(null);
@@ -154,7 +164,15 @@ export function YinghuaPanel() {
 
   return (
     <section className="glass p-6">
-      <SectionHeader step="04" title="影画动作设计 · 三风格（生图时间可能较长，结果可能不理想，多抽几次卡）" />
+      <div className="flex items-center justify-between">
+        <SectionHeader step="04" title="影画动作设计 · 三风格（生图时间可能较长，结果可能不理想，多抽几次卡）" />
+        <button
+          onClick={() => setYinghuaLang(yinghuaLang === 'zh' ? 'en' : 'zh')}
+          className="glass-btn px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
+        >
+          {yinghuaLang === 'zh' ? '中 → EN' : 'EN → 中'}
+        </button>
+      </div>
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
           ⛓ 先生成「零命」，三命/六命会将零命结果（姿势/构图/文字位置）与原始立绘（身份/服饰配色）合成双参考图；三种风格都会自动附加对应影画样式参考图，样张只用于风格，不用于角色身份。

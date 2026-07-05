@@ -108,6 +108,10 @@ interface WorkshopState {
   yinghuaShowText: boolean;
   setYinghuaShowText: (show: boolean) => void;
 
+  // --- Yinghua language toggle ---
+  yinghuaLang: 'zh' | 'en';
+  setYinghuaLang: (lang: 'zh' | 'en') => void;
+
   // --- Yinghua action pose ---
   yinghuaActionPose: string;
   setYinghuaActionPose: (pose: string) => void;
@@ -216,6 +220,9 @@ export const useStore = create<WorkshopState>((set) => ({
 
   yinghuaShowText: true,
   setYinghuaShowText: (show) => set({ yinghuaShowText: show }),
+
+  yinghuaLang: 'zh',
+  setYinghuaLang: (lang) => set({ yinghuaLang: lang }),
 
   yinghuaActionPose: '',
   setYinghuaActionPose: (pose) => set({ yinghuaActionPose: pose }),

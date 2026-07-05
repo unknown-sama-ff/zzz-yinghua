@@ -65,6 +65,7 @@ export interface YinghuaStyle {
   label: string;
   description: string;
   promptTemplate: string;
+  promptTemplateEn?: string;
 }
 
 /**
