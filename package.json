@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9.0"
   },
   "description": "绝区零「影画工坊」— upload a character image, generate three-views + ZZZ yinghua action art, and explore it in a faithful ZZZ-style layered viewer.",
   "scripts": {
