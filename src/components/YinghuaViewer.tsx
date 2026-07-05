@@ -151,7 +151,7 @@ export function YinghuaViewer() {
           className={`relative overflow-hidden bg-zzz-bg ${fullscreen ? 'flex-1 min-h-0 flex items-center justify-center' : 'aspect-[3/2] flex-1'} ${glitch ? 'fx-glitch' : ''}`}
         >
           {fullscreen ? (
-            <div className="relative aspect-[3/2] max-h-full max-w-full w-full">
+            <div className="relative aspect-[3/2] h-full max-w-full">
               {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
               {parts.map((p) => {
                 const src = tierImage(p.styleId);
