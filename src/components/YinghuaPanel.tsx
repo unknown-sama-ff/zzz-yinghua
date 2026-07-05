@@ -124,9 +124,15 @@ export function YinghuaPanel() {
         }
         // Zero-style result as the sole image — the model transforms it.
         imageOverride = baseImg;
-        // Attach style sheet as reference for server-side stitching.
+        // Attach style sheet + original character art as references for server-side
+        // stitching. The original art provides clothing colour/pattern/detail info
+        // that the dark zero result can't convey.
         const styleParsed = parseDataUrl(styleSheet);
-        refImages = [{ base64: styleParsed.base64, mime: styleParsed.mime }];
+        const identityParsed = parseDataUrl(uploadedImage);
+        refImages = [
+          { base64: identityParsed.base64, mime: identityParsed.mime },
+          { base64: styleParsed.base64, mime: styleParsed.mime },
+        ];
       }
     } catch {
       showError('风格参考图合成失败');
