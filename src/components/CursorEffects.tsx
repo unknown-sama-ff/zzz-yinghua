@@ -117,7 +117,8 @@ function createThemeColorCache() {
  */
 export function CursorEffects() {
   const { enabled, reduced, setEnabled } = useCursorEffectsPref();
-  const { freeloadEnabled, setFreeloadEnabled } = useStore();
+  const freeloadEnabled = useStore((s) => s.freeloadEnabled);
+  const setFreeloadEnabled = useStore((s) => s.setFreeloadEnabled);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);
   const particlesRef = useRef<Particle[]>([]);

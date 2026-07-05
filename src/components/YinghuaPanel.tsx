@@ -116,10 +116,12 @@ export function YinghuaPanel() {
       return;
     }
     // 零命 uses the original upload + addon + style sheet.
-    // 三命/六命 use only the zero-style result as the sole image input —
-    // no extra references are stitched, to prevent the model from also
-    // transforming the reference materials into unwanted outputs.
+    // 三命/六命: zero result is the sole positional anchor (imageOverride).
+    // Original character art is passed as a separate refImage ONLY for
+    // character identity (clothing colors, patterns, accessories) — it
+    // must NEVER affect pose, composition, or text position.
     let imageOverride: string | undefined;
+    let refImages: { base64: string; mime: string }[] | undefined;
     try {
       if (id === 1) {
         const styleSheet = await buildStyleReferenceSheet(id);
@@ -131,6 +133,8 @@ export function YinghuaPanel() {
           return;
         }
         imageOverride = baseImg;
+        const identityParsed = parseDataUrl(uploadedImage);
+        refImages = [{ base64: identityParsed.base64, mime: identityParsed.mime }];
       }
     } catch {
       showError('风格参考图合成失败');
@@ -139,7 +143,7 @@ export function YinghuaPanel() {
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
       const images = await generate(
-        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride }),
+        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride, refImages }),
       );
       setYinghuaSlot(id, { status: 'done', images });
       if (id === 3 && images[0]) void runFaceDetect(images[0]);
