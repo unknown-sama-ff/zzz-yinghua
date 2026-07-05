@@ -40,14 +40,18 @@ function pluckImages(json) {
 }
 
 async function stitchRefImages(refImages) {
-  const decoded = await Promise.all(refImages.map(async (ref) => {
+  console.log(`[stitchRefImages] starting with ${refImages.length} refs`);
+  const decoded = await Promise.all(refImages.map(async (ref, i) => {
     const input = Buffer.from(ref.base64, 'base64');
+    console.log(`[stitchRefImages] ref ${i} decoded ${input.length} bytes, mime=${ref.mime}`);
     const resized = await sharp(input).resize({ height: 1024, withoutEnlargement: true }).png().toBuffer();
     const meta = await sharp(resized).metadata();
+    console.log(`[stitchRefImages] ref ${i} resized to ${meta.width}x${meta.height}`);
     return { buffer: resized, width: meta.width || 1024 };
   }));
 
   const totalWidth = decoded.reduce((sum, img) => sum + img.width, 0);
+  console.log(`[stitchRefImages] total width=${totalWidth} height=1024`);
   let x = 0;
   const composite = decoded.map((img) => {
     const out = { input: img.buffer, left: x, top: 0 };
@@ -55,7 +59,7 @@ async function stitchRefImages(refImages) {
     return out;
   });
 
-  return sharp({
+  const result = await sharp({
     create: {
       width: totalWidth,
       height: 1024,
@@ -63,6 +67,8 @@ async function stitchRefImages(refImages) {
       background: { r: 255, g: 255, b: 255, alpha: 1 },
     },
   }).composite(composite).png().toBuffer();
+  console.log(`[stitchRefImages] done, result ${result.length} bytes`);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
