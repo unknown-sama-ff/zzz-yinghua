@@ -3,20 +3,21 @@ import type { LayerPart } from '../types';
 
 interface ControlBarProps {
   onToggle: (code: string) => void;
+  fullscreen?: boolean;
 }
 
 /**
  * Left vertical control bar — 6 cartridge-style buttons (01..06) split into two
  * STAGE groups of three. Mirrors the 六种样式 reference layout.
  */
-export function ControlBar({ onToggle }: ControlBarProps) {
+export function ControlBar({ onToggle, fullscreen }: ControlBarProps) {
   const { parts, setAllParts, setStageVisible } = useStore();
   const stage1 = parts.filter((p) => p.stage === 1);
   const stage2 = parts.filter((p) => p.stage === 2);
   const allOn = parts.every((p) => p.visible);
 
   return (
-    <div className="flex w-full flex-shrink-0 flex-row flex-wrap items-center justify-center gap-2 py-2 md:w-20 md:flex-col md:flex-nowrap md:justify-start md:gap-3 md:py-4 sm:md:w-24">
+    <div className={`flex flex-shrink-0 items-center gap-2 py-2 ${fullscreen ? 'w-20 flex-col justify-start md:py-4' : 'w-full flex-row flex-wrap justify-center md:w-20 md:flex-col md:flex-nowrap md:justify-start md:gap-3 md:py-4 sm:md:w-24'}`}>
       {/* Single toggle: flips all six parts on/off based on current state. */}
       <button
         onClick={() => setAllParts(!allOn)}

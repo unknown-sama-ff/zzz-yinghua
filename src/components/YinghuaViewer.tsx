@@ -112,8 +112,8 @@ export function YinghuaViewer() {
         )}
       </h2>
 
-      <div className={`flex flex-col md:flex-row ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
-        <ControlBar onToggle={handleToggle} />
+      <div className={`flex flex-col md:flex-row ${fullscreen ? 'flex-1 min-h-0 flex-row' : ''}`}>
+        <ControlBar onToggle={handleToggle} fullscreen={fullscreen} />
 
         {/* Main stage */}
         <div
@@ -146,6 +146,16 @@ export function YinghuaViewer() {
 
           {/* Transition sweep overlay */}
           {sweeping && <div className="fx-sweep" />}
+
+          {/* Fullscreen exit button */}
+          {fullscreen && (
+            <button
+              onClick={() => setFullscreen(false)}
+              className="glass-btn absolute right-3 top-3 z-10 px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
+            >
+              退出全屏
+            </button>
+          )}
 
           {/* Empty-state hint */}
           {!hasBase && (

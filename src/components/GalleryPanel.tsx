@@ -128,13 +128,13 @@ export function GalleryPanel() {
 
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          className="fixed inset-0 z-50 bg-black"
           onClick={() => setLightbox(null)}
         >
           <img
             src={lightbox}
             alt="画廊大图"
-            className="max-h-full max-w-full rounded-lg object-contain"
+            className="h-full w-full object-contain"
           />
         </div>
       )}
