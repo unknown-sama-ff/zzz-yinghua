@@ -113,7 +113,7 @@ export function YinghuaViewer() {
   }, [isMobile]);
 
   const handleRefreshClip = useCallback(() => {
-    const src = yinghuaSlots[2].images[0] || yinghuaSlots[1].images[0];
+    const src = yinghuaSlots[3].images[0] || yinghuaSlots[1].images[0];
     if (src) void runFaceDetect(src);
   }, [yinghuaSlots, runFaceDetect]);
 
@@ -123,7 +123,7 @@ export function YinghuaViewer() {
       if (!check.ok) { showError(check.message ?? '文件校验失败'); return; }
       const dataUrl = await fileToDataUrl(file);
       setSlotManual(id, dataUrl);
-      if (id === 2) void runFaceDetect(dataUrl);
+      if (id === 1) void runFaceDetect(dataUrl);
     },
     [setSlotManual, showError, runFaceDetect],
   );
