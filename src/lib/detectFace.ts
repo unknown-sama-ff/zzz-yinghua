@@ -42,7 +42,7 @@ export async function detectFace(
   const smallMime = small.startsWith('data:image/jpeg') ? 'image/jpeg' : imageMime;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
+  const timer = setTimeout(() => controller.abort(), 180000);
   try {
     const res = await fetch('/api/detect-face', {
       method: 'POST',

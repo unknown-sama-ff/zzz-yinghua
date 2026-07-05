@@ -123,7 +123,7 @@ export function YinghuaViewer() {
       if (!check.ok) { showError(check.message ?? '文件校验失败'); return; }
       const dataUrl = await fileToDataUrl(file);
       setSlotManual(id, dataUrl);
-      if (id === 1) void runFaceDetect(dataUrl);
+      if (id === 3) void runFaceDetect(dataUrl);
     },
     [setSlotManual, showError, runFaceDetect],
   );

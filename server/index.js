@@ -106,7 +106,7 @@ app.post('/api/detect-face', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(body),
-    }, 120000);
+    }, 180000);
     if (!response.ok) {
       throw new UpstreamError(codeFromStatus(response.status), `detect-face 返回 ${response.status}`, response.status);
     }
