@@ -103,7 +103,7 @@ export function YinghuaViewer() {
         影画查看器
       </h2>
 
-      <div className="flex">
+      <div className="flex flex-col md:flex-row">
         <ControlBar onToggle={handleToggle} />
 
         {/* Main stage */}

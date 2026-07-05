@@ -16,7 +16,7 @@ export function ControlBar({ onToggle }: ControlBarProps) {
   const allOn = parts.every((p) => p.visible);
 
   return (
-    <div className="flex w-20 flex-shrink-0 flex-col items-center gap-3 py-4 sm:w-24">
+    <div className="flex w-full flex-shrink-0 flex-row flex-wrap items-center justify-center gap-2 py-2 md:w-20 md:flex-col md:flex-nowrap md:justify-start md:gap-3 md:py-4 sm:md:w-24">
       {/* Single toggle: flips all six parts on/off based on current state. */}
       <button
         onClick={() => setAllParts(!allOn)}
