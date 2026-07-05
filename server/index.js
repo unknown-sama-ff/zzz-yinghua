@@ -95,7 +95,7 @@ app.post('/api/detect-face', async (req, res) => {
       role: 'user',
       content: [
         { type: 'image_url', image_url: { url: `data:${mime};base64,${imageBase64}` } },
-        { type: 'text', text: 'Detect the character\'s facial region. The character may be human, robot, animal, or any creature — adapt to their anatomy:\n\nfaceTop = top of the facial feature area (human: above eyebrows; robot: top of visor/screen/faceplate; animal: above eyes)\nfaceBottom = bottom of the facial feature area (human: bottom of chin; robot: bottom of faceplate; animal: bottom of muzzle/snout)\nfaceLeft = leftmost edge of the facial feature cluster\nfaceRight = rightmost edge of the facial feature cluster\n\nReturn ONLY raw JSON: {"faceTop":0.05,"faceBottom":0.48,"faceLeft":0.10,"faceRight":0.55}\nValues are 0-1 fractions: top/bottom = fraction of image height from top, left/right = fraction of image width from left. No markdown, no explanation.' },
+        { type: 'text', text: 'Detect the character\'s facial region and body motion axis. The character may be human, robot, animal, or any creature — adapt to their anatomy:\n\nfaceTop = top of the facial feature area (human: above eyebrows; robot: top of visor/screen/faceplate; animal: above eyes)\nfaceBottom = bottom of the facial feature area (human: bottom of chin; robot: bottom of faceplate; animal: bottom of muzzle/snout)\nfaceLeft = leftmost edge of the facial feature cluster\nfaceRight = rightmost edge of the facial feature cluster\nbodyAxisAngle = the angle in degrees of the character\'s primary body motion axis — their spine, torso, or core limb direction. This is the dominant directional line of their pose. 0 = horizontal, positive = right side higher (counter-clockwise), range roughly -60 to +60. For a standing upright character use 90, for a lying horizontal character use 0.\n\nReturn ONLY raw JSON: {"faceTop":0.05,"faceBottom":0.48,"faceLeft":0.10,"faceRight":0.55,"bodyAxisAngle":8}\nValues are 0-1 fractions: top/bottom = fraction of image height from top, left/right = fraction of image width from left. No markdown, no explanation.' },
       ],
     }],
     max_tokens: 200,
@@ -120,8 +120,9 @@ app.post('/api/detect-face', async (req, res) => {
     const faceBottom = Math.max(0, Math.min(1, Number(coords.faceBottom)));
     const faceLeft = Math.max(0, Math.min(1, Number(coords.faceLeft ?? 0.25)));
     const faceRight = Math.max(0, Math.min(1, Number(coords.faceRight ?? 0.75)));
-    console.log(`[detect-face] faceTop=${faceTop} faceBottom=${faceBottom} faceLeft=${faceLeft} faceRight=${faceRight}`);
-    return res.json({ ok: true, faceTop, faceBottom, faceLeft, faceRight });
+    const bodyAxisAngle = Number.isFinite(Number(coords.bodyAxisAngle)) ? Number(coords.bodyAxisAngle) : 8;
+    console.log(`[detect-face] faceTop=${faceTop} faceBottom=${faceBottom} faceLeft=${faceLeft} faceRight=${faceRight} bodyAxisAngle=${bodyAxisAngle}`);
+    return res.json({ ok: true, faceTop, faceBottom, faceLeft, faceRight, bodyAxisAngle });
   } catch (err) {
     if (err instanceof UpstreamError) return fail(res, err.status, err.code, err.message);
     console.error('[detect-face] unexpected error:', err);

@@ -17,8 +17,11 @@ function pct(v: number): string {
  *   region-2 (03/06) = below face — torso, lower body
  * Cut lines are parallel (same slope) so bands tile seamlessly.
  */
-export function computeClipRegions(faceTop: number, faceBottom: number): ClipRegions {
-  const SLOPE = 0.14;
+export function computeClipRegions(faceTop: number, faceBottom: number, bodyAxisAngle?: number): ClipRegions {
+  // Slope from body axis angle; positive angle = right side higher in screen.
+  // Default 8° → tan(8°) ≈ 0.14, matching the previous hardcoded value.
+  const angleRad = (bodyAxisAngle ?? 8) * Math.PI / 180;
+  const SLOPE = Math.tan(angleRad);
 
   // r0 top edge: just above the eyebrows
   const t0r = Math.max(faceTop - 0.04, 0.04);

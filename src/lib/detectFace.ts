@@ -3,6 +3,7 @@ export interface FaceBounds {
   faceBottom: number;
   faceLeft: number;
   faceRight: number;
+  bodyAxisAngle: number;
 }
 
 export async function detectFace(
@@ -26,6 +27,7 @@ export async function detectFace(
       faceBottom: json.faceBottom,
       faceLeft: json.faceLeft,
       faceRight: json.faceRight,
+      bodyAxisAngle: json.bodyAxisAngle ?? 8,
     };
   } catch (err: any) {
     if (err.name === 'AbortError') throw new Error('人脸检测超时，请重试');
