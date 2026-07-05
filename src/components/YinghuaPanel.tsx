@@ -115,16 +115,14 @@ export function YinghuaPanel() {
       showError('请先上传角色正面图片');
       return;
     }
-    // 零命 uses the original upload + addon + style sheet as a single reference.
-    // 三命/六命 use the zero-style result as the sole image input so the model
-    // transforms the rendering style on top of it — positions are pixel-preserved.
-    // The style reference sheet is passed as a separate ref for server-side stitching
-    // alongside the zero result, giving the model style cues without breaking alignment.
+    // 零命 uses the original upload + addon + style sheet.
+    // 三命/六命 use only the zero-style result as the sole image input —
+    // no extra references are stitched, to prevent the model from also
+    // transforming the reference materials into unwanted outputs.
     let imageOverride: string | undefined;
-    let refImages: { base64: string; mime: string }[] | undefined;
     try {
-      const styleSheet = await buildStyleReferenceSheet(id);
       if (id === 1) {
+        const styleSheet = await buildStyleReferenceSheet(id);
         imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
       } else {
         const baseImg = yinghuaSlots[1].images[0];
@@ -132,17 +130,7 @@ export function YinghuaPanel() {
           showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
           return;
         }
-        // Zero-style result as the sole image — the model transforms it.
         imageOverride = baseImg;
-        // Attach style sheet + original character art as references for server-side
-        // stitching. The original art provides clothing colour/pattern/detail info
-        // that the dark zero result can't convey.
-        const styleParsed = parseDataUrl(styleSheet);
-        const identityParsed = parseDataUrl(uploadedImage);
-        refImages = [
-          { base64: identityParsed.base64, mime: identityParsed.mime },
-          { base64: styleParsed.base64, mime: styleParsed.mime },
-        ];
       }
     } catch {
       showError('风格参考图合成失败');
@@ -151,7 +139,7 @@ export function YinghuaPanel() {
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
       const images = await generate(
-        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride, refImages }),
+        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride }),
       );
       setYinghuaSlot(id, { status: 'done', images });
       if (id === 3 && images[0]) void runFaceDetect(images[0]);
