@@ -24,8 +24,10 @@ export function YinghuaPanel() {
     setYinghuaSlot,
     yinghuaShowText,
     setYinghuaShowText,
-    yinghuaActionPose,
-    setYinghuaActionPose,
+    yinghuaCharacterDynamic,
+    setYinghuaCharacterDynamic,
+    yinghuaMicroDynamic,
+    setYinghuaMicroDynamic,
     yinghuaCharacterTraits,
     setYinghuaCharacterTraits,
     yinghuaAddonImage,
@@ -48,7 +50,7 @@ export function YinghuaPanel() {
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
       if (!yinghuaPrompts[style.id]) {
-        setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
+        setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -57,26 +59,26 @@ export function YinghuaPanel() {
   // Re-fill prompts when the name changes.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characterName, yinghuaActionPose, yinghuaCharacterTraits]);
+  }, [characterName, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits]);
 
   // Re-fill prompts when palette changes (new image uploaded).
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [palette, yinghuaActionPose, yinghuaCharacterTraits]);
+  }, [palette, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits]);
 
   // Re-fill prompts when showText toggles.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits]);
+  }, [yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits]);
 
   // Warm the style reference sheets on mount so the first generate click
   // doesn't pay the cold-start fetch/decode/stitch cost.
@@ -87,7 +89,7 @@ export function YinghuaPanel() {
   // Re-fill prompts when language toggles.
   useEffect(() => {
     for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaActionPose, yinghuaCharacterTraits, yinghuaLang));
+      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yinghuaLang]);
@@ -187,15 +189,25 @@ export function YinghuaPanel() {
             : 'prompt 替换为"画面整洁不含任何文字"'}
         </p>
 
-        {/* Action pose input */}
+        {/* Character dynamic input */}
         <div className="mt-3 flex items-center gap-2">
-          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">动作姿势</span>
+          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">角色动态</span>
           <input
             type="text"
-            value={yinghuaActionPose}
-            onChange={(e) => setYinghuaActionPose(e.target.value)}
-            placeholder="智能分析（留空自动生成）"
-            className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90 placeholder:text-zzz-text/30"
+            value={yinghuaCharacterDynamic}
+            onChange={(e) => setYinghuaCharacterDynamic(e.target.value)}
+            className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90"
+          />
+        </div>
+
+        {/* Micro-dynamic input */}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">微动态细节</span>
+          <input
+            type="text"
+            value={yinghuaMicroDynamic}
+            onChange={(e) => setYinghuaMicroDynamic(e.target.value)}
+            className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90"
           />
         </div>
 

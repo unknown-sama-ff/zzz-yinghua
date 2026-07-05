@@ -112,9 +112,11 @@ interface WorkshopState {
   yinghuaLang: 'zh' | 'en';
   setYinghuaLang: (lang: 'zh' | 'en') => void;
 
-  // --- Yinghua action pose ---
-  yinghuaActionPose: string;
-  setYinghuaActionPose: (pose: string) => void;
+  // --- Yinghua character dynamic & micro-dynamic ---
+  yinghuaCharacterDynamic: string;
+  setYinghuaCharacterDynamic: (v: string) => void;
+  yinghuaMicroDynamic: string;
+  setYinghuaMicroDynamic: (v: string) => void;
 
   // --- Yinghua character traits ---
   yinghuaCharacterTraits: string;
@@ -224,8 +226,10 @@ export const useStore = create<WorkshopState>((set) => ({
   yinghuaLang: 'zh',
   setYinghuaLang: (lang) => set({ yinghuaLang: lang }),
 
-  yinghuaActionPose: '',
-  setYinghuaActionPose: (pose) => set({ yinghuaActionPose: pose }),
+  yinghuaCharacterDynamic: '低重心姿态（侧躺/蜷缩/趴卧/瘫坐/倚靠），身体大面积接触支撑面',
+  setYinghuaCharacterDynamic: (v) => set({ yinghuaCharacterDynamic: v }),
+  yinghuaMicroDynamic: '微动态细节（打哈欠/wink/半睁眼/比耶/拉领带/抱玩偶）',
+  setYinghuaMicroDynamic: (v) => set({ yinghuaMicroDynamic: v }),
 
   yinghuaCharacterTraits: '',
   setYinghuaCharacterTraits: (t) => set({ yinghuaCharacterTraits: t }),
