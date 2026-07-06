@@ -73,7 +73,7 @@ export function YinghuaViewer() {
               baseUrl: visionCred.baseUrl || undefined,
               model: visionCred.model || undefined,
             });
-        setViewerClipRegions(computeClipRegions(bounds.faceTop, bounds.faceBottom, bounds.bodyAxisAngle));
+        setViewerClipRegions(computeClipRegions(bounds.faceTop, bounds.faceBottom, bounds.bodyAxisAngle, bounds.faceLeft, bounds.faceRight));
       } catch (err) {
         setDetectFaceError(err instanceof Error ? err.message : '人脸检测失败');
       } finally {
