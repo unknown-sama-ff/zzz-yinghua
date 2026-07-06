@@ -161,18 +161,33 @@ export function YinghuaViewer() {
           className={`relative overflow-hidden bg-zzz-bg ${fullscreen ? 'flex-1 min-h-0 flex items-center justify-center' : 'aspect-[3/2] flex-1'} ${glitch ? 'fx-glitch' : ''}`}
         >
           {fullscreen ? (
-            <div className="relative aspect-[3/2] h-full max-w-full">
-              {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
-              {parts.map((p) => {
-                const src = tierImage(p.styleId);
-                if (!src || !p.visible) return null;
-                const regionStyle = viewerClipRegions
-                  ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
-                  : {};
-                return <img key={p.code} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part fx-enter${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
-              })}
-              {sweeping && <div className="fx-sweep" />}
-            </div>
+            isMobile ? (
+              <div className="relative aspect-[3/2] h-full max-w-full">
+                {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
+                {parts.map((p) => {
+                  const src = tierImage(p.styleId);
+                  if (!src || !p.visible) return null;
+                  const regionStyle = viewerClipRegions
+                    ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
+                    : {};
+                  return <img key={p.code} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part fx-enter${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
+                })}
+                {sweeping && <div className="fx-sweep" />}
+              </div>
+            ) : (
+              <div className="relative aspect-[3/2] max-h-full max-w-full">
+                {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part absolute inset-0 w-full h-full object-contain" data-visible="true" loading="lazy" />}
+                {parts.map((p) => {
+                  const src = tierImage(p.styleId);
+                  if (!src || !p.visible) return null;
+                  const regionStyle = viewerClipRegions
+                    ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
+                    : {};
+                  return <img key={p.code} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part fx-enter absolute inset-0 w-full h-full object-contain${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
+                })}
+                {sweeping && <div className="fx-sweep" />}
+              </div>
+            )
           ) : (
             <>
               {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
