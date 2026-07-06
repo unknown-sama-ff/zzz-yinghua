@@ -19,7 +19,8 @@ function pct(v: number): string {
  */
 export function computeClipRegions(faceTop: number, faceBottom: number, bodyAxisAngle?: number): ClipRegions {
   const angleRad = (bodyAxisAngle ?? 8) * Math.PI / 180;
-  const SLOPE = Math.tan(angleRad);
+  // Cap slope at ±2.0 (≈±63°) to prevent polygon degeneration on extreme angles.
+  const SLOPE = Math.max(-2.0, Math.min(2.0, Math.tan(angleRad)));
 
   // Safety clamp on face bounds so a failed detection (faceTop ≈ 0)
   // doesn't collapse the face band to zero height.
