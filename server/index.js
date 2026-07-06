@@ -95,10 +95,11 @@ app.post('/api/detect-face', async (req, res) => {
       role: 'user',
       content: [
         { type: 'image_url', image_url: { url: `data:${mime};base64,${imageBase64}` } },
-        { type: 'text', text: 'Detect the character\'s facial region and body motion axis. The character may be human, robot, animal, or any creature — adapt to their anatomy:\n\nfaceTop = top of the facial feature area (human: above eyebrows; robot: top of visor/screen/faceplate; animal: above eyes)\nfaceBottom = bottom of the facial feature area (human: bottom of chin; robot: bottom of faceplate; animal: bottom of muzzle/snout)\nfaceLeft = leftmost edge of the facial feature cluster\nfaceRight = rightmost edge of the facial feature cluster\nbodyAxisAngle = the angle in degrees of the character\'s primary body motion axis — their spine, torso, or core limb direction. This is the dominant directional line of their pose. 0 = horizontal, positive = right side higher (counter-clockwise), range roughly -60 to +60. For a standing upright character use 90, for a lying horizontal character use 0.\n\nReturn ONLY raw JSON: {"faceTop":0.05,"faceBottom":0.48,"faceLeft":0.10,"faceRight":0.55,"bodyAxisAngle":8}\nValues are 0-1 fractions: top/bottom = fraction of image height from top, left/right = fraction of image width from left. No markdown, no explanation.' },
+        { type: 'text', text: 'Look at this character image and locate their face. It may be human, robot, animal, or any creature.\n\nReturn a JSON object with these fields (all values are 0-1 fractions):\n- faceTop: top edge of face/head (above eyes/brow for human, above visor for robot, above eyes for animal)\n- faceBottom: bottom edge of face (bottom of chin for human, bottom of faceplate for robot, bottom of muzzle for animal)\n- faceLeft: leftmost edge of facial features\n- faceRight: rightmost edge of facial features\n- bodyAxisAngle: angle in degrees of the main body/spine direction. 0=horizontal lying down, 90=standing upright, positive=right side higher. Range roughly -60 to +60.\n\nFor example, a character centered in the upper half of the image: {"faceTop":0.15,"faceBottom":0.40,"faceLeft":0.30,"faceRight":0.55,"bodyAxisAngle":75}\n\nReply with ONLY the JSON object. No markdown, no explanation.' },
       ],
     }],
     max_tokens: 200,
+    response_format: { type: 'json_object' },
   };
 
   try {
@@ -113,9 +114,14 @@ app.post('/api/detect-face', async (req, res) => {
     const json = await parseJsonSafe(response);
     const text = json.choices?.[0]?.message?.content ?? '';
     console.log(`[detect-face] raw response: ${text.slice(0, 200)}`);
-    const match = text.match(/\{[^}]+\}/);
-    if (!match) throw new UpstreamError('UPSTREAM_ERROR', '视觉模型未返回有效坐标');
-    const coords = JSON.parse(match[0]);
+    let coords: Record<string, unknown>;
+    try {
+      coords = JSON.parse(text);
+    } catch {
+      const match = text.match(/\{[^}]+\}/);
+      if (!match) throw new UpstreamError('UPSTREAM_ERROR', '视觉模型未返回有效坐标');
+      coords = JSON.parse(match[0]);
+    }
     const faceTop = Math.max(0, Math.min(1, Number(coords.faceTop)));
     const faceBottom = Math.max(0, Math.min(1, Number(coords.faceBottom)));
     const faceLeft = Math.max(0, Math.min(1, Number(coords.faceLeft ?? 0.25)));

@@ -23,7 +23,7 @@ function resizeDataUrl(dataUrl: string, maxDim: number = 384): Promise<string> {
       const ctx = canvas.getContext('2d');
       if (!ctx) return reject(new Error('resizeDataUrl: no 2d context'));
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.85));
+      resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = () => reject(new Error('resizeDataUrl: image load failed'));
     img.src = dataUrl;
@@ -36,7 +36,7 @@ export async function detectFace(
   opts?: { apiKey?: string; baseUrl?: string; model?: string; useServerPreset?: boolean },
 ): Promise<FaceBounds> {
   // Resize to max 384px before sending for fast vision-model turnaround.
-  const small = await resizeDataUrl(`data:${imageMime};base64,${imageBase64}`, 384);
+  const small = await resizeDataUrl(`data:${imageMime};base64,${imageBase64}`, 512);
   const parsed = small.split(',');
   const smallBase64 = parsed[1] || imageBase64;
   const smallMime = small.startsWith('data:image/jpeg') ? 'image/jpeg' : imageMime;
