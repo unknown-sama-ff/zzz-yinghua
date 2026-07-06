@@ -100,7 +100,7 @@ export function PosterPanel() {
       {/* Reference thumbnail — shows only the active variant, click to enlarge */}
       <div className="mb-3 overflow-hidden rounded-lg border border-zzz-text/10">
         <img
-          src={`/作者推荐/${current.label}_thumb.jpg`}
+          src={`/作者推荐/${current.label}.png`}
           alt={`${current.label} 示例`}
           className="mx-auto max-w-xs w-full cursor-pointer"
           loading="lazy"
