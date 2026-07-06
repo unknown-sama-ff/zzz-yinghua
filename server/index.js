@@ -114,7 +114,7 @@ app.post('/api/detect-face', async (req, res) => {
     const json = await parseJsonSafe(response);
     const text = json.choices?.[0]?.message?.content ?? '';
     console.log(`[detect-face] raw response: ${text.slice(0, 200)}`);
-    let coords: Record<string, unknown>;
+    let coords;
     try {
       coords = JSON.parse(text);
     } catch {
