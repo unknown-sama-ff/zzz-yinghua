@@ -22,6 +22,11 @@ function pct(v: number): string {
  *
  * Extreme angles naturally produce near-triangular trapezoids (one edge clamped to
  * the image boundary), which is the intended aesthetic.
+ *
+ * WEDGE MODE: when the face occupies a large fraction of the frame (close-up/compact
+ * composition), region-0's two cut lines are no longer parallel — the far edge
+ * converges toward the near edge on one side, tapering the band from full width
+ * down to a narrow point instead of a constant-width parallelogram.
  */
 export function computeClipRegions(
   faceTop: number,
@@ -33,6 +38,8 @@ export function computeClipRegions(
   const angle = bodyAxisAngle ?? 8;
   const angleRad = angle * Math.PI / 180;
   const OVERLAP = 0.003;
+  const WEDGE_THRESHOLD = 0.30;
+  const WEDGE_GAP = 0.05;
 
   // ── VERTICAL MODE: lying / near-horizontal body ─────────────────────────────
   if (Math.abs(angle) < 45) {
@@ -49,7 +56,11 @@ export function computeClipRegions(
 
     // Right cut line: minimum band width of 0.22 so the face is never squeezed out.
     const r0t = Math.max(0, Math.min(1, Math.max(fr + 0.04, l0t + 0.22)));
-    const r0b = Math.max(0, Math.min(1, r0t + SLOPE_Y));
+    // Close-up composition (wide face) converges the right line's bottom point
+    // toward the left line's bottom point, tapering region-0 into a wedge.
+    const r0b = (fr - fl) > WEDGE_THRESHOLD
+      ? Math.max(0, Math.min(1, l0b + WEDGE_GAP))
+      : Math.max(0, Math.min(1, r0t + SLOPE_Y));
 
     return {
       r0: `polygon(${pct(l0t)} 0, ${pct(r0t)} 0, ${pct(r0b)} 100%, ${pct(l0b)} 100%)`,
@@ -72,7 +83,11 @@ export function computeClipRegions(
 
   // Bottom cut line: just below chin, minimum band height 0.22.
   const b0r = Math.min(Math.max(fb + 0.04, t0r + 0.22), 0.85);
-  const b0l = Math.max(0, Math.min(1, b0r + SLOPE));
+  // Close-up composition (tall face) converges the bottom line's left point
+  // toward the top line's left point, tapering region-0 into a wedge.
+  const b0l = (fb - ft) > WEDGE_THRESHOLD
+    ? Math.max(0, Math.min(1, t0l + WEDGE_GAP))
+    : Math.max(0, Math.min(1, b0r + SLOPE));
 
   return {
     r0: `polygon(0 ${pct(t0l)}, 100% ${pct(t0r)}, 100% ${pct(b0r)}, 0 ${pct(b0l)})`,
