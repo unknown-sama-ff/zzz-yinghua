@@ -22,11 +22,16 @@ const prefersReducedMotion = () =>
  * programmatic transition (scanline sweep + glitch). Honors reduced-motion.
  */
 export function YinghuaViewer() {
-  const {
-    parts, togglePart, yinghuaSlots, setSlotManual,
-    freeloadEnabled, visionCred, viewerClipRegions, setViewerClipRegions,
-    detectFaceError, setDetectFaceError,
-  } = useStore();
+  const parts = useStore((s) => s.parts);
+  const togglePart = useStore((s) => s.togglePart);
+  const yinghuaSlots = useStore((s) => s.yinghuaSlots);
+  const setSlotManual = useStore((s) => s.setSlotManual);
+  const freeloadEnabled = useStore((s) => s.freeloadEnabled);
+  const visionCred = useStore((s) => s.visionCred);
+  const viewerClipRegions = useStore((s) => s.viewerClipRegions);
+  const setViewerClipRegions = useStore((s) => s.setViewerClipRegions);
+  const detectFaceError = useStore((s) => s.detectFaceError);
+  const setDetectFaceError = useStore((s) => s.setDetectFaceError);
   const showError = useToast((s) => s.show);
   const [sweeping, setSweeping] = useState(false);
   const [glitch, setGlitch] = useState(false);

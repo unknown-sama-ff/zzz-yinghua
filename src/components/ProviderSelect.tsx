@@ -10,19 +10,17 @@ const PROVIDERS: { value: ProviderName; label: string }[] = [
 
 /** Provider dropdown + character name; expands custom-url config when chosen. */
 export function ProviderSelect() {
-  const {
-    provider,
-    setProvider,
-    custom,
-    setCustom,
-    characterName,
-    setCharacterName,
-    creds,
-    setCred,
-    freeloadEnabled,
-    visionCred,
-    setVisionCred,
-  } = useStore();
+  const provider = useStore((s) => s.provider);
+  const setProvider = useStore((s) => s.setProvider);
+  const custom = useStore((s) => s.custom);
+  const setCustom = useStore((s) => s.setCustom);
+  const characterName = useStore((s) => s.characterName);
+  const setCharacterName = useStore((s) => s.setCharacterName);
+  const creds = useStore((s) => s.creds);
+  const setCred = useStore((s) => s.setCred);
+  const freeloadEnabled = useStore((s) => s.freeloadEnabled);
+  const visionCred = useStore((s) => s.visionCred);
+  const setVisionCred = useStore((s) => s.setVisionCred);
 
   const isKeyed = provider === 'seedance' || provider === 'gpt-image';
   const baseUrlPlaceholder =

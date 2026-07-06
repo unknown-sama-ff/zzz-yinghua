@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
@@ -16,84 +16,61 @@ import type { YinghuaStyleId } from '../types';
 
 /** Section 2.4 — generate the three ZZZ yinghua action styles. */
 export function YinghuaPanel() {
-  const {
-    characterName,
-    yinghuaPrompts,
-    setYinghuaPrompt,
-    yinghuaSlots,
-    setYinghuaSlot,
-    yinghuaShowText,
-    setYinghuaShowText,
-    yinghuaCharacterDynamic,
-    setYinghuaCharacterDynamic,
-    yinghuaMicroDynamic,
-    setYinghuaMicroDynamic,
-    yinghuaCharacterTraits,
-    setYinghuaCharacterTraits,
-    yinghuaAddonImage,
-    setYinghuaAddonImage,
-    yinghuaLang,
-    setYinghuaLang,
-    uploadedImage,
-    palette,
-    provider,
-    freeloadEnabled,
-    visionCred,
-    setViewerClipRegions,
-    setDetectFaceError,
-    setFaceBounds,
-    threeViewSlot,
-  } = useStore();
+  // Per-field selectors so this component only re-renders on fields it reads.
+  const characterName = useStore((s) => s.characterName);
+  const yinghuaPrompts = useStore((s) => s.yinghuaPrompts);
+  const setYinghuaPrompt = useStore((s) => s.setYinghuaPrompt);
+  const yinghuaSlots = useStore((s) => s.yinghuaSlots);
+  const setYinghuaSlot = useStore((s) => s.setYinghuaSlot);
+  const yinghuaShowText = useStore((s) => s.yinghuaShowText);
+  const setYinghuaShowText = useStore((s) => s.setYinghuaShowText);
+  const yinghuaCharacterDynamic = useStore((s) => s.yinghuaCharacterDynamic);
+  const setYinghuaCharacterDynamic = useStore((s) => s.setYinghuaCharacterDynamic);
+  const yinghuaMicroDynamic = useStore((s) => s.yinghuaMicroDynamic);
+  const setYinghuaMicroDynamic = useStore((s) => s.setYinghuaMicroDynamic);
+  const yinghuaCharacterTraits = useStore((s) => s.yinghuaCharacterTraits);
+  const setYinghuaCharacterTraits = useStore((s) => s.setYinghuaCharacterTraits);
+  const yinghuaAddonImage = useStore((s) => s.yinghuaAddonImage);
+  const setYinghuaAddonImage = useStore((s) => s.setYinghuaAddonImage);
+  const yinghuaLang = useStore((s) => s.yinghuaLang);
+  const setYinghuaLang = useStore((s) => s.setYinghuaLang);
+  const uploadedImage = useStore((s) => s.uploadedImage);
+  const palette = useStore((s) => s.palette);
+  const provider = useStore((s) => s.provider);
+  const freeloadEnabled = useStore((s) => s.freeloadEnabled);
+  const visionCred = useStore((s) => s.visionCred);
+  const setViewerClipRegions = useStore((s) => s.setViewerClipRegions);
+  const setDetectFaceError = useStore((s) => s.setDetectFaceError);
+  const setFaceBounds = useStore((s) => s.setFaceBounds);
+  const threeViewSlot = useStore((s) => s.threeViewSlot);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
 
-  // Seed each style's editable prompt from its template once a name is known.
-  useEffect(() => {
+  // Compute prompts once from all inputs, then write to store in one effect.
+  const computedPrompts = useMemo(() => {
+    const prompts: Record<number, string> = {};
     for (const style of YINGHUA_STYLES) {
-      if (!yinghuaPrompts[style.id]) {
-        setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
-      }
+      prompts[style.id] = fillName(
+        yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate,
+        characterName, palette ?? undefined, yinghuaShowText,
+        yinghuaCharacterDynamic, yinghuaMicroDynamic,
+        yinghuaCharacterTraits, yinghuaLang,
+      );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return prompts;
+  }, [characterName, palette, yinghuaShowText, yinghuaCharacterDynamic,
+      yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang]);
 
-  // Re-fill prompts when the name changes.
   useEffect(() => {
-    for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
+    for (const [id, prompt] of Object.entries(computedPrompts)) {
+      setYinghuaPrompt(Number(id) as YinghuaStyleId, prompt);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [characterName, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits]);
+  }, [computedPrompts, setYinghuaPrompt]);
 
-  // Re-fill prompts when palette changes (new image uploaded).
-  useEffect(() => {
-    for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [palette, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits]);
-
-  // Re-fill prompts when showText toggles.
-  useEffect(() => {
-    for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits]);
-
-  // Warm the style reference sheets on mount so the first generate click
-  // doesn't pay the cold-start fetch/decode/stitch cost.
+  // Warm the style reference sheets on mount.
   useEffect(() => {
     void preloadStyleReferenceSheets();
   }, []);
-
-  // Re-fill prompts when language toggles.
-  useEffect(() => {
-    for (const style of YINGHUA_STYLES) {
-      setYinghuaPrompt(style.id, fillName(yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate, characterName, palette ?? undefined, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yinghuaLang]);
 
   const runFaceDetect = async (src: string) => {
     setDetectFaceError(null);

@@ -71,17 +71,15 @@ function ViewSlot({
 
 /** Section 03 — three-view generation workbench. */
 export function ThreeViewPanel() {
-  const {
-    threeViewUploads,
-    setThreeViewUpload,
-    threeViewPrompt,
-    setThreeViewPrompt,
-    threeViewSlot,
-    setThreeViewSlot,
-    setUpload,
-    setPalette,
-    addCostumeChangeImages,
-  } = useStore();
+  const threeViewUploads = useStore((s) => s.threeViewUploads);
+  const setThreeViewUpload = useStore((s) => s.setThreeViewUpload);
+  const threeViewPrompt = useStore((s) => s.threeViewPrompt);
+  const setThreeViewPrompt = useStore((s) => s.setThreeViewPrompt);
+  const threeViewSlot = useStore((s) => s.threeViewSlot);
+  const setThreeViewSlot = useStore((s) => s.setThreeViewSlot);
+  const setUpload = useStore((s) => s.setUpload);
+  const setPalette = useStore((s) => s.setPalette);
+  const addCostumeChangeImages = useStore((s) => s.addCostumeChangeImages);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
 

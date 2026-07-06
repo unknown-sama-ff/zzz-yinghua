@@ -13,22 +13,20 @@ import { SectionHeader } from './SectionHeader';
 
 /** Image upload with drag/drop, validation, preview and palette extraction. */
 export function Uploader() {
-  const {
-    uploadedImage,
-    uploadedName,
-    setUpload,
-    setPalette,
-    clearUpload,
-    costumeChangePrompt,
-    setCostumeChangePrompt,
-    costumeChangeSlot,
-    setCostumeChangeSlot,
-    costumeChangeHistory,
-    addCostumeChangeImages,
-    clearCostumeChangeHistory,
-    costumeChangeRefImage,
-    setCostumeChangeRefImage,
-  } = useStore();
+  const uploadedImage = useStore((s) => s.uploadedImage);
+  const uploadedName = useStore((s) => s.uploadedName);
+  const setUpload = useStore((s) => s.setUpload);
+  const setPalette = useStore((s) => s.setPalette);
+  const clearUpload = useStore((s) => s.clearUpload);
+  const costumeChangePrompt = useStore((s) => s.costumeChangePrompt);
+  const setCostumeChangePrompt = useStore((s) => s.setCostumeChangePrompt);
+  const costumeChangeSlot = useStore((s) => s.costumeChangeSlot);
+  const setCostumeChangeSlot = useStore((s) => s.setCostumeChangeSlot);
+  const costumeChangeHistory = useStore((s) => s.costumeChangeHistory);
+  const addCostumeChangeImages = useStore((s) => s.addCostumeChangeImages);
+  const clearCostumeChangeHistory = useStore((s) => s.clearCostumeChangeHistory);
+  const costumeChangeRefImage = useStore((s) => s.costumeChangeRefImage);
+  const setCostumeChangeRefImage = useStore((s) => s.setCostumeChangeRefImage);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [dragging, setDragging] = useState(false);

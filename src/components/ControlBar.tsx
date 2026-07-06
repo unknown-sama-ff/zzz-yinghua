@@ -11,7 +11,9 @@ interface ControlBarProps {
  * STAGE groups of three. Mirrors the 六种样式 reference layout.
  */
 export function ControlBar({ onToggle, fullscreen }: ControlBarProps) {
-  const { parts, setAllParts, setStageVisible } = useStore();
+  const parts = useStore((s) => s.parts);
+  const setAllParts = useStore((s) => s.setAllParts);
+  const setStageVisible = useStore((s) => s.setStageVisible);
   const stage1 = parts.filter((p) => p.stage === 1);
   const stage2 = parts.filter((p) => p.stage === 2);
   const allOn = parts.every((p) => p.visible);
