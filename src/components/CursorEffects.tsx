@@ -462,7 +462,7 @@ export function CursorEffects() {
 
   return (
     <>
-      <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[10000]" style={{ willChange: 'transform', display: enabled ? undefined : 'none' }} aria-hidden="true" />
+      <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[10000]" style={{ display: enabled ? undefined : 'none' }} aria-hidden="true" />
       <div ref={pulseRef} className="scroll-pulse-overlay pointer-events-none fixed inset-0 z-[9998]" aria-hidden="true" />
       <button
         onClick={() => setFreeloadEnabled(!freeloadEnabled)}
