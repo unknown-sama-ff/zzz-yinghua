@@ -18,18 +18,21 @@ function pct(v: number): string {
  * Cut lines are parallel (same slope) so bands tile seamlessly.
  */
 export function computeClipRegions(faceTop: number, faceBottom: number, bodyAxisAngle?: number): ClipRegions {
-  // Slope from body axis angle; positive angle = right side higher in screen.
-  // Default 8° → tan(8°) ≈ 0.14, matching the previous hardcoded value.
   const angleRad = (bodyAxisAngle ?? 8) * Math.PI / 180;
   const SLOPE = Math.tan(angleRad);
 
+  // Safety clamp on face bounds so a failed detection (faceTop ≈ 0)
+  // doesn't collapse the face band to zero height.
+  const ft = Math.max(0.05, Math.min(0.85, faceTop));
+  const fb = Math.max(0.10, Math.min(0.95, faceBottom));
+
   // r0 top edge: just above the eyebrows
-  const t0r = Math.max(faceTop - 0.04, 0.04);
-  const t0l = t0r + SLOPE;
+  const t0r = Math.max(ft - 0.04, 0.04);
+  const t0l = Math.max(0, Math.min(1, t0r + SLOPE));
 
   // r0 bottom edge: just below the chin, with a minimum band height of ~0.22
-  const b0r = Math.min(Math.max(faceBottom + 0.04, t0r + 0.22), 0.50);
-  const b0l = b0r + SLOPE;
+  const b0r = Math.min(Math.max(fb + 0.04, t0r + 0.22), 0.85);
+  const b0l = Math.max(0, Math.min(1, b0r + SLOPE));
 
   // Tiny overlap (~0.3% of image height) between adjacent regions eliminates
   // visible sub-pixel seams caused by independent clip-path rasterisation.
