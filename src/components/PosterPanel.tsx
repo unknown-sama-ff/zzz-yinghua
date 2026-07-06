@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_SIZE, splitName } from '../lib/prompts';
+import { combineImagesSideBySide } from '../lib/combineImages';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
@@ -55,7 +56,7 @@ export function PosterPanel() {
   const posterSlot = useStore((s) => s.posterSlot);
   const setPosterSlot = useStore((s) => s.setPosterSlot);
   const provider = useStore((s) => s.provider);
-  const threeViewSlot = useStore((s) => s.threeViewSlot);
+  const yinghuaSlots = useStore((s) => s.yinghuaSlots);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [variant, setVariant] = useState<string>(POSTER_VARIANTS[1].id);
@@ -68,15 +69,20 @@ export function PosterPanel() {
   const prompt = fillPoster(current.template, characterName, dominant, accent, palette?.textTopBright, palette?.textBottom);
 
   const run = async () => {
-    const threeViewImg = threeViewSlot.images[0] || uploadedImage;
-    if (!threeViewImg) {
-      showError('请先上传角色图片或生成三视图');
+    const zeroImg = yinghuaSlots[1]?.images[0];
+    const mainImg = zeroImg || uploadedImage;
+    if (!mainImg) {
+      showError('请先上传角色图片或生成零命');
       return;
     }
+    // If we have both zero-fate and uploaded image, combine them as dual reference.
+    const imageOverride = (zeroImg && uploadedImage)
+      ? await combineImagesSideBySide(zeroImg, uploadedImage)
+      : mainImg;
     setPosterSlot({ status: 'loading', error: undefined });
     try {
       const images = await generate(
-        buildRequest(prompt, { size: YINGHUA_SIZE, imageOverride: threeViewImg }),
+        buildRequest(prompt, { size: YINGHUA_SIZE, imageOverride }),
       );
       setPosterSlot({ status: 'done', images });
     } catch (err) {
