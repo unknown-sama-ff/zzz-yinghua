@@ -54,6 +54,7 @@ export function PosterPanel() {
   const buildRequest = useBuildRequest();
   const [variant, setVariant] = useState<string>(POSTER_VARIANTS[1].id);
   const [lightbox, setLightbox] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState('');
 
   const current = POSTER_VARIANTS.find((v) => v.id === variant) ?? POSTER_VARIANTS[0];
   const dominant = palette?.dominant ?? '#b026ff';
@@ -97,16 +98,28 @@ export function PosterPanel() {
         ))}
       </div>
 
-      {/* Reference thumbnail — shows only the active variant, click to enlarge */}
-      <div className="mb-3 overflow-hidden rounded-lg border border-zzz-text/10">
-        <img
-          src={`/作者推荐/${current.label}_thumb.png`}
-          alt={`${current.label} 示例`}
-          className="mx-auto max-w-xs w-full cursor-pointer"
-          loading="lazy"
-          onClick={() => setLightbox(true)}
-        />
-        <p className="px-2 py-1 font-mono text-[10px] text-zzz-text/45">{current.label} 参考图 · 点击放大</p>
+      {/* Reference thumbnails — click to enlarge */}
+      <div className="mb-3 flex gap-2 overflow-hidden rounded-lg border border-zzz-text/10 p-2">
+        <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.label}.png`); setLightbox(true); }}>
+          <img
+            src={`/作者推荐/${current.label}.png`}
+            alt={`${current.label} 示例1`}
+            className="mx-auto max-w-xs w-full"
+            loading="lazy"
+          />
+          <p className="text-center font-mono text-[10px] text-zzz-text/45">参考图1 · 点击放大</p>
+        </div>
+        {current.id === 'surprise' && (
+          <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.label}_thumb.png`); setLightbox(true); }}>
+            <img
+              src={`/作者推荐/${current.label}_thumb.png`}
+              alt={`${current.label} 示例2`}
+              className="mx-auto max-w-xs w-full"
+              loading="lazy"
+            />
+            <p className="text-center font-mono text-[10px] text-zzz-text/45">参考图2 · 点击放大</p>
+          </div>
+        )}
       </div>
 
       <textarea
@@ -143,7 +156,7 @@ export function PosterPanel() {
           onClick={() => setLightbox(false)}
         >
           <img
-            src={`/作者推荐/${current.label}.png`}
+            src={lightboxSrc}
             alt={`${current.label} 示例`}
             className="max-h-full max-w-full rounded-lg object-contain"
           />
