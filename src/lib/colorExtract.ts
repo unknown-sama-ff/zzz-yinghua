@@ -44,9 +44,14 @@ export async function extractPalette(imageSrc: string): Promise<Palette> {
     const vivid = ranked.filter((s) => s.sat > 0.18 && s.light > 0.12 && s.light < 0.9);
     const dominant = (vivid[0] ?? ranked[0]).rgb;
 
-    // accent = the most saturated color distinct from dominant.
+    // accent = the most saturated color distinct from dominant, but with the same
+    // brightness floor/ceiling as dominant so a high-saturation DARK color (e.g. a
+    // deep-red shadow) is never chosen — that was leaking dark red into backgrounds.
     const bySat = [...ranked].sort((a, b) => b.sat - a.sat);
+    const accentOk = (s: typeof bySat[number]) =>
+      s.light > 0.12 && s.light < 0.9 && colorDistance(s.rgb, dominant) > 60;
     const accent =
+      bySat.find(accentOk)?.rgb ??
       bySat.find((s) => colorDistance(s.rgb, dominant) > 60)?.rgb ??
       shiftHue(dominant);
 
