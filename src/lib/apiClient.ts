@@ -5,10 +5,11 @@ import type { ApiResponse, GenRequest } from '../types';
  * retries, timeouts and long-task polling, then returns the unified envelope.
  */
 export async function generate(req: GenRequest): Promise<string[]> {
-  // gpt-image edits can take ~60s+; keep the connection alive well past that so
-  // a slow-but-successful upstream isn't reported as a "can't reach backend" error.
+  // gpt-image edits can occasionally take 4+ minutes (observed up to ~278s); keep
+  // the connection alive well past that so a slow-but-successful upstream isn't
+  // reported as a "can't reach backend" error.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 240000);
+  const timer = setTimeout(() => controller.abort(), 360000);
   let res: Response;
   try {
     res = await fetch('/api/generate', {
