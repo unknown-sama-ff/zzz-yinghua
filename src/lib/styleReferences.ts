@@ -17,6 +17,7 @@ const STYLE_REFERENCE_URLS: Record<YinghuaStyleId, string[]> = {
     '/影画样式3/DM_20260627161836_007.PNG',
     '/影画样式3/DM_20260627161836_010.PNG',
   ],
+  4: [], // 剪影样式：不需要风格样张
 };
 
 const styleReferenceSheetCache = new Map<YinghuaStyleId, Promise<string>>();
