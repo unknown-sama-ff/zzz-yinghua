@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
-import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
+import { YINGHUA_STYLES, YINGHUA_SIZE, fillName, YINGHUA_UNDRESS_PASS, YINGHUA_UNDRESS_PASS_EN } from '../lib/prompts';
 import { stitchImages, embedThumbnail } from '../lib/stitchImages';
 import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
 import { parseDataUrl, validateImageFile, fileToDataUrl } from '../lib/validation';
@@ -54,7 +54,7 @@ export function YinghuaPanel() {
         yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate,
         characterName, palette ?? undefined, yinghuaShowText,
         yinghuaCharacterDynamic, yinghuaMicroDynamic,
-        yinghuaCharacterTraits, yinghuaLang,
+        yinghuaCharacterTraits, yinghuaLang, style.id,
       );
     }
     return prompts;
@@ -127,15 +127,32 @@ export function YinghuaPanel() {
       const images = await generate(
         buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride }),
       );
-      setYinghuaSlot(id, { status: 'done', images });
       if (id === 3 && images[0]) {
-        void runFaceDetect(images[0]);
-        if (palette) {
-          const root = document.documentElement.style;
-          root.setProperty('--zzz-primary', palette.textTopBright);
-          root.setProperty('--zzz-magenta', palette.textBottom);
-          root.setProperty('--zzz-accent', palette.textBottom);
+        // 第二遍：专职撕衣露肤。编辑第一遍成图（干净全彩、脸/身/色/字已锁定），
+        // 单一任务只改服装，其余逐像素保全——避开"保全 vs 撕衣"在同一次调用里的冲突。
+        const undressPrompt = yinghuaLang === 'en' ? YINGHUA_UNDRESS_PASS_EN : YINGHUA_UNDRESS_PASS;
+        let finalImages = images;
+        try {
+          finalImages = await generate(
+            buildRequest(undressPrompt, { size: YINGHUA_SIZE, imageOverride: images[0] }),
+          );
+        } catch {
+          // 第二遍失败：保留第一遍连贯全彩图，不丢弃。
+          showError('二次撕衣失败，保留一次成图（可重试生成）');
+          finalImages = images;
         }
+        setYinghuaSlot(3, { status: 'done', images: finalImages });
+        if (finalImages[0]) {
+          void runFaceDetect(finalImages[0]);
+          if (palette) {
+            const root = document.documentElement.style;
+            root.setProperty('--zzz-primary', palette.textTopBright);
+            root.setProperty('--zzz-magenta', palette.textBottom);
+            root.setProperty('--zzz-accent', palette.textBottom);
+          }
+        }
+      } else {
+        setYinghuaSlot(id, { status: 'done', images });
       }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
@@ -157,7 +174,7 @@ export function YinghuaPanel() {
       </div>
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，同姿态「就地撕衣」露肤：锁脸位与大致身位，四肢与微表情可小幅调整）。配色统一以三视图原色为准。
+          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁脸位/大致身位/配色）。六命为【两遍生图】：先出连贯全彩图，再自动做一次专职「撕衣露肤」编辑，故耗时约翻倍；配色统一以三视图原色为准。
         </p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}

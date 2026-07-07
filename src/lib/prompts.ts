@@ -6,6 +6,20 @@ import type { Palette, YinghuaStyle } from '../types';
 export const YINGHUA_SIZE = '1536x1024';
 
 /**
+ * Second-pass 'undress' prompt for 六命. The first pass edits 三命 into a
+ * coherent full-color clothed poster (pose/face/color/text preserved); this
+ * single-purpose pass edits THAT result to tear/minimize the clothing for
+ * skin exposure while keeping everything else pixel-identical. Splitting the
+ * job in two lets edits-mode's preservation strength keep coherence while a
+ * focused subtractive prompt gets the clothing to actually open.
+ */
+export const YINGHUA_UNDRESS_PASS =
+  '这是一张已完成全彩上色的绝区零影画角色海报。你的唯一任务：在【完全不改变】角色的姿态、脸部五官与位置、身体位置与朝向、发型发色、纯白背景、以及文字（位置/大小/字形/颜色）的前提下，把角色身上的服装大幅撕开、破损、精简，露出下方的皮肤。除了"服装被撕开、皮肤露出"这一处变化外，画面其余一切都必须与输入图逐像素保持一致，绝不允许移动或重画脸、身体、背景与文字。露肤方式：服装因战斗/动作等不可抗因素被撕裂破损，或改为开放性设计（缩短裙摆/无袖/深V领/露背/露腰/热裤化）；必须让肩、锁骨、腰腹、后背、大腿等大块区域【成片连续】裸露，裸露皮肤应占角色身体可见面积的一半以上——只破几个小洞、或露肤程度与原来相近，都算失败，必须撕得更彻底、露得更多。撕开后露出的皮肤按自然肤色渲染，带自然红晕与高光；仍保留（未撕除）的服装部位其配色与花纹保持不变。严禁给角色新增输入图中不存在的黑丝/连裤袜/深色袜：腿部原本裸露就保持裸露肌肤，原本穿什么袜就保持原袜。严禁改变角色的身份、年龄感与体型——少女保持少女，不得成熟化、御姐化、增大胸围或拉长身材。输出尺寸与输入完全一致（1536×1024，3:2横向构图），整体维持绝区零官方Mindscape Cinema影画的明亮全彩印刷品风格。';
+
+export const YINGHUA_UNDRESS_PASS_EN =
+  'This is a fully-colored ZZZ Mindscape Cinema character poster. Your ONLY task: WITHOUT changing the character\'s pose, facial features and position, body position and orientation, hairstyle/hair color, the pure-white background, or the text (position/size/letterforms/color) AT ALL, tear open, damage, and drastically minimize the clothing on the character\'s body to expose the skin underneath. Except for the single change of "clothing torn open and skin exposed", everything else in the image must stay pixel-for-pixel identical to the input — never move or redraw the face, body, background, or text. How to reveal skin: clothing torn/damaged by force majeure (combat, action), or redesigned as open (cropped skirt / sleeveless / deep-V neck / open back / bare waist / hotpants); large regions — shoulders, collarbone, waist/midriff, back, thighs — must be CONTINUOUSLY and broadly bare, with exposed skin covering MORE THAN HALF of the character\'s visible body area. Merely a few small holes, or exposure similar to the original outfit, is a FAILURE — tear more thoroughly and reveal more. Skin revealed by tearing is rendered as natural skin tone with natural blush and specular highlights; clothing parts that REMAIN (not torn away) keep their original colors and patterns unchanged. Strictly forbid adding stockings/tights/dark hosiery not present in the input: if the legs were bare, keep them as bare skin; if they wore socks, keep the original socks. Do NOT change the character\'s identity, age impression, or body type — a young-girl body stays a young-girl body; do not mature/age-up, enlarge the bust, or lengthen the figure. Output dimensions identical to the input (1536×1024, 3:2 landscape), keeping the ZZZ Official Mindscape Cinema bright full-color print aesthetic overall.';
+
+/**
  * Fidelity prefix — prepended to every yinghua style prompt so the model treats
  * the uploaded art as the character reference and keeps identity intact while
  * stylizing. Surfaced (and editable) in the UI as part of each prompt.
@@ -15,6 +29,19 @@ export const FIDELITY_PREFIX =
 
 export const FIDELITY_PREFIX_EN =
   'Strictly reference and preserve the uploaded image\'s facial features, hairstyle and hair color, clothing details and palette — ensure it is the same character with identity unchanged. The main character image and original art are the ONLY identity reference; the output MUST be the exact character from the uploaded image. Strictly forbid designing or creating a new character; all facial features, facial proportions, hairstyle, hair color, body type, and clothing details must exactly match the character in the three-view. Strictly preserve the original character\'s apparent age, body proportions, and physique — if the original is a youthful/petite girl, keep that body type; do NOT mature/"onee-san"-ify her, enlarge the bust, elongate the figure, or alter the body curves; height ratio and fullness must stay faithful to the original three-view. If the reference contains extra props/weapons/decorative elements, use them only as optional accents for the pose. Do not change the character\'s identity, hairstyle, face, or main clothing style. The image MUST be landscape composition (wider than tall, 3:2 banner); full body is not required, but the character must be fully shown from the lower-chest up. The zero-fate is a dark silhouette style; three-fate is the color-transformed version of zero-fate, and six-fate is the color-transformed version of three-fate — each style is determined independently by the stylization instructions below. The final image keeps only the character subject and normal-proportion English name text — no extra stickers, logos, barcodes, caption text, small labels, or background decoration. Under these constraints, apply the following stylization: ';
+
+/**
+ * Slim fidelity prefix for the EDIT-based styles (三命/六命). They edit a prior
+ * generated image (零命/三命) plus a three-view thumbnail — NOT the uploaded art —
+ * so the full prefix's "uploaded image / props" framing is mismatched. This keeps
+ * only what still applies: same-character (vs base + three-view), body-proportion
+ * fidelity, the pipeline note, and clean output.
+ */
+export const FIDELITY_EDIT_PREFIX =
+  '本图为对已生成底图的编辑：角色的身份、面部五官、发型发色、体型均以【输入底图与右下角三视图缩略图】为唯一依据，生成的必须是同一角色本人，严禁自行设计或创造新角色；必须严格保持原角色的年龄感、身材比例与体态——原角色是少女体型就保持少女体型，严禁擅自成熟化、御姐化、增大胸围、拉长身材或改变身材曲线；零命为暗色剪影风格，三命为零命的色彩变换版本、六命为三命的色彩变换版本，本图画风由下方指令决定；最终画面只保留角色主体与英文名字文字，不要任何额外贴纸、徽标、条码、说明字、小标签或背景装饰。在此前提下进行如下处理：';
+
+export const FIDELITY_EDIT_PREFIX_EN =
+  'This image edits an already-generated base image: the character\'s identity, facial features, hairstyle/hair color, and body type are based SOLELY on the input base image and the three-view thumbnail in the bottom-right corner; the output MUST be the exact same character — strictly forbid designing or creating a new character. Strictly preserve the original character\'s apparent age, body proportions, and physique — if the original is a youthful/petite girl, keep that body type; do NOT mature/"onee-san"-ify her, enlarge the bust, elongate the figure, or alter the body curves. The zero-fate is a dark silhouette style; three-fate is the color-transformed version of zero-fate, and six-fate is the color-transformed version of three-fate; this image\'s style is determined by the instructions below. The final image keeps only the character subject and the English name text — no extra stickers, logos, barcodes, caption text, small labels, or background decoration. Under these constraints, proceed as follows: ';
 
 /**
  * Three-view + close-up generation prompt.
@@ -76,6 +103,7 @@ export function fillName(
   microDynamic?: string,
   characterTraits?: string,
   lang?: 'zh' | 'en',
+  styleId?: number,
 ): string {
   const upper = (name || 'CHARACTER').toUpperCase();
   const [top, bottom] = splitName(upper);
@@ -109,5 +137,11 @@ export function fillName(
       '画面整洁不含任何文字，无水印',
     );
   }
-  return (lang === 'en' ? FIDELITY_PREFIX_EN : FIDELITY_PREFIX) + filled;
+  // 编辑型风格（三命=2 / 六命=3）用瘦身前缀——它们编辑零命/三命成图而非上传图，
+  // 完整前缀的"上传图片/道具"框架对它们指代错位。零命(1)仍用完整前缀。
+  const isEdit = styleId === 2 || styleId === 3;
+  const prefix = isEdit
+    ? (lang === 'en' ? FIDELITY_EDIT_PREFIX_EN : FIDELITY_EDIT_PREFIX)
+    : (lang === 'en' ? FIDELITY_PREFIX_EN : FIDELITY_PREFIX);
+  return prefix + filled;
 }
