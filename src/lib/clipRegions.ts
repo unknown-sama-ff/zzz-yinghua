@@ -27,6 +27,13 @@ function pct(v: number): string {
  * composition), region-0's two cut lines are no longer parallel — the far edge
  * converges toward the near edge on one side, tapering the band from full width
  * down to a narrow point instead of a constant-width parallelogram.
+ *
+ * COMPACT-POSE MODE (compactPose = true): for curled-up/balled poses or symmetric
+ * mid-air poses with no single dominant body direction, bodyAxisAngle is unreliable,
+ * so neither the horizontal nor vertical band orientation fits. Instead, cut a
+ * 45°-diagonal band straight through the face center — direction ("\" or "/") is
+ * picked from which quadrant the face sits in, so the band runs toward the frame's
+ * open/empty corner rather than a guessed body direction.
  */
 export function computeClipRegions(
   faceTop: number,
@@ -34,10 +41,37 @@ export function computeClipRegions(
   bodyAxisAngle?: number,
   faceLeft?: number,
   faceRight?: number,
+  compactPose?: boolean,
 ): ClipRegions {
+  const OVERLAP = 0.003;
+
+  // ── COMPACT-POSE MODE: no dominant body direction — diagonal band through face ──
+  if (compactPose) {
+    const fl = faceLeft ?? 0.25;
+    const fr = faceRight ?? 0.75;
+    const fcx = (fl + fr) / 2;
+    const fcy = (faceTop + faceBottom) / 2;
+    // Same quadrant (both upper-left or both lower-right) → "\" band (slope +1).
+    // Opposite quadrants → "/" band (slope -1). Runs the band toward the open corner.
+    const slopeSign = (fcx < 0.5) === (fcy < 0.5) ? 1 : -1;
+    const faceSpan = Math.max(faceBottom - faceTop, fr - fl);
+    const halfW = Math.max(0.15, faceSpan / 2 + 0.10);
+    const y0 = fcy - slopeSign * fcx;
+
+    const t0l = Math.max(0, Math.min(1, y0 - halfW));
+    const t0r = Math.max(0, Math.min(1, slopeSign + y0 - halfW));
+    const b0l = Math.max(0, Math.min(1, y0 + halfW));
+    const b0r = Math.max(0, Math.min(1, slopeSign + y0 + halfW));
+
+    return {
+      r0: `polygon(0 ${pct(t0l)}, 100% ${pct(t0r)}, 100% ${pct(b0r)}, 0 ${pct(b0l)})`,
+      r1: `polygon(0 0, 100% 0, 100% ${pct(t0r + OVERLAP)}, 0 ${pct(t0l + OVERLAP)})`,
+      r2: `polygon(0 ${pct(b0l - OVERLAP)}, 100% ${pct(b0r - OVERLAP)}, 100% 100%, 0 100%)`,
+    };
+  }
+
   const angle = bodyAxisAngle ?? 8;
   const angleRad = angle * Math.PI / 180;
-  const OVERLAP = 0.003;
   const WEDGE_THRESHOLD = 0.30;
   const WEDGE_GAP = 0.05;
 
