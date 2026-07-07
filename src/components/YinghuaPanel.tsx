@@ -96,17 +96,22 @@ export function YinghuaPanel() {
       return;
     }
     // 零命 uses the original upload + addon + style sheet.
-    // 三命/六命: zero result + three-view thumbnail embedded in corner
-    // as a single imageOverride — perfect position lock with color reference.
+    // 三命 edits the 零命 result; 六命 edits the 三命 result (clearer pose/anatomy
+    // than the dark 零命 silhouette). Both embed the three-view thumbnail in the
+    // corner as a single imageOverride — position lock with color reference.
     let imageOverride: string | undefined;
     try {
       if (id === 1) {
         const styleSheet = await buildStyleReferenceSheet(id);
         imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
       } else {
-        const baseImg = yinghuaSlots[1].images[0];
+        // 三命(2) edits 零命(1); 六命(3) edits 三命(2).
+        const baseSlotId = id === 3 ? 2 : 1;
+        const baseImg = yinghuaSlots[baseSlotId].images[0];
         if (!baseImg) {
-          showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
+          showError(id === 3
+            ? '请先生成三命，六命需要三命结果锁定姿势与文字位置'
+            : '请先生成零命，三命需要零命结果锁定姿势与文字位置');
           return;
         }
         const threeView = threeViewSlot.images[0];
@@ -242,8 +247,10 @@ export function YinghuaPanel() {
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {YINGHUA_STYLES.map((style) => {
-          const oneReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
-          const needsBase = style.id !== 1 && !oneReady;
+          const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
+          const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
+          // 三命(2) needs 零命; 六命(3) needs 三命; 零命(1) needs nothing.
+          const needsBase = style.id === 3 ? !threeReady : style.id === 2 ? !zeroReady : false;
           return (
           <div
             key={style.id}
@@ -262,7 +269,7 @@ export function YinghuaPanel() {
               disabled={yinghuaSlots[style.id].status === 'loading' || needsBase}
               className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
             >
-              {needsBase ? '需先生成零命' : '生成'}
+              {needsBase ? (style.id === 3 ? '需先生成三命' : '需先生成零命') : '生成'}
             </button>
             <ResultView
               slot={yinghuaSlots[style.id]}
