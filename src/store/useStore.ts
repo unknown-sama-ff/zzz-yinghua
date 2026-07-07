@@ -169,10 +169,10 @@ export const useStore = create<WorkshopState>((set) => ({
   setThreeViewSlot: (patch) =>
     set((s) => ({ threeViewSlot: { ...s.threeViewSlot, ...patch } })),
 
-  yinghuaPrompts: { 1: '', 2: '', 3: '', 4: '' },
+  yinghuaPrompts: { 1: '', 2: '', 3: '' },
   setYinghuaPrompt: (id, p) =>
     set((s) => ({ yinghuaPrompts: { ...s.yinghuaPrompts, [id]: p } })),
-  yinghuaSlots: { 1: emptySlot(), 2: emptySlot(), 3: emptySlot(), 4: emptySlot() },
+  yinghuaSlots: { 1: emptySlot(), 2: emptySlot(), 3: emptySlot() },
   setYinghuaSlot: (id, patch) =>
     set((s) => ({
       yinghuaSlots: { ...s.yinghuaSlots, [id]: { ...s.yinghuaSlots[id], ...patch } },

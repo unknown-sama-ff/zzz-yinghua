@@ -40,7 +40,7 @@ export function YinghuaViewer() {
   const isMobile = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const sectionRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
-  const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null, 4: null });
+  const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null });
 
   useEffect(() => {
     return () => timers.current.forEach((t) => clearTimeout(t));

@@ -95,8 +95,7 @@ export function YinghuaPanel() {
       showError('请先上传角色正面图片');
       return;
     }
-    // 零命 uses the original upload + addon + style sheet.
-    // 剪影(4) uses the original upload + addon + three-view only, no style sheet.
+    // 零命(1) uses the original upload + addon + style sheet.
     // 三命(2) edit 零命(1)——锁姿态/文字，做去饱和灰阶。
     // 六命(3) edit 三命(2)——三命形体清晰、同姿态，便于"就地撕衣"露肤且脸位/身位与前两张一致。
     // 三命/六命都在角落嵌入三视图缩略图作为单张 imageOverride——配色参考 + 位置锁定。
@@ -105,12 +104,6 @@ export function YinghuaPanel() {
       if (id === 1) {
         const styleSheet = await buildStyleReferenceSheet(id);
         imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
-      } else if (id === 4) {
-        // 剪影样式：只参考三视图，不需要风格样张
-        const threeView = threeViewSlot.images[0];
-        imageOverride = threeView
-          ? await stitchImages([uploadedImage, yinghuaAddonImage, threeView])
-          : await stitchImages([uploadedImage, yinghuaAddonImage]);
       } else {
         // 三命(2) edit 零命(1)；六命(3) edit 三命(2)。
         const baseImg = id === 3 ? yinghuaSlots[2].images[0] : yinghuaSlots[1].images[0];

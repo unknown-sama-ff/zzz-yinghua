@@ -32,6 +32,12 @@ const POSTER_VARIANTS: PosterVariant[] = [
     template:
       '严格参考并保留上传图片中角色的面部特征、发型发色、服装细节与配色，确保为同一角色、不改变身份特征；画面必须为横向构图（landscape，宽大于高，3:2 横幅），不强制展示角色全身，突出角色特点与个性，但角色大腿以上必须完整呈现于画面中（以便展现裙摆/短裤等下半身服装改造）；角色做出动作后人物应当撑满画面90%以上；在此前提下进行如下风格化：绝区零影画风格，画风与参考图中角色保持完全一致；输出尺寸严格锁定为1536×1024像素（3:2横向构图），严禁改变画幅尺寸或裁剪范围。色彩与上色——全彩高饱和赛璐珞：角色进行完整全彩高饱和赛璐珞上色，色彩鲜艳饱满、明亮夺目，严禁暗淡、灰蒙、去饱和或黑白灰处理；真实自然的肤色质感（肤色必须与参考图中角色的原始肤色完全一致，带有自然红晕与高光）；以「{DOMINANT_COLOR}」为主色调贯穿角色服装、头发、配饰，配合「{ACCENT_COLOR}」作为辉光、高光边缘、点缀色与氛围色提高整体色彩冲击力；服装的配色、图案纹样与固有色须忠于原设计，但剪裁与遮蔽面积按下文肌肤展现要求改造；肌肤展现——【强制要求 · 不可跳过】基于原角色服饰设计基因进行创新改造，保留原设计的配色、图案纹样与装饰元素，大幅增加肌肤展现。露肤方式以【战损撕裂/爆衣】为主导风格：服装因战斗、动作、环境等不可抗因素而被撕裂、扯破、崩裂、损毁——布料呈现不规则的撕裂口、崩开的裂缝、参差的破碎毛边、脱线的线头，破损处边缘毛糙外翻、有残缺的碎布片挂在身上或半脱垂落；严禁把服装处理成边缘平整、干净利落的"重新剪短设计"款（那不是撕裂效果）。场景氛围不限于激烈战斗瞬间，可由模型从以下方向自由选择其一，但无论哪种场景，服装都必须保持已被撕裂破损的状态：① 战斗中——激烈动态、衣物正被扯破的爆发瞬间；② 战斗后——衣衫已破损凌乱，角色卸下防备、疲惫喘息、私密放松的慵懒状态；③ 休整中——倚靠、瘫坐、半卧等松弛姿态，破损的衣物自然垂落。在以撕裂为主的前提下，可少量辅以开放性设计（无袖/深V/露背等）作为补充。必须完成以下至少6项（每项均以撕裂破损而非整齐裁剪的方式实现）：1. 外套/披风被撕破崩开或残缺脱落 2. 护甲碎裂崩落露出下方 3. 裙摆被撕裂开衩、下摆参差破碎 4. 袖子撕裂脱线、崩开露出肩臂 5. 领口被扯破撕开露出锁骨与肩颈 6. 背部布料撕裂破开露背 7. 腰腹处衣料被扯破露出腰腹 8. 腿部布料撕裂破洞、残片垂挂；改造后仍须保留服饰原有的配色与图案纹样；背景——纯白无杂质：背景为纯白色（#FFFFFF）铺满整个画面背景区域，绝对纯白，无任何渐变、无噪点、无杂色、无纹理、无阴影、无暗角，呈现干净的印刷品底色质感；文字处理——超大做旧印刷体叠压：超大做旧印刷体英文{NAME_TOP}和{NAME_BOTTOM}尺寸极大（单字高度占画面高度的30%-45%），采用高饱和{TEXT_BOTTOM}或{TEXT_TOP_BRIGHT}做旧色，边缘带有粗糙磨损、噪点、印刷错位与墨点飞溅质感；文字分布于画面上下边缘（顶部一行、底部一行），必须与角色产生前后遮挡与叠压关系——文字可被角色头发、肢体、道具、服装部分覆盖，也可衬于角色身体后方，形成丰富的空间纵深感；严禁为避免遮挡而缩小文字、改变文字位置或移动至空旷角落；质感与细节：强烈明暗对比，做旧噪点，斜切几何色块，工业贴纸UI质感，网点纸/半调纹理（halftone dot pattern），印刷做旧质感，扫描线；角色主体脸部清晰，细节高精度，整体呈现绝区零官方Mindscape Cinema影画的明亮全彩印刷品美学。',
   },
+  {
+    id: 'silhouette',
+    label: '剪影版',
+    template:
+      '严格参考并保留上传图片中角色的面部特征、发型发色、服装细节与配色，确保为同一角色、不改变身份特征；参考图包含角色立绘与风格样张：角色立绘用于身份、面部、发型、服饰与配色参考；样张仅用于绝区零影画的整体构图方向、人物风格、色彩关系与角落文字排版参考，严禁借用样张中的人物外形和名字；样张的背景颜色不作为配色参考，提取颜色时忽略样张背景。绝区零官方Mindscape Cinema影画风格，单色调深色剪影海报风（Monochrome Dark Silhouette Poster）：基于角色立绘生成基准图{CHARACTER_TRAITS}；输出尺寸严格锁定为1536×1024像素（3:2横向构图），严禁改变画幅尺寸或裁剪范围。人物构图须有强烈设计感与视觉冲击力——优先采用大仰视、大俯视、极端斜侧等非常规视角，严禁正面平视、证件照式大头、对称站像。角色动作必须是低重心姿态：侧躺、蜷缩、趴卧、瘫坐、倚靠等，身体大面积接触支撑面，避免站立式pose。整体为卸防感的非战斗姿态，放松、慵懒、毫无戒备。同时融入微动态细节——打哈欠、wink、半睁眼、比耶、拉领带、抱玩偶等，制造"时间切片"般的生动瞬间感。允许头顶、肩部、手臂、发尾大幅出框，人物大面积裁切，肢体延展至画面边缘，形成破框而出的开放感。构图偏左或偏右，避免居中；角色主体和文字共占画面约80%~85%；动作设计具有艺术感、展现角色个性特点；画风与原三视图保持完全一致。文字排版为画面强制核心要素：采用超大号且必须水平排版的做旧印刷体英文{NAME_TOP}和{NAME_BOTTOM}，以双角配对方式放置（对角配对或同侧竖向配对：左上+左下、右上+右下、左上+右下、右上+左下 四选一；严禁左上+右上的顶边横向并排，也严禁左下+右下的底边横向并排），文字必须贴近所在角落的边缘位置，严禁旋转、斜切、弧排或透视变形；文字基线必须严格水平（与画面上下边缘平行），整体绝不可倾斜或旋转任何角度，即使角色姿态是倾斜或躺卧的、文字也必须保持水平正置；{NAME_TOP}文字组为三者中最大最宽的文字层，宽度接近画面左右边缘，高度约达画面的四分之一强；{NAME_BOTTOM}文字组明显小于{NAME_TOP}，约为{NAME_TOP}的五到六成大小；{NAME_TOP}位于角色后方作为背景层，{NAME_BOTTOM}压于角色前方作为前景层；文字必须与角色产生重叠和前后遮挡关系，严禁为逃避与角色重叠而将文字缩小或移至空旷处；前景文字层可压住肩、发、手臂等局部，但不得遮挡脸部主体；{NAME_TOP}文字颜色强制使用{TEXT_TOP}，{NAME_BOTTOM}文字颜色强制使用{TEXT_BOTTOM}，不得使用其他颜色；文字不透明度100%、完全实心，不可透过文字看到后方角色。角色以{DOMINANT_COLOR}为主色调，整体是一个深色剪影、暗部占绝大部分面积，靠明亮背景衬托出人形：角色的裸露肌肤（脸、颈、手臂、腿等所有皮肤）压成全图最暗、彻底的近纯黑，五官几乎隐入黑暗仅极隐约可见（皮肤是最深的剪影核心）；头发、服饰、护甲、配饰等非皮肤部位保持{DOMINANT_COLOR}色相，但同样以暗调为主——仅受光面、结构边缘、褶皱高光提亮到较亮色阶勾勒出细节，其余大面积的背光区、阴影区、内凹处都压成深暗调，使整个角色以深色为主、只有少量亮部透出结构。绝不能反过来（严禁把皮肤画亮），也绝不能把服饰头发整体铺成大面积亮色/白色（那样太亮、失去剪影感）——目标是"整体深色剪影、皮肤最黑、服饰头发仅高光与结构线提亮"的高对比效果，暗部要足够多、足够深，接近纯剪影。光照采用45度柔和顶光作为全局光源，全图元素均受此光源影响；服装与头发的明暗由光照方向与布料褶皱、发丝走向共同决定，同一材质因褶皱朝向不同呈现不同明暗，形成自然光影层次；明暗交界清晰但不锐利。角色主体（不含背景）统一为{DOMINANT_COLOR}单一色相、且刻意降低饱和度的低饱和灰调（muted / desaturated，色彩沉稳内敛、偏灰，绝非鲜艳高饱和的亮色调——像蒙了一层灰的高级感海报色；注意：这条低饱和只约束角色主体，背景另作高饱和撞色处理，见下文）：角色的肌肤、毛发、服饰、配饰均为{DOMINANT_COLOR}色相压低饱和后的不同明度阶，通过明暗差异区分部位与材质，其中肌肤是全身明度最低（最暗近黑）的部分、头发与服饰配饰只在受光面与高光处明度高于肌肤（其暗部/阴影仍压得较深），角色主体采用双色调（duotone）：主色为低饱和的{DOMINANT_COLOR}、占角色绝大部分面积，仅眼睛虹膜（跟随角色毛发颜色）与标志性配饰等极少数点缀部位可用{ACCENT_COLOR}提亮点睛；除{DOMINANT_COLOR}与{ACCENT_COLOR}这两个色相外，角色主体不得出现任何其他颜色。服装本体、花纹、布料印花、袖口纹样、腰带图案不得做任何改动，必须与角色三视图完全一致，严禁自行修改、增减、简化或重新设计任何服装部件，仅可将其转为{DOMINANT_COLOR}单色调；花纹以明度差呈现的同色调纹样清晰可辨。背景与主体形成撞色对比：背景使用与主体撞色的高饱和鲜艳亮色纯色平涂作为大面积底色（优先用{ACCENT_COLOR}与主体的低饱和{DOMINANT_COLOR}形成撞色，也可用{DOMINANT_COLOR}的高饱和高亮版；背景是鲜艳饱和的，不做低饱和灰调处理），角色主体则是低饱和的深色剪影——深沉低饱和的角色主体压在高饱和鲜艳的亮色背景上，形成强烈的撞色与明暗双重对比、极强的海报冲击力；主体与背景必须明确分离，只允许极少量边缘轻微染边，主体大面积块面绝不能变成背景色本身、也绝不能糊进背景。角色动态：{ACTION_POSE}；整体效果：低饱和深色剪影主体、深底亮线透光的高对比、深沉主体压在高饱和鲜艳亮色背景上形成撞色冲击、水平超大角落压版文字、强烈留白与斜向冲击感，呈现出角色的登场感与氛围张力。',
+  },
 ];
 
 function fillPoster(template: string, name: string, dominant: string, accent: string, textTopBright?: string, textBottom?: string): string {
@@ -67,12 +73,34 @@ export function PosterPanel() {
   const prompt = fillPoster(current.template, characterName, dominant, accent, palette?.textTopBright, palette?.textBottom);
 
   const run = async () => {
-    // All three poster variants use only the three-view as the reference image.
-    const imageOverride = threeViewSlot.images[0];
-    if (!imageOverride) {
-      showError('请先在 03 模块生成三视图');
-      return;
+    let imageOverride: string | undefined;
+
+    if (variant === 'silhouette') {
+      // 剪影版：使用固定的预设参考图 /作者推荐/剪影版.png
+      const silhouetteRef = '/作者推荐/剪影版.png';
+      try {
+        const res = await fetch(silhouetteRef);
+        if (!res.ok) throw new Error('剪影参考图加载失败');
+        const blob = await res.blob();
+        imageOverride = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (err) {
+        showError(err instanceof Error ? err.message : '剪影参考图加载失败');
+        return;
+      }
+    } else {
+      // 其他变体：只使用三视图作为参考图
+      imageOverride = threeViewSlot.images[0];
+      if (!imageOverride) {
+        showError('请先在 03 模块生成三视图');
+        return;
+      }
     }
+
     setPosterSlot({ status: 'loading', error: undefined });
     try {
       const images = await generate(
@@ -106,10 +134,10 @@ export function PosterPanel() {
 
       {/* Reference thumbnails — click to enlarge */}
       <div className="mb-3 flex gap-2 overflow-hidden rounded-lg border border-zzz-text/10 p-2">
-        <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.label}.png`); setLightbox(true); }}>
+        <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.png`); setLightbox(true); }}>
           <img
             key={`${current.label}-1`}
-            src={`/作者推荐/${current.label}.png`}
+            src={`/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.png`}
             alt={`${current.label} 示例1`}
             className="mx-auto max-w-xs w-full"
           />
