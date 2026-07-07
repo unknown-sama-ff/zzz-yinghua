@@ -174,7 +174,7 @@ export function YinghuaPanel() {
       </div>
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁脸位/大致身位/配色）。六命为【两遍生图】：先出连贯全彩图，再自动做一次专职「撕衣露肤」编辑，故耗时约翻倍；配色统一以三视图原色为准。
+          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁脸位/大致身位/配色）。六命为【两遍生图】：先出连贯全彩图，再自动做一次专职「自然精简服装、顺势露肤」编辑，故耗时约翻倍；配色统一以三视图原色为准。
         </p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}
