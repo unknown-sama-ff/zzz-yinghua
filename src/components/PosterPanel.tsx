@@ -114,20 +114,20 @@ export function PosterPanel() {
       <div className="mb-3 flex gap-2 overflow-hidden rounded-lg border border-zzz-text/10 p-2">
         <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.label}.png`); setLightbox(true); }}>
           <img
+            key={`${current.label}-1`}
             src={`/作者推荐/${current.label}.png`}
             alt={`${current.label} 示例1`}
             className="mx-auto max-w-xs w-full"
-            loading="lazy"
           />
           <p className="text-center font-mono text-[10px] text-zzz-text/45">参考图1 · 点击放大</p>
         </div>
         {current.id === 'surprise' && (
           <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.label}_thumb.png`); setLightbox(true); }}>
             <img
+              key={`${current.label}-2`}
               src={`/作者推荐/${current.label}_thumb.png`}
               alt={`${current.label} 示例2`}
               className="mx-auto max-w-xs w-full"
-              loading="lazy"
             />
             <p className="text-center font-mono text-[10px] text-zzz-text/45">参考图2 · 点击放大</p>
           </div>
