@@ -37,13 +37,6 @@ export function splitName(name: string): [string, string] {
 }
 
 /**
- * Text instruction: English character names in normal proportions, placed as
- * corner typography rather than stretched bands across the image.
- */
-export const TEXT_INSTRUCTION =
-  '做旧印刷体英文「{NAME_TOP}」和「{NAME_BOTTOM}」分别放置于两个角落，形成对角或同侧配对（左上+左下 或 左上+右下 或 右上+左下 或 右上+右下 四选一），文字必须贴近所在角落的边缘位置，采用超大号字体，文字允许与角色局部叠压但不得遮挡脸部主体，文字不透明度100%、完全实心，不可透过文字看到后方角色';
-
-/**
  * The three ZZZ yinghua art styles.
  */
 export const YINGHUA_STYLES: YinghuaStyle[] = [
