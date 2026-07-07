@@ -96,18 +96,21 @@ export function YinghuaPanel() {
       return;
     }
     // 零命 uses the original upload + addon + style sheet.
-    // 三命 和 六命 都编辑 零命 成图（暗色剪影 → 模型敢大改服装以撕裂露肤）。
-    // 两者都在角落嵌入三视图缩略图作为单张 imageOverride——位置锁定 + 配色参考。
+    // 三命(2) 编辑 零命(1)——锁姿态/文字，做去饱和灰阶。
+    // 六命(3) 编辑 三命(2)——三命形体清晰、同姿态，便于"就地撕衣"露肤且脸位/身位与前两张一致。
+    // 三命/六命都在角落嵌入三视图缩略图作为单张 imageOverride——配色参考 + 位置锁定。
     let imageOverride: string | undefined;
     try {
       if (id === 1) {
         const styleSheet = await buildStyleReferenceSheet(id);
         imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
       } else {
-        // 三命(2) 与 六命(3) 都 edit 零命(1)。
-        const baseImg = yinghuaSlots[1].images[0];
+        // 三命(2) edit 零命(1)；六命(3) edit 三命(2)。
+        const baseImg = id === 3 ? yinghuaSlots[2].images[0] : yinghuaSlots[1].images[0];
         if (!baseImg) {
-          showError('请先生成零命，三命/六命需要零命结果锁定姿势与文字位置');
+          showError(id === 3
+            ? '请先生成三命，六命以三命成图为底图（姿态基准，就地撕衣露肤）'
+            : '请先生成零命，三命需要零命结果锁定姿势与文字位置');
           return;
         }
         const threeView = threeViewSlot.images[0];
@@ -154,7 +157,7 @@ export function YinghuaPanel() {
       </div>
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 先生成「零命」，三命/六命会将零命结果（姿势/构图/文字位置）与原始立绘（身份/服饰配色）合成双参考图；三种风格都会自动附加对应影画样式参考图，样张只用于风格，不用于角色身份。
+          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，同姿态「就地撕衣」露肤：锁脸位与大致身位，四肢与微表情可小幅调整）。配色统一以三视图原色为准。
         </p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}
@@ -244,8 +247,9 @@ export function YinghuaPanel() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {YINGHUA_STYLES.map((style) => {
           const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
-          // 三命(2) 与 六命(3) 都依赖零命(1)；零命自身无依赖。
-          const needsBase = style.id !== 1 && !zeroReady;
+          const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
+          // 链路：零命→三命→六命。三命(2)依赖零命(1)；六命(3)依赖三命(2)。
+          const needsBase = (style.id === 2 && !zeroReady) || (style.id === 3 && !threeReady);
           return (
           <div
             key={style.id}
@@ -264,7 +268,7 @@ export function YinghuaPanel() {
               disabled={yinghuaSlots[style.id].status === 'loading' || needsBase}
               className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
             >
-              {needsBase ? '需先生成零命' : '生成'}
+              {needsBase ? (style.id === 3 ? '需先生成三命' : '需先生成零命') : '生成'}
             </button>
             <ResultView
               slot={yinghuaSlots[style.id]}
