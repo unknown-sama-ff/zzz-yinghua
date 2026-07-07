@@ -4,7 +4,6 @@ export interface FaceBounds {
   faceLeft: number;
   faceRight: number;
   bodyAxisAngle: number;
-  compactPose: boolean;
 }
 
 /**
@@ -59,7 +58,6 @@ export async function detectFace(
       faceLeft: json.faceLeft,
       faceRight: json.faceRight,
       bodyAxisAngle: json.bodyAxisAngle ?? 8,
-      compactPose: Boolean(json.compactPose),
     };
   } catch (err: any) {
     if (err.name === 'AbortError') throw new Error('人脸检测超时，请重试');

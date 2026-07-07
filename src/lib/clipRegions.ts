@@ -9,119 +9,31 @@ function pct(v: number): string {
 }
 
 /**
- * Compute three clip-path polygons from face bounds (0–1 fractions of image dimensions).
- * Auto-selects cut orientation based on body axis angle:
- *
- *   |bodyAxisAngle| >= 45° → HORIZONTAL cuts (standing/leaning characters)
- *     Bands are top/bottom strips; slope = x-drift per unit y going left→right.
- *     r0 = face band, r1 = above face (hair), r2 = below face (torso).
- *
- *   |bodyAxisAngle| < 45° → VERTICAL cuts (lying characters)
- *     Bands are left/right columns; slope = x-drift per unit y going top→bottom.
- *     r0 = face band, r1 = left of face (hair side), r2 = right of face (body side).
- *
- * Extreme angles naturally produce near-triangular trapezoids (one edge clamped to
- * the image boundary), which is the intended aesthetic.
- *
- * WEDGE MODE: when the face occupies a large fraction of the frame (close-up/compact
- * composition), region-0's two cut lines are no longer parallel — the far edge
- * converges toward the near edge on one side, tapering the band from full width
- * down to a narrow point instead of a constant-width parallelogram.
- *
- * COMPACT-POSE MODE (compactPose = true): for curled-up/balled poses or symmetric
- * mid-air poses with no single dominant body direction, bodyAxisAngle is unreliable,
- * so neither the horizontal nor vertical band orientation fits. Instead, cut a
- * 45°-diagonal band straight through the face center — direction ("\" or "/") is
- * picked from which quadrant the face sits in, so the band runs toward the frame's
- * open/empty corner rather than a guessed body direction.
+ * Compute three diagonal clip-path polygons from face bounds (0–1 fractions of
+ * image height). Three bands tile the full image with a tiny intentional overlap
+ * so that independent clip-path rasterisation doesn't leave visible seams.
+ *   region-0 (01/04) = face band  — both eyes, minimal, no background
+ *   region-1 (02/05) = above face — head, hair
+ *   region-2 (03/06) = below face — torso, lower body
+ * Cut lines are parallel (same slope) so bands tile seamlessly.
  */
-export function computeClipRegions(
-  faceTop: number,
-  faceBottom: number,
-  bodyAxisAngle?: number,
-  faceLeft?: number,
-  faceRight?: number,
-  compactPose?: boolean,
-): ClipRegions {
-  const OVERLAP = 0.003;
-
-  // ── COMPACT-POSE MODE: no dominant body direction — diagonal band through face ──
-  if (compactPose) {
-    const fl = faceLeft ?? 0.25;
-    const fr = faceRight ?? 0.75;
-    const fcx = (fl + fr) / 2;
-    const fcy = (faceTop + faceBottom) / 2;
-    // Same quadrant (both upper-left or both lower-right) → "\" band (slope +1).
-    // Opposite quadrants → "/" band (slope -1). Runs the band toward the open corner.
-    const slopeSign = (fcx < 0.5) === (fcy < 0.5) ? 1 : -1;
-    const faceSpan = Math.max(faceBottom - faceTop, fr - fl);
-    const halfW = Math.max(0.15, faceSpan / 2 + 0.10);
-    const y0 = fcy - slopeSign * fcx;
-
-    const t0l = Math.max(0, Math.min(1, y0 - halfW));
-    const t0r = Math.max(0, Math.min(1, slopeSign + y0 - halfW));
-    const b0l = Math.max(0, Math.min(1, y0 + halfW));
-    const b0r = Math.max(0, Math.min(1, slopeSign + y0 + halfW));
-
-    return {
-      r0: `polygon(0 ${pct(t0l)}, 100% ${pct(t0r)}, 100% ${pct(b0r)}, 0 ${pct(b0l)})`,
-      r1: `polygon(0 0, 100% 0, 100% ${pct(t0r + OVERLAP)}, 0 ${pct(t0l + OVERLAP)})`,
-      r2: `polygon(0 ${pct(b0l - OVERLAP)}, 100% ${pct(b0r - OVERLAP)}, 100% 100%, 0 100%)`,
-    };
-  }
-
-  const angle = bodyAxisAngle ?? 8;
-  const angleRad = angle * Math.PI / 180;
-  const WEDGE_THRESHOLD = 0.30;
-  const WEDGE_GAP = 0.05;
-
-  // ── VERTICAL MODE: lying / near-horizontal body ─────────────────────────────
-  if (Math.abs(angle) < 45) {
-    // SLOPE_Y: x-drift per unit y, follows the body's diagonal direction.
-    const SLOPE_Y = Math.tan(angleRad);
-
-    // Clamp face horizontal bounds.
-    const fl = Math.max(0.02, Math.min(0.80, faceLeft ?? 0.25));
-    const fr = Math.max(0.10, Math.min(0.98, faceRight ?? 0.65));
-
-    // Left cut line: face band left edge at top/bottom of image.
-    const l0t = Math.max(0, Math.min(1, fl - 0.04));
-    const l0b = Math.max(0, Math.min(1, l0t + SLOPE_Y));
-
-    // Right cut line: minimum band width of 0.22 so the face is never squeezed out.
-    const r0t = Math.max(0, Math.min(1, Math.max(fr + 0.04, l0t + 0.22)));
-    // Close-up composition (wide face) converges the right line's bottom point
-    // toward the left line's bottom point, tapering region-0 into a wedge.
-    const r0b = (fr - fl) > WEDGE_THRESHOLD
-      ? Math.max(0, Math.min(1, l0b + WEDGE_GAP))
-      : Math.max(0, Math.min(1, r0t + SLOPE_Y));
-
-    return {
-      r0: `polygon(${pct(l0t)} 0, ${pct(r0t)} 0, ${pct(r0b)} 100%, ${pct(l0b)} 100%)`,
-      r1: `polygon(0 0, ${pct(l0t + OVERLAP)} 0, ${pct(l0b + OVERLAP)} 100%, 0 100%)`,
-      r2: `polygon(${pct(r0t - OVERLAP)} 0, 100% 0, 100% 100%, ${pct(r0b - OVERLAP)} 100%)`,
-    };
-  }
-
-  // ── HORIZONTAL MODE: standing / leaning body ─────────────────────────────────
-  // SLOPE: y-drift per unit x, going left→right.
+export function computeClipRegions(faceTop: number, faceBottom: number, bodyAxisAngle?: number): ClipRegions {
+  // Slope from body axis angle; positive angle = right side higher in screen.
+  // Default 8° → tan(8°) ≈ 0.14, matching the previous hardcoded value.
+  const angleRad = (bodyAxisAngle ?? 8) * Math.PI / 180;
   const SLOPE = Math.tan(angleRad);
 
-  // Clamp face vertical bounds.
-  const ft = Math.max(0.05, Math.min(0.85, faceTop));
-  const fb = Math.max(0.10, Math.min(0.95, faceBottom));
+  // r0 top edge: just above the eyebrows
+  const t0r = Math.max(faceTop - 0.04, 0.04);
+  const t0l = t0r + SLOPE;
 
-  // Top cut line: just above eyebrows.
-  const t0r = Math.max(ft - 0.04, 0.04);
-  const t0l = Math.max(0, Math.min(1, t0r + SLOPE));
+  // r0 bottom edge: just below the chin, with a minimum band height of ~0.22
+  const b0r = Math.min(Math.max(faceBottom + 0.04, t0r + 0.22), 0.50);
+  const b0l = b0r + SLOPE;
 
-  // Bottom cut line: just below chin, minimum band height 0.22.
-  const b0r = Math.min(Math.max(fb + 0.04, t0r + 0.22), 0.85);
-  // Close-up composition (tall face) converges the bottom line's left point
-  // toward the top line's left point, tapering region-0 into a wedge.
-  const b0l = (fb - ft) > WEDGE_THRESHOLD
-    ? Math.max(0, Math.min(1, t0l + WEDGE_GAP))
-    : Math.max(0, Math.min(1, b0r + SLOPE));
+  // Tiny overlap (~0.3% of image height) between adjacent regions eliminates
+  // visible sub-pixel seams caused by independent clip-path rasterisation.
+  const OVERLAP = 0.003;
 
   return {
     r0: `polygon(0 ${pct(t0l)}, 100% ${pct(t0r)}, 100% ${pct(b0r)}, 0 ${pct(b0l)})`,
