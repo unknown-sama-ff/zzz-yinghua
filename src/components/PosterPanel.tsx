@@ -3,7 +3,6 @@ import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_SIZE, splitName } from '../lib/prompts';
-import { combineImagesSideBySide } from '../lib/combineImages';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
@@ -51,12 +50,11 @@ function fillPoster(template: string, name: string, dominant: string, accent: st
 /** Section 06 — one-click ZZZ poster generation, author-recommended prompt. */
 export function PosterPanel() {
   const characterName = useStore((s) => s.characterName);
-  const uploadedImage = useStore((s) => s.uploadedImage);
   const palette = useStore((s) => s.palette);
   const posterSlot = useStore((s) => s.posterSlot);
   const setPosterSlot = useStore((s) => s.setPosterSlot);
   const provider = useStore((s) => s.provider);
-  const yinghuaSlots = useStore((s) => s.yinghuaSlots);
+  const threeViewSlot = useStore((s) => s.threeViewSlot);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [variant, setVariant] = useState<string>(POSTER_VARIANTS[1].id);
@@ -69,16 +67,12 @@ export function PosterPanel() {
   const prompt = fillPoster(current.template, characterName, dominant, accent, palette?.textTopBright, palette?.textBottom);
 
   const run = async () => {
-    const zeroImg = yinghuaSlots[1]?.images[0];
-    const mainImg = zeroImg || uploadedImage;
-    if (!mainImg) {
-      showError('请先上传角色图片或生成零命');
+    // All three poster variants use only the three-view as the reference image.
+    const imageOverride = threeViewSlot.images[0];
+    if (!imageOverride) {
+      showError('请先在 03 模块生成三视图');
       return;
     }
-    // If we have both zero-fate and uploaded image, combine them as dual reference.
-    const imageOverride = (zeroImg && uploadedImage)
-      ? await combineImagesSideBySide(zeroImg, uploadedImage)
-      : mainImg;
     setPosterSlot({ status: 'loading', error: undefined });
     try {
       const images = await generate(
