@@ -64,7 +64,7 @@ export interface Palette {
 export type NamePlacement = 'auto' | 'top-left+bottom-right' | 'top-right+bottom-left';
 
 /** One of the three ZZZ yinghua art styles. */
-export type YinghuaStyleId = 1 | 2 | 3;
+export type YinghuaStyleId = 1 | 2 | 3 | 4;
 
 export interface YinghuaStyle {
   id: YinghuaStyleId;
