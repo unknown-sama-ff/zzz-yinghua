@@ -133,8 +133,13 @@ export function YinghuaPanel() {
         const undressPrompt = yinghuaLang === 'en' ? YINGHUA_UNDRESS_PASS_EN : YINGHUA_UNDRESS_PASS;
         let finalImages = images;
         try {
+          // 第二遍也嵌入三视图缩略图作为服饰参考，确保AI根据原始服装健康露肤
+          const threeView = threeViewSlot.images[0];
+          const undressImageOverride = threeView
+            ? await embedThumbnail(images[0], threeView)
+            : images[0];
           finalImages = await generate(
-            buildRequest(undressPrompt, { size: YINGHUA_SIZE, imageOverride: images[0] }),
+            buildRequest(undressPrompt, { size: YINGHUA_SIZE, imageOverride: undressImageOverride }),
           );
         } catch {
           // 第二遍失败：保留第一遍连贯全彩图，不丢弃。
