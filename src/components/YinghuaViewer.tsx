@@ -118,9 +118,15 @@ export function YinghuaViewer() {
   }, [isMobile]);
 
   const handleRefreshClip = useCallback(() => {
-    const src = yinghuaSlots[3].images[0] || yinghuaSlots[1].images[0];
-    if (src) void runFaceDetect(src);
-  }, [yinghuaSlots, runFaceDetect]);
+    // 检查六命图片是否已生成
+    const sixSlot = yinghuaSlots[3];
+    if (sixSlot.status !== 'done' || !sixSlot.images[0]) {
+      showError('请先完成六命图片生成');
+      return;
+    }
+    const src = sixSlot.images[0];
+    void runFaceDetect(src);
+  }, [yinghuaSlots, runFaceDetect, showError]);
 
   const handleSlotUpload = useCallback(
     async (id: YinghuaStyleId, file: File) => {
