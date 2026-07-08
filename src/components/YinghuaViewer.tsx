@@ -190,12 +190,12 @@ export function YinghuaViewer() {
         )}
       </h2>
 
-      <div className={`flex flex-col md:flex-row ${fullscreen ? 'flex-1 min-h-0 flex-row items-stretch' : ''}`}>
+      <div className={`flex flex-col md:flex-row ${fullscreen ? 'flex-1 min-h-0 flex-row items-stretch' : 'flex-1 min-h-0'}`}>
         <ControlBar onToggle={handleToggle} fullscreen={fullscreen} />
 
         {/* Main stage */}
         <div
-          className={`relative overflow-hidden bg-zzz-bg ${glitch ? 'fx-glitch' : ''}`}
+          className={`relative overflow-hidden bg-zzz-bg flex items-center justify-center ${glitch ? 'fx-glitch' : ''}`}
           style={{ aspectRatio: `${imageAspectRatio}` }}
         >
           {fullscreen ? (
@@ -212,7 +212,7 @@ export function YinghuaViewer() {
               {sweeping && <div className="fx-sweep" />}
             </div>
           ) : (
-            <div className="relative w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
+            <div className="relative h-full w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
               {baseImg && <img ref={baseImgRef} src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
               {parts.map((p) => {
                 const src = tierImage(p.styleId);
