@@ -112,7 +112,7 @@ export function ThreeViewPanel() {
       const images = await generate(
         buildRequest(threeViewPrompt, {
           imageOverride: stitched,
-          ...(provider === 'seedance' ? { aspectRatio: '16:9' } : { size: YINGHUA_SIZE })
+          ...(provider === 'seedance' ? { size: '2848x1600' } : { size: YINGHUA_SIZE })
         }),
       );
       setThreeViewSlot({ status: 'done', images });

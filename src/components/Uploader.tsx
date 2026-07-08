@@ -285,7 +285,7 @@ export function Uploader() {
                 }
                 generate(buildRequest(costumeChangePrompt, {
                   imageOverride,
-                  ...(provider === 'seedance' ? { aspectRatio: '16:9' } : { size: YINGHUA_SIZE })
+                  ...(provider === 'seedance' ? { size: '2848x1600' } : { size: YINGHUA_SIZE })
                 }))
                   .then((images) => {
                     setCostumeChangeSlot({ status: 'done', images });

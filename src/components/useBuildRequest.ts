@@ -20,7 +20,7 @@ export function parseHeaders(raw: string): Record<string, string> {
  * Reads provider, uploaded image and custom-url config.
  *
  * Size selection strategy:
- * - seedance: uses aspectRatio (e.g. '16:9') for widescreen outputs
+ * - seedance: uses size (e.g. '2848x1600') for specific pixel dimensions
  * - gpt-image: uses size (e.g. '1536x1024') for fixed pixel dimensions
  * - custom-url: passes both size and aspectRatio (provider decides)
  */
@@ -35,17 +35,7 @@ export function useBuildRequest() {
     let size = opts?.size;
     let aspectRatio = opts?.aspectRatio;
 
-    if (provider === 'seedance') {
-      // seedance prefers aspectRatio; fall back to size if aspectRatio not provided
-      if (!aspectRatio && size) {
-        // Map known sizes to aspect ratios
-        if (size === '1536x1024' || size === '1024x768') aspectRatio = '4:3';
-        else if (size === '1024x1536' || size === '768x1024') aspectRatio = '9:16';
-        else if (size === '1792x1024' || size === '1024x576') aspectRatio = '16:9';
-        else if (size === '1024x1792' || size === '576x1024') aspectRatio = '9:16';
-        else aspectRatio = '1:1';
-      }
-    } else if (provider === 'gpt-image') {
+    if (provider === 'gpt-image') {
       // gpt-image prefers size; fall back to aspectRatio if size not provided
       if (!size && aspectRatio) {
         // Map aspect ratios to gpt-image supported sizes

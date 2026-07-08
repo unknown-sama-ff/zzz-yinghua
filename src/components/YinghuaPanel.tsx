@@ -124,9 +124,9 @@ export function YinghuaPanel() {
     }
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
-      // seedance uses aspectRatio, gpt-image uses size
+      // seedance uses size, gpt-image uses size
       const sizeOpts = provider === 'seedance'
-        ? { aspectRatio: '16:9', imageOverride }
+        ? { size: '2848x1600', imageOverride }
         : { size: YINGHUA_SIZE, imageOverride };
       const images = await generate(
         buildRequest(yinghuaPrompts[id], sizeOpts),
@@ -144,7 +144,7 @@ export function YinghuaPanel() {
             : images[0];
           finalImages = await generate(
             buildRequest(undressPrompt, provider === 'seedance'
-              ? { aspectRatio: '16:9', imageOverride: undressImageOverride }
+              ? { size: '2848x1600', imageOverride: undressImageOverride }
               : { size: YINGHUA_SIZE, imageOverride: undressImageOverride }),
           );
         } catch {
