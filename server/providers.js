@@ -83,7 +83,7 @@ async function seedance(req) {
       ? 'seedance 服务端预设缺少密钥或 Base URL'
       : 'seedance 缺少密钥或 Base URL（请在前端填写）', 401);
   }
-  const body: any = {
+  const body = {
     prompt: req.prompt,
     image: req.imageBase64,
     n: req.n || 1,
@@ -234,7 +234,7 @@ async function gptImage(req) {
   }
 
   // No image → text-only generations.
-  const body: any = { model, prompt: req.prompt, n };
+  const body = { model, prompt: req.prompt, n };
   if (req.aspectRatio) {
     body.aspect_ratio = req.aspectRatio;
   } else {
