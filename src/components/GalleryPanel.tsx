@@ -72,7 +72,10 @@ export function GalleryPanel() {
   return (
     <section className="glass p-6">
       <div className="flex items-center justify-between gap-3">
-        <SectionHeader step="07" title="画廊 · 生成作品" />
+        <div>
+          <SectionHeader step="07" title="画廊 · 生成作品" />
+          <p className="mt-1 font-mono text-[10px] text-zzz-text/40">（共预计可存800张，一般来说不用删除，上传你认为好看的，值得大家一起欣赏的作品吧！）</p>
+        </div>
         <button
           onClick={() => void loadGallery('refresh')}
           disabled={refreshing || loading}
