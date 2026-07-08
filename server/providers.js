@@ -83,12 +83,17 @@ async function seedance(req) {
       ? 'seedance 服务端预设缺少密钥或 Base URL'
       : 'seedance 缺少密钥或 Base URL（请在前端填写）', 401);
   }
-  const body = {
+  const body: any = {
     prompt: req.prompt,
     image: req.imageBase64,
-    size: req.size || '1024x1024',
     n: req.n || 1,
   };
+  // Prefer aspectRatio when provided, fall back to size or default
+  if (req.aspectRatio) {
+    body.aspect_ratio = req.aspectRatio;
+  } else {
+    body.size = req.size || '1024x1024';
+  }
   if (useServerPreset ? process.env.SEEDANCE_MODEL : req.model) body.model = useServerPreset ? process.env.SEEDANCE_MODEL : req.model;
   const json = await withRetry(async () => {
     const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/images/edits`, {
@@ -162,7 +167,8 @@ async function gptImage(req) {
       ? 'gpt-image 服务端预设缺少模型名称'
       : 'gpt-image 缺少模型名称（请在前端填写）', 401);
   }
-  const size = req.size || '1024x1024';
+  // Prefer aspectRatio when provided, otherwise use size
+  const size = req.aspectRatio ? undefined : (req.size || '1024x1024');
   const n = req.n || 1;
   const root = base.replace(/\/$/, '');
 
@@ -204,7 +210,11 @@ async function gptImage(req) {
     const form = new FormData();
     form.append('model', model);
     form.append('prompt', req.prompt);
-    form.append('size', size);
+    if (req.aspectRatio) {
+      form.append('aspect_ratio', req.aspectRatio);
+    } else {
+      form.append('size', size);
+    }
     form.append('n', String(n));
     form.append('image', blob, 'image.png');
 
@@ -224,7 +234,12 @@ async function gptImage(req) {
   }
 
   // No image → text-only generations.
-  const body = { model, prompt: req.prompt, size, n };
+  const body: any = { model, prompt: req.prompt, n };
+  if (req.aspectRatio) {
+    body.aspect_ratio = req.aspectRatio;
+  } else {
+    body.size = size;
+  }
   const json = await withRetry(async () => {
     const res = await fetchWithTimeout(`${root}/images/generations`, {
       method: 'POST',

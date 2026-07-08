@@ -11,6 +11,7 @@ export interface GenRequest {
   /** Multiple independent reference images (zero-style result, original art, style sheet). */
   refImages?: { base64: string; mime: string }[];
   size?: string;
+  aspectRatio?: string;
   n?: number;
   useServerPreset?: boolean;
   // Optional per-request credentials (override server .env when provided).

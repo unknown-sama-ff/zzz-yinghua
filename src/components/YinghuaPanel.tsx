@@ -124,8 +124,12 @@ export function YinghuaPanel() {
     }
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     try {
+      // seedance uses aspectRatio, gpt-image uses size
+      const sizeOpts = provider === 'seedance'
+        ? { aspectRatio: '16:9', imageOverride }
+        : { size: YINGHUA_SIZE, imageOverride };
       const images = await generate(
-        buildRequest(yinghuaPrompts[id], { size: YINGHUA_SIZE, imageOverride }),
+        buildRequest(yinghuaPrompts[id], sizeOpts),
       );
       if (id === 3 && images[0]) {
         // 第二遍：专职撕衣露肤。编辑第一遍成图（干净全彩、脸/身/色/字已锁定），
@@ -139,7 +143,9 @@ export function YinghuaPanel() {
             ? await embedThumbnail(images[0], threeView)
             : images[0];
           finalImages = await generate(
-            buildRequest(undressPrompt, { size: YINGHUA_SIZE, imageOverride: undressImageOverride }),
+            buildRequest(undressPrompt, provider === 'seedance'
+              ? { aspectRatio: '16:9', imageOverride: undressImageOverride }
+              : { size: YINGHUA_SIZE, imageOverride: undressImageOverride }),
           );
         } catch {
           // 第二遍失败：保留第一遍连贯全彩图，不丢弃。

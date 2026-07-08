@@ -27,6 +27,7 @@ export function Uploader() {
   const clearCostumeChangeHistory = useStore((s) => s.clearCostumeChangeHistory);
   const costumeChangeRefImage = useStore((s) => s.costumeChangeRefImage);
   const setCostumeChangeRefImage = useStore((s) => s.setCostumeChangeRefImage);
+  const provider = useStore((s) => s.provider);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [dragging, setDragging] = useState(false);
@@ -282,7 +283,10 @@ export function Uploader() {
                     return;
                   }
                 }
-                generate(buildRequest(costumeChangePrompt, { size: YINGHUA_SIZE, imageOverride }))
+                generate(buildRequest(costumeChangePrompt, {
+                  imageOverride,
+                  ...(provider === 'seedance' ? { aspectRatio: '16:9' } : { size: YINGHUA_SIZE })
+                }))
                   .then((images) => {
                     setCostumeChangeSlot({ status: 'done', images });
                     addCostumeChangeImages(images);

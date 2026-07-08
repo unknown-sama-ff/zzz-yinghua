@@ -37,10 +37,41 @@ export function YinghuaViewer() {
   const [glitch, setGlitch] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [imageAspectRatio, setImageAspectRatio] = useState<number>(16 / 9); // 默认 16:9
   const isMobile = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const sectionRef = useRef<HTMLElement>(null);
+  const baseImgRef = useRef<HTMLImageElement>(null);
   const timers = useRef<number[]>([]);
   const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null });
+
+  // 监听底图加载，获取实际宽高比
+  useEffect(() => {
+    const img = baseImgRef.current;
+    if (!img) return;
+
+    const updateAspectRatio = () => {
+      if (img.naturalWidth && img.naturalHeight) {
+        const ratio = img.naturalWidth / img.naturalHeight;
+        setImageAspectRatio(ratio);
+      }
+    };
+
+    // 如果图片已加载，立即更新
+    if (img.complete && img.naturalWidth) {
+      updateAspectRatio();
+    } else {
+      img.addEventListener('load', updateAspectRatio);
+    }
+
+    return () => {
+      img.removeEventListener('load', updateAspectRatio);
+    };
+  }, [baseImg]);
+
+  // 当零命图片切换时，重置宽高比
+  useEffect(() => {
+    setImageAspectRatio(16 / 9); // 重置为默认，等待新图片加载
+  }, [baseImg]);
 
   useEffect(() => {
     return () => timers.current.forEach((t) => clearTimeout(t));
@@ -164,11 +195,12 @@ export function YinghuaViewer() {
 
         {/* Main stage */}
         <div
-          className={`relative overflow-hidden bg-zzz-bg ${fullscreen ? 'flex-1 min-h-0 flex items-center justify-center' : 'aspect-[3/2] flex-1'} ${glitch ? 'fx-glitch' : ''}`}
+          className={`relative overflow-hidden bg-zzz-bg ${glitch ? 'fx-glitch' : ''}`}
+          style={{ aspectRatio: `${imageAspectRatio}` }}
         >
           {fullscreen ? (
-            <div className="relative aspect-[3/2] h-full max-w-full">
-              {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
+            <div className="relative h-full w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
+              {baseImg && <img ref={baseImgRef} src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
               {parts.map((p) => {
                 const src = tierImage(p.styleId);
                 if (!src || !p.visible) return null;
@@ -180,8 +212,8 @@ export function YinghuaViewer() {
               {sweeping && <div className="fx-sweep" />}
             </div>
           ) : (
-            <>
-              {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
+            <div className="relative w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
+              {baseImg && <img ref={baseImgRef} src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
               {parts.map((p) => {
                 const src = tierImage(p.styleId);
                 if (!src || !p.visible) return null;
@@ -191,7 +223,7 @@ export function YinghuaViewer() {
                 return <img key={p.code} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part fx-enter${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
               })}
               {sweeping && <div className="fx-sweep" />}
-            </>
+            </div>
           )}
 
           {/* Fullscreen exit button */}

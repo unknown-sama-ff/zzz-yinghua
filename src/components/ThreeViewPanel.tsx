@@ -79,6 +79,7 @@ export function ThreeViewPanel() {
   const setThreeViewSlot = useStore((s) => s.setThreeViewSlot);
   const setUpload = useStore((s) => s.setUpload);
   const setPalette = useStore((s) => s.setPalette);
+  const provider = useStore((s) => s.provider);
   const addCostumeChangeImages = useStore((s) => s.addCostumeChangeImages);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
@@ -109,7 +110,10 @@ export function ThreeViewPanel() {
         threeViewUploads.back,
       ]);
       const images = await generate(
-        buildRequest(threeViewPrompt, { imageOverride: stitched, size: YINGHUA_SIZE }),
+        buildRequest(threeViewPrompt, {
+          imageOverride: stitched,
+          ...(provider === 'seedance' ? { aspectRatio: '16:9' } : { size: YINGHUA_SIZE })
+        }),
       );
       setThreeViewSlot({ status: 'done', images });
       addCostumeChangeImages(images);

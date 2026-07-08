@@ -18,19 +18,52 @@ export function parseHeaders(raw: string): Record<string, string> {
 /**
  * Build a GenRequest from current store state for a given prompt.
  * Reads provider, uploaded image and custom-url config.
+ *
+ * Size selection strategy:
+ * - seedance: uses aspectRatio (e.g. '16:9') for widescreen outputs
+ * - gpt-image: uses size (e.g. '1536x1024') for fixed pixel dimensions
+ * - custom-url: passes both size and aspectRatio (provider decides)
  */
 export function useBuildRequest() {
   const { provider, uploadedImage, custom, creds, freeloadEnabled } = useStore();
 
-  return (prompt: string, opts?: { imageOverride?: string; size?: string; refImages?: { base64: string; mime: string }[] }): GenRequest => {
+  return (prompt: string, opts?: { imageOverride?: string; size?: string; aspectRatio?: string; refImages?: { base64: string; mime: string }[] }): GenRequest => {
     const image = opts?.imageOverride ?? uploadedImage ?? undefined;
     const parsed = image ? parseDataUrl(image) : undefined;
+
+    // Smart defaults: if caller only provided one size param, fill the other based on provider
+    let size = opts?.size;
+    let aspectRatio = opts?.aspectRatio;
+
+    if (provider === 'seedance') {
+      // seedance prefers aspectRatio; fall back to size if aspectRatio not provided
+      if (!aspectRatio && size) {
+        // Map known sizes to aspect ratios
+        if (size === '1536x1024' || size === '1024x768') aspectRatio = '4:3';
+        else if (size === '1024x1536' || size === '768x1024') aspectRatio = '9:16';
+        else if (size === '1792x1024' || size === '1024x576') aspectRatio = '16:9';
+        else if (size === '1024x1792' || size === '576x1024') aspectRatio = '9:16';
+        else aspectRatio = '1:1';
+      }
+    } else if (provider === 'gpt-image') {
+      // gpt-image prefers size; fall back to aspectRatio if size not provided
+      if (!size && aspectRatio) {
+        // Map aspect ratios to gpt-image supported sizes
+        if (aspectRatio === '16:9') size = '1536x864';
+        else if (aspectRatio === '9:16') size = '864x1536';
+        else if (aspectRatio === '4:3') size = '1536x1024';
+        else if (aspectRatio === '3:4') size = '1024x1536';
+        else size = '1024x1024'; // 1:1 default
+      }
+    }
+
     const req: GenRequest = {
       provider,
       prompt,
       imageBase64: parsed?.base64,
       imageMime: parsed?.mime,
-      size: opts?.size,
+      size,
+      aspectRatio,
       n: 1,
       refImages: opts?.refImages,
       ...(freeloadEnabled ? { useServerPreset: true } : {}),
