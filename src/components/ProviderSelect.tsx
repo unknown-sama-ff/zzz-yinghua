@@ -31,6 +31,7 @@ export function ProviderSelect() {
   return (
     <section className="glass p-6">
       <SectionHeader step="03" title="接口与角色（中转站URL后加/v1）" />
+      <p className="mb-4 font-mono text-xs text-red-400/80">⚠ seedance效果不好，不推荐</p>
 
       <label className="mb-1 block font-mono text-xs text-zzz-text/60">角色英文名</label>
       <input
