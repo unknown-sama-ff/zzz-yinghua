@@ -49,8 +49,9 @@ export function ProviderSelect() {
           <button
             key={p.value}
             onClick={() => setProvider(p.value)}
+            disabled={freeloadEnabled && p.value !== 'gpt-image'}
             data-active={provider === p.value}
-            className="glass-btn flex-1 px-2 py-2.5 font-mono text-xs text-zzz-text"
+            className={`glass-btn flex-1 px-2 py-2.5 font-mono text-xs ${freeloadEnabled && p.value !== 'gpt-image' ? 'opacity-30 cursor-not-allowed' : 'text-zzz-text'}`}
           >
             {p.label}
           </button>
