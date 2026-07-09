@@ -3,7 +3,7 @@ import type { ProviderName } from '../types';
 import { SectionHeader } from './SectionHeader';
 
 const PROVIDERS: { value: ProviderName; label: string }[] = [
-  { value: 'seedance', label: 'seedance' },
+  { value: 'seedream', label: 'seedream' },
   { value: 'gpt-image', label: 'gpt-image' },
   { value: 'custom-url', label: '自定义URL' },
 ];
@@ -22,18 +22,18 @@ export function ProviderSelect() {
   const visionCred = useStore((s) => s.visionCred);
   const setVisionCred = useStore((s) => s.setVisionCred);
 
-  const isKeyed = provider === 'seedance' || provider === 'gpt-image' || provider === 'custom-url';
+  const isKeyed = provider === 'seedream' || provider === 'gpt-image' || provider === 'custom-url';
   const baseUrlPlaceholder =
     provider === 'gpt-image'
       ? 'https://api.openai.com/v1（可留空用默认）'
       : provider === 'custom-url'
         ? 'https://yunwu.ai/v1/images/generations（完整端点，不含自动后缀）'
-        : 'https://api.seedance.example/v1';
+        : 'https://api.seedream.example/v1';
 
   return (
     <section className="glass p-6">
       <SectionHeader step="03" title="接口与角色（中转站URL后加/v1）" />
-      <p className="mb-4 font-mono text-xs text-red-400/80">⚠ seedance效果不好，不推荐</p>
+      <p className="mb-4 font-mono text-xs text-red-400/80">⚠ seedream效果不好，不推荐</p>
 
       <label className="mb-1 block font-mono text-xs text-zzz-text/60">角色英文名</label>
       <input
@@ -73,7 +73,7 @@ export function ProviderSelect() {
                   ? 'sk-...（自动生成 Authorization: Bearer 请求头）'
                   : provider === 'gpt-image'
                     ? 'sk-...'
-                    : '你的 seedance 密钥'
+                    : '你的 seedream 密钥'
               }
               className="glass-input w-full px-3 py-2 font-mono text-sm"
             />
@@ -101,7 +101,7 @@ export function ProviderSelect() {
                   ? 'gemini-3.1-flash-lite-image'
                   : provider === 'gpt-image'
                     ? 'gpt-image-2（默认）'
-                    : '如 seedance-v1'
+                    : '如 seedream-v1'
               }
               className="glass-input w-full px-3 py-2 font-mono text-sm"
             />

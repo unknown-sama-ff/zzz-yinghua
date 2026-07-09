@@ -176,7 +176,7 @@ export function YinghuaViewer() {
   );
 
   return (
-    <section ref={sectionRef} className={`${fullscreen ? 'fixed inset-0 z-50 flex flex-col' : ''} glass overflow-hidden`}>
+    <section ref={sectionRef} className={`${fullscreen ? 'fixed inset-0 z-50 flex flex-col' : 'flex flex-col'} glass overflow-hidden`}>
       <h2 className={`zzz-heading flex items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text ${fullscreen ? 'hidden' : ''}`}>
         <span className="step-badge">05</span>
         影画查看器
@@ -195,7 +195,7 @@ export function YinghuaViewer() {
 
         {/* Main stage */}
         <div
-          className={`relative overflow-hidden bg-zzz-bg flex items-center justify-center ${glitch ? 'fx-glitch' : ''}`}
+          className={`flex-1 min-h-0 relative overflow-hidden bg-zzz-bg flex items-center justify-center ${glitch ? 'fx-glitch' : ''}`}
           style={{ aspectRatio: `${imageAspectRatio}` }}
         >
           {fullscreen ? (

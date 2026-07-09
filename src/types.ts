@@ -1,6 +1,6 @@
 // Shared types across frontend and the API contract with the Node proxy.
 
-export type ProviderName = 'seedance' | 'gpt-image' | 'custom-url';
+export type ProviderName = 'seedream' | 'gpt-image' | 'custom-url';
 
 /** Request payload the frontend sends to POST /api/generate. */
 export interface GenRequest {

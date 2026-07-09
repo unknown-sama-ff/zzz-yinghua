@@ -14,7 +14,7 @@ import sharp from 'sharp';
  * `req` is the validated body from POST /api/generate.
  *
  * NOTE: upstream image-API request/response shapes vary. These implementations
- * target the common conventions (OpenAI images edit, a seedance-style task API)
+ * target the common conventions (OpenAI images edit, a seedream-style task API)
  * and normalize the result. Adjust field names if your endpoint differs.
  */
 
@@ -72,21 +72,25 @@ async function stitchRefImages(refImages) {
 }
 
 // ---------------------------------------------------------------------------
-// seedance — image-to-image / edit endpoint, may return a task_id to poll.
+// seedream — image-to-image / edit endpoint, may return a task_id to poll.
 // ---------------------------------------------------------------------------
-async function seedance(req) {
+async function seedream(req) {
   const useServerPreset = req.useServerPreset === true;
-  const key = useServerPreset ? process.env.SEEDANCE_API_KEY : req.apiKey;
-  const base = useServerPreset ? process.env.SEEDANCE_BASE_URL : req.baseUrl;
+  const key = useServerPreset ? process.env.SEEDREAM_API_KEY : req.apiKey;
+  const base = useServerPreset ? process.env.SEEDREAM_BASE_URL : req.baseUrl;
   if (!key || !base) {
     throw new UpstreamError('UNAUTHORIZED', useServerPreset
-      ? 'seedance 服务端预设缺少密钥或 Base URL'
-      : 'seedance 缺少密钥或 Base URL（请在前端填写）', 401);
+      ? 'seedream 服务端预设缺少密钥或 Base URL'
+      : 'seedream 缺少密钥或 Base URL（请在前端填写）', 401);
   }
+  const model = useServerPreset
+    ? process.env.SEEDREAM_MODEL
+    : req.model;
   const body = {
     prompt: req.prompt,
     image: req.imageBase64,
     n: req.n || 1,
+    ...(model ? { model } : {}),
   };
   // Prefer aspectRatio when provided, fall back to size or default
   if (req.aspectRatio) {
@@ -94,15 +98,14 @@ async function seedance(req) {
   } else {
     body.size = req.size || '1024x1024';
   }
-  if (useServerPreset ? process.env.SEEDANCE_MODEL : req.model) body.model = useServerPreset ? process.env.SEEDANCE_MODEL : req.model;
   const json = await withRetry(async () => {
-    const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/images/edits`, {
+    const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/images/generations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      throw new UpstreamError(codeFromStatus(res.status), `seedance 返回 ${res.status}`, res.status);
+      throw new UpstreamError(codeFromStatus(res.status), `seedream 返回 ${res.status}`, res.status);
     }
     return parseJsonSafe(res);
   });
@@ -110,13 +113,13 @@ async function seedance(req) {
   // Long-task: poll if a task id is returned instead of images.
   const taskId = json.task_id || json.id;
   if (taskId && pluckImages(json).length === 0) {
-    const images = await pollSeedanceTask(base, key, taskId);
+    const images = await pollSeedreamTask(base, key, taskId);
     return { images, raw: json };
   }
   return { images: pluckImages(json), raw: json };
 }
 
-async function pollSeedanceTask(base, key, taskId, maxMs = 180000) {
+async function pollSeedreamTask(base, key, taskId, maxMs = 180000) {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     await sleep(2000);
@@ -130,10 +133,10 @@ async function pollSeedanceTask(base, key, taskId, maxMs = 180000) {
       return pluckImages(json);
     }
     if (status === 'failed' || status === 'error') {
-      throw new UpstreamError('UPSTREAM_ERROR', 'seedance 任务失败');
+      throw new UpstreamError('UPSTREAM_ERROR', 'seedream 任务失败');
     }
   }
-  throw new UpstreamError('UPSTREAM_TIMEOUT', 'seedance 任务轮询超时', 504);
+  throw new UpstreamError('UPSTREAM_TIMEOUT', 'seedream 任务轮询超时', 504);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +298,7 @@ async function customUrl(req) {
 }
 
 export const providers = {
-  seedance,
+  seedream,
   'gpt-image': gptImage,
   'custom-url': customUrl,
 };

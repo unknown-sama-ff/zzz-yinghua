@@ -20,7 +20,7 @@ export function parseHeaders(raw: string): Record<string, string> {
  * Reads provider, uploaded image and custom-url config.
  *
  * Size selection strategy:
- * - seedance: uses size (e.g. '2848x1600') for specific pixel dimensions
+ * - seedream: uses size (e.g. '2848x1600') for specific pixel dimensions
  * - gpt-image: uses size (e.g. '1536x1024') for fixed pixel dimensions
  * - custom-url: passes both size and aspectRatio (provider decides)
  */
@@ -58,7 +58,7 @@ export function useBuildRequest() {
       refImages: opts?.refImages,
       ...(freeloadEnabled ? { useServerPreset: true } : {}),
     };
-    if (provider === 'seedance' || provider === 'gpt-image') {
+    if (provider === 'seedream' || provider === 'gpt-image') {
       const c = creds[provider];
       if (c.apiKey.trim()) req.apiKey = c.apiKey.trim();
       if (c.baseUrl.trim()) req.baseUrl = c.baseUrl.trim();

@@ -54,9 +54,9 @@ interface WorkshopState {
   custom: CustomProviderConfig;
   setCustom: (patch: Partial<CustomProviderConfig>) => void;
   // Per-provider credentials, kept in memory only (never persisted to disk).
-  creds: Record<'seedance' | 'gpt-image' | 'custom-url', { apiKey: string; baseUrl: string; model: string }>;
+  creds: Record<'seedream' | 'gpt-image' | 'custom-url', { apiKey: string; baseUrl: string; model: string }>;
   setCred: (
-    provider: 'seedance' | 'gpt-image' | 'custom-url',
+    provider: 'seedream' | 'gpt-image' | 'custom-url',
     patch: Partial<{ apiKey: string; baseUrl: string; model: string }>,
   ) => void;
 
@@ -145,14 +145,14 @@ export const useStore = create<WorkshopState>((set) => ({
   characterName: '',
   setCharacterName: (name) => set({ characterName: name }),
 
-  provider: 'seedance',
+  provider: 'seedream',
   setProvider: (p) => set({ provider: p }),
   freeloadEnabled: false,
   setFreeloadEnabled: (enabled) => set({ freeloadEnabled: enabled, ...(enabled ? { provider: 'gpt-image' as const } : {}) }),
   custom: { endpoint: '', headers: '', bodyTemplate: '' },
   setCustom: (patch) => set((s) => ({ custom: { ...s.custom, ...patch } })),
   creds: {
-    seedance: { apiKey: '', baseUrl: '', model: '' },
+    seedream: { apiKey: '', baseUrl: '', model: '' },
     'gpt-image': { apiKey: '', baseUrl: '', model: '' },
     'custom-url': { apiKey: '', baseUrl: '', model: '' },
   },

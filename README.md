@@ -5,7 +5,7 @@
 ## 功能
 
 - **图片上传**：拖拽 / 点击，本地预览，类型与大小校验（PNG/JPEG/WEBP，≤10MB）。
-- **三 Provider**：`seedance`、`gpt-image`、`custom-url`（自定义端点 + 鉴权头），统一经后端代理调用。
+- **三 Provider**：`seedream`、`gpt-image`、`custom-url`（自定义端点 + 鉴权头），统一经后端代理调用。
 - **三视图 + 特写**（可开关）：内置 prompt 模板，可微调。
 - **影画三风格**：重墨黑白 / 半赛璐珞 / 全彩高饱和，背景嵌入角色英文名。
 - **影画查看器**：左侧 6 按钮（01–06）分两组 STAGE，自由组合显隐；切换带扫描线 / 故障 / 辉光特效（CSS 程序化复刻，非视频叠加）。
@@ -48,7 +48,7 @@ npm start              # Node 代理同时托管 dist/ 静态资源
 |----|------|
 | `PORT` | 代理端口，默认 8787 |
 | `CORS_ORIGIN` | 允许的前端源，默认 `http://localhost:5173` |
-| `SEEDANCE_API_KEY` / `SEEDANCE_BASE_URL` | seedance 图编辑端点 |
+| `SEEDREAM_API_KEY` / `SEEDREAM_BASE_URL` | seedream 图编辑端点 |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` | gpt-image（gpt-image-1）端点 |
 | `UPSTREAM_TIMEOUT_MS` | 上游超时，默认 60000 |
 
@@ -59,12 +59,12 @@ npm start              # Node 代理同时托管 dist/ 静态资源
 - `POST /api/generate` — body `{ provider, prompt, imageBase64?, size?, n?, customEndpoint?, customHeaders?, customBodyTemplate? }`
 - 响应：`{ ok: true, images: string[] }` 或 `{ ok: false, code, message }`
 - 错误码：`INVALID_INPUT` `UNAUTHORIZED` `UPSTREAM_TIMEOUT` `UPSTREAM_ERROR` `RATE_LIMITED` `SSRF_BLOCKED`
-- 代理特性：错误归一化、120s 超时（超时不重试）、瞬时错误最多 2 次指数退避重试、seedance 长任务轮询、上游非 JSON 响应容错。
+- 代理特性：错误归一化、120s 超时（超时不重试）、瞬时错误最多 2 次指数退避重试、seedream 长任务轮询、上游非 JSON 响应容错。
 
 ## 角色保真（让生图严格参考上传立绘）
 
 - **gpt-image**：有上传图时走 `/images/edits`（multipart 上传图片文件），使立绘真正作为图生图条件；无图时回退 `/images/generations` 纯文生图。需所用模型支持图像编辑。
-- **seedance / custom-url**：以 base64 随请求体发送图片（`image` 字段 / `{image}` 占位）。
+- **seedream / custom-url**：以 base64 随请求体发送图片（`image` 字段 / `{image}` 占位）。
 - **提示词保真前缀**：三种影画风格与三视图提示词均强约束「保留上传角色的面部、发型发色、服装与配色，确保同一角色」，在 UI 文本框可见且可微调（见 `src/lib/prompts.ts` 的 `FIDELITY_PREFIX`）。
 
 ## 部署到 Vercel

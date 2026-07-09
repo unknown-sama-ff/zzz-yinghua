@@ -26,7 +26,7 @@ app.use(
 // hence the generous ceiling beyond any single 10MB upload.
 app.use(express.json({ limit: '50mb' }));
 
-const VALID_PROVIDERS = new Set(['seedance', 'gpt-image', 'custom-url']);
+const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 
 app.post('/api/generate', async (req, res) => {
   const body = req.body || {};
