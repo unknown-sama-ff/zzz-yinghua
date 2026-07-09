@@ -65,9 +65,11 @@ export function useBuildRequest() {
       if (c.model.trim()) req.model = c.model.trim();
     }
     if (provider === 'custom-url') {
-      req.customEndpoint = custom.endpoint;
-      req.customHeaders = parseHeaders(custom.headers);
-      req.customBodyTemplate = custom.bodyTemplate || undefined;
+      const c = creds['custom-url'];
+      if (c.apiKey.trim()) req.customHeaders = { Authorization: `Bearer ${c.apiKey.trim()}` };
+      if (c.baseUrl.trim()) req.customEndpoint = c.baseUrl.trim();
+      if (c.model.trim()) req.model = c.model.trim();
+      req.customBodyTemplate = custom.bodyTemplate || '{"model":"{model}","prompt":"{prompt}","n":1}';
     }
     return req;
   };

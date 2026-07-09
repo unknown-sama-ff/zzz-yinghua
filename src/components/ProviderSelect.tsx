@@ -22,11 +22,13 @@ export function ProviderSelect() {
   const visionCred = useStore((s) => s.visionCred);
   const setVisionCred = useStore((s) => s.setVisionCred);
 
-  const isKeyed = provider === 'seedance' || provider === 'gpt-image';
+  const isKeyed = provider === 'seedance' || provider === 'gpt-image' || provider === 'custom-url';
   const baseUrlPlaceholder =
     provider === 'gpt-image'
       ? 'https://api.openai.com/v1（可留空用默认）'
-      : 'https://api.seedance.example/v1';
+      : provider === 'custom-url'
+        ? 'https://yunwu.ai/v1/images/generations（完整端点，不含自动后缀）'
+        : 'https://api.seedance.example/v1';
 
   return (
     <section className="glass p-6">
@@ -66,13 +68,19 @@ export function ProviderSelect() {
               autoComplete="off"
               value={creds[provider].apiKey}
               onChange={(e) => setCred(provider, { apiKey: e.target.value })}
-              placeholder={provider === 'gpt-image' ? 'sk-...' : '你的 seedance 密钥'}
+              placeholder={
+                provider === 'custom-url'
+                  ? 'sk-...（自动生成 Authorization: Bearer 请求头）'
+                  : provider === 'gpt-image'
+                    ? 'sk-...'
+                    : '你的 seedance 密钥'
+              }
               className="glass-input w-full px-3 py-2 font-mono text-sm"
             />
           </div>
           <div>
             <label className="mb-1 block font-mono text-xs text-zzz-text/60">
-              Base URL // 可选
+              Base URL // {provider === 'custom-url' ? '完整端点路径' : '可选'}
             </label>
             <input
               value={creds[provider].baseUrl}
@@ -83,18 +91,40 @@ export function ProviderSelect() {
           </div>
           <div>
             <label className="mb-1 block font-mono text-xs text-zzz-text/60">
-              模型名称 // 可选
+              模型名称 // {provider === 'custom-url' ? '填入请求体' : '可选'}
             </label>
             <input
               value={creds[provider].model}
               onChange={(e) => setCred(provider, { model: e.target.value })}
-              placeholder={provider === 'gpt-image' ? 'gpt-image-2（默认）' : '如 seedance-v1'}
+              placeholder={
+                provider === 'custom-url'
+                  ? 'gemini-3.1-flash-lite-image'
+                  : provider === 'gpt-image'
+                    ? 'gpt-image-2（默认）'
+                    : '如 seedance-v1'
+              }
               className="glass-input w-full px-3 py-2 font-mono text-sm"
             />
           </div>
+          {provider === 'custom-url' && (
+            <div>
+              <label className="mb-1 block font-mono text-xs text-zzz-text/60">
+                请求体模板 // 可用 {'{prompt}'} {'{image}'} {'{model}'} 占位
+              </label>
+              <textarea
+                value={custom.bodyTemplate}
+                onChange={(e) => setCustom({ bodyTemplate: e.target.value })}
+                placeholder={'{"model":"{model}","prompt":"{prompt}","n":1}'}
+                rows={3}
+                className="glass-input w-full resize-y px-3 py-2 font-mono text-xs"
+              />
+            </div>
+          )}
           <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
-            🔒 密钥仅保存在当前浏览器会话内存，不写入磁盘、不随项目提交；随请求发送到本地后端代理转发上游。
-            留空则回退到服务端 .env 配置。
+            {provider === 'custom-url'
+              ? '🔒 密钥仅保存在当前浏览器会话内存。后端会拦截指向 localhost / 内网地址的请求（基础 SSRF 防护）。'
+              : '🔒 密钥仅保存在当前浏览器会话内存，不写入磁盘、不随项目提交；随请求发送到本地后端代理转发上游。留空则回退到服务端 .env 配置。'
+            }
           </p>
         </div>
       )}
@@ -103,47 +133,6 @@ export function ProviderSelect() {
         <div className="mt-4 border-t border-zzz-text/10 pt-4">
           <p className="font-mono text-[11px] leading-relaxed text-zzz-primary/80">
             已启用作者预设通道
-          </p>
-        </div>
-      )}
-
-      {provider === 'custom-url' && (
-        <div className="mt-4 space-y-3 border-t border-zzz-text/10 pt-4">
-          <div>
-            <label className="mb-1 block font-mono text-xs text-zzz-text/60">Endpoint URL</label>
-            <input
-              value={custom.endpoint}
-              onChange={(e) => setCustom({ endpoint: e.target.value })}
-              placeholder="https://api.example.com/v1/images"
-              className="glass-input w-full px-3 py-2 font-mono text-sm"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block font-mono text-xs text-zzz-text/60">
-              请求头 // 每行 Key: Value
-            </label>
-            <textarea
-              value={custom.headers}
-              onChange={(e) => setCustom({ headers: e.target.value })}
-              placeholder={'Authorization: Bearer sk-...\nX-Custom: value'}
-              rows={3}
-              className="glass-input w-full resize-y px-3 py-2 font-mono text-xs"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block font-mono text-xs text-zzz-text/60">
-              请求体模板 // 可用 {'{prompt}'} {'{image}'} {'{model}'} 占位
-            </label>
-            <textarea
-              value={custom.bodyTemplate}
-              onChange={(e) => setCustom({ bodyTemplate: e.target.value })}
-              placeholder={'{"prompt":"{prompt}","image":"{image}"}'}
-              rows={3}
-              className="glass-input w-full resize-y px-3 py-2 font-mono text-xs"
-            />
-          </div>
-          <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
-            ⚠ 仅填可信端点。后端会拦截指向 localhost / 内网地址的请求（基础 SSRF 防护）。
           </p>
         </div>
       )}
