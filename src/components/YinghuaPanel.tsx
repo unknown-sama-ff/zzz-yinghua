@@ -95,17 +95,12 @@ export function YinghuaPanel() {
       showError('请先上传角色正面图片');
       return;
     }
-    // 零命(1) uses the original upload + addon + style sheet.
-    // 三命(2) edit 零命(1)——锁姿态/文字，做去饱和灰阶。
-    // 六命(3) edit 三命(2)——三命形体清晰、同姿态，便于"就地撕衣"露肤且脸位/身位与前两张一致。
-    // 三命/六命都在角落嵌入三视图缩略图作为单张 imageOverride——配色参考 + 位置锁定。
     let imageOverride: string | undefined;
     try {
       if (id === 1) {
         const styleSheet = await buildStyleReferenceSheet(id);
         imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
       } else {
-        // 三命(2) edit 零命(1)；六命(3) edit 三命(2)。
         const baseImg = id === 3 ? yinghuaSlots[2].images[0] : yinghuaSlots[1].images[0];
         if (!baseImg) {
           showError(id === 3
@@ -122,22 +117,24 @@ export function YinghuaPanel() {
       showError('风格参考图合成失败');
       return;
     }
+
+    // Phase 1: set loading state, yield so the browser paints the skeleton
+    // before we enter the long-running generate() + JSON-parse block.
     setYinghuaSlot(id, { status: 'loading', error: undefined });
+    await Promise.resolve();
+
     try {
-      // seedream uses size, gpt-image uses size
       const sizeOpts = provider === 'seedream'
         ? { size: '2848x1600', imageOverride }
         : { size: YINGHUA_SIZE, imageOverride };
       const images = await generate(
         buildRequest(yinghuaPrompts[id], sizeOpts),
       );
+
       if (id === 3 && images[0]) {
-        // 第二遍：专职撕衣露肤。编辑第一遍成图（干净全彩、脸/身/色/字已锁定），
-        // 单一任务只改服装，其余逐像素保全——避开"保全 vs 撕衣"在同一次调用里的冲突。
         const undressPrompt = yinghuaLang === 'en' ? YINGHUA_UNDRESS_PASS_EN : YINGHUA_UNDRESS_PASS;
         let finalImages = images;
         try {
-          // 第二遍也嵌入三视图缩略图作为服饰参考，确保AI根据原始服装健康露肤
           const threeView = threeViewSlot.images[0];
           const undressImageOverride = threeView
             ? await embedThumbnail(images[0], threeView)
@@ -148,20 +145,32 @@ export function YinghuaPanel() {
               : { size: YINGHUA_SIZE, imageOverride: undressImageOverride }),
           );
         } catch {
-          // 第二遍失败：保留第一遍连贯全彩图，不丢弃。
           showError('二次撕衣失败，保留一次成图（可重试生成）');
           finalImages = images;
         }
+
+        // Phase 2: set done, yield so the new <img> can start decoding
+        // before face-detect + theme-update cascade runs.
         setYinghuaSlot(3, { status: 'done', images: finalImages });
-        if (finalImages[0]) {
-          void runFaceDetect(finalImages[0]);
-          if (palette) {
-            const root = document.documentElement.style;
-            root.setProperty('--zzz-primary', palette.textTopBright);
-            root.setProperty('--zzz-magenta', palette.textBottom);
-            root.setProperty('--zzz-accent', palette.textBottom);
+        await Promise.resolve();
+
+        // Phase 3: defer face-detect + theme colour update. Each of these
+        // triggers a separate re-render / style-recalc cascade (MutationObserver
+        // + getComputedStyle on every .glass element). Running them after the
+        // done state has painted keeps the viewer transition smooth.
+        const capturedFinalImages = finalImages;
+        const capturedPalette = palette;
+        setTimeout(() => {
+          if (capturedFinalImages[0]) {
+            void runFaceDetect(capturedFinalImages[0]);
           }
-        }
+          if (capturedPalette) {
+            const root = document.documentElement.style;
+            root.setProperty('--zzz-primary', capturedPalette.textTopBright);
+            root.setProperty('--zzz-magenta', capturedPalette.textBottom);
+            root.setProperty('--zzz-accent', capturedPalette.textBottom);
+          }
+        }, 0);
       } else {
         setYinghuaSlot(id, { status: 'done', images });
       }
