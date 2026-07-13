@@ -43,7 +43,7 @@ function getWorker(): Worker | null {
   if (!worker || (worker as any)._disposed) {
     if (!hasOffscreenCanvas()) return null;
     try {
-      worker = new Worker(new URL('./imageWorker.ts', import.meta.url), {
+      worker = new Worker(new URL('../workers/imageWorker.ts', import.meta.url), {
         type: 'module',
       });
       (worker as any)._disposed = false;
