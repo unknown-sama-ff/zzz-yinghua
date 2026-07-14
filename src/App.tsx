@@ -27,6 +27,7 @@ export default function App() {
               'radial-gradient(60% 120% at 100% 0%, color-mix(in srgb, var(--zzz-primary) 20%, transparent), transparent 70%)',
           }}
         />
+
         <div className="mx-auto max-w-6xl">
           <h1 className="zzz-heading text-4xl tracking-widest text-zzz-text sm:text-5xl">
             影画<span className="text-zzz-primary">工坊</span>

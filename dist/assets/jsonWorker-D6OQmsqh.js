@@ -1,0 +1,1 @@
+(function(){"use strict";self.onmessage=s=>{try{const e=s.data,t=new TextDecoder("utf-8",{fatal:!1}).decode(e),a=JSON.parse(t);postMessage({type:"result",data:a})}catch(e){postMessage({type:"error",message:e instanceof Error?e.message:"json worker parse failed"})}}})();
