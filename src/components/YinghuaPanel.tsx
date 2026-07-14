@@ -75,7 +75,19 @@ export function YinghuaPanel() {
   const runFaceDetect = async (src: string) => {
     setDetectFaceError(null);
     try {
-      const parsed = parseDataUrl(src);
+      // Normalize remote URLs from upstream APIs to data URLs.
+      let dataUrl = src;
+      if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
+      const parsed = parseDataUrl(dataUrl);
       const bounds = await detectFace(parsed.base64, parsed.mime, freeloadEnabled
         ? { useServerPreset: true }
         : {

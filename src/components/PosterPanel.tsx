@@ -74,34 +74,13 @@ export function PosterPanel() {
   const prompt = fillPoster(current.template, characterName, dominant, accent, palette?.textTopBright, palette?.textBottom);
 
   const run = async () => {
-    let imageOverride: string | undefined;
-
-    if (variant === 'silhouette') {
-      // 剪影版：使用固定的预设参考图 /作者推荐/剪影版.png
-      const silhouetteRef = '/作者推荐/剪影版.png';
-      try {
-        const res = await fetch(silhouetteRef);
-        if (!res.ok) throw new Error('剪影参考图加载失败');
-        const blob = await res.blob();
-        imageOverride = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      } catch (err) {
-        showError(err instanceof Error ? err.message : '剪影参考图加载失败');
-        return;
-      }
-    } else {
-      // 其他变体：优先使用三视图作为参考图，没有则回退到主立绘
-      const tv = threeViewSlot.images[0] ?? undefined;
-      const main = uploadedImage ?? undefined;
-      imageOverride = tv || main;
-      if (!imageOverride) {
-        showError('请先在 01 模块生成三视图，或上传角色立绘');
-        return;
-      }
+    // 所有变体统一：优先使用三视图，没有则回退到主立绘
+    const tv = threeViewSlot.images[0] ?? undefined;
+    const main = uploadedImage ?? undefined;
+    const imageOverride = tv || main;
+    if (!imageOverride) {
+      showError('请先在 01 模块生成三视图，或上传角色立绘');
+      return;
     }
 
     setPosterSlot({ status: 'loading', error: undefined });

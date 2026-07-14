@@ -12,7 +12,23 @@ export interface FaceBounds {
  * Resize a data URL image to fit within maxDim (longest side), keeping aspect ratio.
  * Returns a much smaller base64 for faster vision-model processing.
  */
-function resizeDataUrl(dataUrl: string, maxDim: number = 384): Promise<string> {
+async function resolveDataUrl(dataUrl: string): Promise<string> {
+  // Handle remote URLs from upstream APIs (e.g. seedream returns d.url instead of b64_json).
+  if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  return dataUrl;
+}
+
+async function resizeDataUrl(dataUrl: string, maxDim: number = 384): Promise<string> {
+  const src = await resolveDataUrl(dataUrl);
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -28,7 +44,7 @@ function resizeDataUrl(dataUrl: string, maxDim: number = 384): Promise<string> {
       resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = () => reject(new Error('resizeDataUrl: image load failed'));
-    img.src = dataUrl;
+    img.src = src;
   });
 }
 

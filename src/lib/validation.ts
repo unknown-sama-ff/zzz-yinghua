@@ -46,7 +46,20 @@ export async function compressDataUrl(
   maxDim = 1024,
   quality = 0.80,
 ): Promise<string> {
-  const { base64, mime } = parseDataUrl(dataUrl);
+  // Handle remote URLs from upstream APIs — fetch and convert to data URL.
+  let src = dataUrl;
+  if (src.startsWith('http://') || src.startsWith('https://')) {
+    const res = await fetch(src);
+    const blob = await res.blob();
+    src = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  const { base64, mime } = parseDataUrl(src);
 
   // Decode base64 to a Blob
   const byteStr = atob(base64);
