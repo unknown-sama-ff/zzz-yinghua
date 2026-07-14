@@ -296,7 +296,7 @@ async function gptImage(req) {
     let processedExt = ext;
     try {
       const maxDim = 1024;
-      const jpegQuality = 0.80;
+      const jpegQuality = 80;
       const meta = await sharp(buffer, { failOnError: false }).metadata();
       const needsResize = meta.width && meta.height && (meta.width > maxDim || meta.height > maxDim);
       const needsFormatChange = mime !== 'image/jpeg';
@@ -328,13 +328,17 @@ async function gptImage(req) {
       return res;
     }
 
-    let res = await tryEdits(new FormData([
-      ['model', model],
-      ['prompt', req.prompt],
-      ...(req.aspectRatio ? [['aspect_ratio', req.aspectRatio]] : [['size', size || '1024x1024']]),
-      ['n', String(n)],
-      ['image', new Blob([processedBuffer], { type: processedMime }), `image.${processedExt}`],
-    ]));
+    const form = new FormData();
+    form.append('model', model);
+    form.append('prompt', req.prompt);
+    if (req.aspectRatio) {
+      form.append('aspect_ratio', req.aspectRatio);
+    } else {
+      form.append('size', size || '1024x1024');
+    }
+    form.append('n', String(n));
+    form.append('image', new Blob([processedBuffer], { type: processedMime }), `image.${processedExt}`);
+    let res = await tryEdits(form);
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
       console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
@@ -344,15 +348,19 @@ async function gptImage(req) {
         try {
           const reduced = await sharp(processedBuffer, { failOnError: false })
             .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: 0.70 })
+            .jpeg({ quality: 70 })
             .toBuffer();
-          res = await tryEdits(new FormData([
-            ['model', model],
-            ['prompt', req.prompt],
-            ...(req.aspectRatio ? [['aspect_ratio', req.aspectRatio]] : [['size', size || '1024x1024']]),
-            ['n', String(n)],
-            ['image', new Blob([reduced], { type: 'image/jpeg' }), 'image.jpg'],
-          ]));
+          const retryForm = new FormData();
+          retryForm.append('model', model);
+          retryForm.append('prompt', req.prompt);
+          if (req.aspectRatio) {
+            retryForm.append('aspect_ratio', req.aspectRatio);
+          } else {
+            retryForm.append('size', size || '1024x1024');
+          }
+          retryForm.append('n', String(n));
+          retryForm.append('image', new Blob([reduced], { type: 'image/jpeg' }), 'image.jpg');
+          res = await tryEdits(retryForm);
           if (!res.ok) {
             const retryText = await res.text().catch(() => '');
             console.warn(`[gpt-image] reduced retry also failed ${res.status}: ${retryText.slice(0, 200)}`);
