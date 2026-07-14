@@ -129,7 +129,7 @@ export function YinghuaPanel() {
             reader.readAsDataURL(blob);
           });
         }
-        imageOverride = await compressDataUrl(src, 2048, 0.85);
+        imageOverride = await compressDataUrl(src);
       }
     } catch {
       showError('风格参考图合成失败');
@@ -170,7 +170,7 @@ export function YinghuaPanel() {
                 reader.readAsDataURL(blob);
               });
             }
-            undressImageOverride = await compressDataUrl(undressImageOverride, 2048, 0.85);
+            undressImageOverride = await compressDataUrl(undressImageOverride);
           }
           finalImages = await generate(
             buildRequest(undressPrompt, provider === 'seedream'

@@ -295,8 +295,8 @@ async function gptImage(req) {
     let processedMime = mime;
     let processedExt = ext;
     try {
-      const maxDim = 1536;
-      const jpegQuality = 0.8;
+      const maxDim = 1024;
+      const jpegQuality = 0.80;
       const meta = await sharp(buffer, { failOnError: false }).metadata();
       const needsResize = meta.width && meta.height && (meta.width > maxDim || meta.height > maxDim);
       const needsFormatChange = mime !== 'image/jpeg';
@@ -339,12 +339,12 @@ async function gptImage(req) {
       const bodyText = await res.text().catch(() => '');
       console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
       // Cheap relays may still reject. Retry with smaller size if this was a large image.
-      if (res.status === 400 && processedBuffer.length > 500 * 1024) {
-        console.log(`[gpt-image] retrying with reduced quality (768px, 0.70)...`);
+      if (res.status === 400 && processedBuffer.length > 300 * 1024) {
+        console.log(`[gpt-image] retrying with reduced quality (512px, 0.70)...`);
         try {
           const reduced = await sharp(processedBuffer, { failOnError: false })
-            .resize(768, 768, { fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: 0.7 })
+            .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 0.70 })
             .toBuffer();
           res = await tryEdits(new FormData([
             ['model', model],
