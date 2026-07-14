@@ -1,4 +1,5 @@
 import type { ApiResponse, GenRequest } from '../types';
+import { API_BASE } from './apiBase';
 
 // ── JSON-parse Worker (offload res.json() from the main thread) ───────────────
 
@@ -60,7 +61,7 @@ export async function generate(req: GenRequest): Promise<string[]> {
   const timer = setTimeout(() => controller.abort(), 360000);
   let res: Response;
   try {
-    res = await fetch('/api/generate', {
+    res = await fetch(`${API_BASE}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),

@@ -1,3 +1,5 @@
+import { API_BASE } from './apiBase';
+
 export interface FaceBounds {
   faceTop: number;
   faceBottom: number;
@@ -44,7 +46,7 @@ export async function detectFace(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 180000);
   try {
-    const res = await fetch('/api/detect-face', {
+    const res = await fetch(`${API_BASE}/detect-face`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageBase64: smallBase64, imageMime: smallMime, ...opts }),

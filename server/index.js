@@ -16,9 +16,23 @@ const app = express();
 // still lands where the proxy forwards. Local dev sets PORT=8787 via .env.
 const PORT = Number(process.env.PORT || 8080);
 
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',   // Vite dev server
+  'http://localhost:8787',   // direct backend access
+  ...(process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim())
+    : []),
+]);
+
+const corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+  if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+  return callback(null, false);  // reflect: block unknown origins
+};
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: corsOrigin,
+    credentials: true,
   }),
 );
 // Large limit to accommodate base64 image uploads. Three-view stitching tiles
