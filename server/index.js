@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import { providers } from './providers.js';
+import { providers, registerTaskStore } from './providers.js';
 import { UpstreamError, fetchWithTimeout, parseJsonSafe, codeFromStatus } from './http.js';
 
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
@@ -11,6 +11,7 @@ loadEnv();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+const IS_VERCEL = Boolean(process.env.VERCEL);
 // Railway (and most PaaS) inject PORT and route the public domain to it.
 // Fall back to 8080 — Railway's default target port — so a missing PORT var
 // still lands where the proxy forwards. Local dev sets PORT=8787 via .env.
@@ -42,6 +43,51 @@ app.use(express.json({ limit: '50mb' }));
 
 const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 
+// ── In-memory task registry for async image generation ────────────────────
+// Vercel serverless functions have execution time limits. When running on
+// Vercel, generate() returns a taskId immediately and the frontend polls
+// GET /api/task/:id for completion.
+const taskStore = new Map<string, {
+  status: 'pending' | 'running' | 'done' | 'error';
+  images?: string[];
+  error?: string;
+  timer?: ReturnType<typeof setTimeout>;
+}>();
+
+const TASK_TTL_MS = 5 * 60_000; // 5 min — long enough for polling, then auto-clean
+
+function cleanupTask(id: string) {
+  const entry = taskStore.get(id);
+  if (entry?.timer) clearTimeout(entry.timer);
+  taskStore.delete(id);
+}
+
+// Let providers register task results (needed for async Vercel worker pattern).
+registerTaskStore((id, images) => {
+  const entry = taskStore.get(id);
+  if (!entry) return;
+  entry.status = 'done';
+  entry.images = images;
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = setTimeout(() => cleanupTask(id), TASK_TTL_MS);
+});
+
+app.get('/api/task/:id', (req, res) => {
+  const { id } = req.params;
+  const task = taskStore.get(id);
+  if (!task) return fail(res, 404, 'NOT_FOUND', '任务不存在或已过期');
+  if (task.status === 'done') {
+    cleanupTask(id);
+    return res.json({ ok: true, images: task.images ?? [], taskId: id });
+  }
+  if (task.status === 'error') {
+    cleanupTask(id);
+    return fail(res, 502, 'UPSTREAM_ERROR', task.error ?? '生成失败');
+  }
+  // Still pending/running — 202 Accepted
+  res.status(202).json({ ok: true, taskId: id, status: task.status });
+});
+
 app.post('/api/generate', async (req, res) => {
   const body = req.body || {};
   const { provider, prompt } = body;
@@ -61,6 +107,18 @@ app.post('/api/generate', async (req, res) => {
 
   try {
     const result = await providers[provider](body);
+
+    // Long-task: provider returned a task_id → register and return immediately.
+    const taskId = result.taskId;
+    if (taskId && (!result.images || result.images.length === 0)) {
+      taskStore.set(taskId, {
+        status: 'pending',
+        timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS),
+      });
+      console.log(`[generate] provider=${provider} task queued id=${taskId} (${Date.now() - started}ms)`);
+      return res.json({ ok: true, taskId });
+    }
+
     if (!result.images || result.images.length === 0) {
       console.warn(`[generate] provider=${provider} 上游未返回图片 (${Date.now() - started}ms)`);
       return fail(res, 502, 'UPSTREAM_ERROR', '上游未返回图片');
@@ -198,14 +256,20 @@ function loadEnv() {
   }
 }
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`[影画工坊] proxy listening on http://0.0.0.0:${PORT} dist=${hasDist} node=${process.version}`);
-});
+// Vercel serverless: export the app so the runtime can use it as a handler.
+// Local / Railway: start the HTTP server as before.
+if (IS_VERCEL) {
+  module.exports = app;
+} else {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[影画工坊] proxy listening on http://0.0.0.0:${PORT} dist=${hasDist} node=${process.version}`);
+  });
 
-// Allow long image-to-image requests to complete.
-if (typeof server.requestTimeout === 'number') {
-  const upstreamMs = Number(process.env.UPSTREAM_TIMEOUT_MS || 300000);
-  server.requestTimeout = upstreamMs + 60000;
-  server.headersTimeout = upstreamMs + 60000;
+  // Allow long image-to-image requests to complete.
+  if (typeof server.requestTimeout === 'number') {
+    const upstreamMs = Number(process.env.UPSTREAM_TIMEOUT_MS || 300000);
+    server.requestTimeout = upstreamMs + 60000;
+    server.headersTimeout = upstreamMs + 60000;
+  }
 }
 

@@ -87,7 +87,34 @@ export async function generate(req: GenRequest): Promise<string[]> {
   if (!data.ok) {
     throw new ApiError(data.code, data.message);
   }
+
+  // Long-task: if the backend returns a task_id, poll until completion.
+  const taskId = data.taskId;
+  if (taskId) {
+    const images = await pollTask(taskId);
+    return images;
+  }
+
   return data.images;
+}
+
+async function pollTask(taskId: string): Promise<string[]> {
+  const maxMs = 180_000;
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    await sleep(3000);
+    const res = await fetch(`${API_BASE}/task/${encodeURIComponent(taskId)}`);
+    if (!res.ok) continue;
+    const data = (await res.json()) as ApiResponse;
+    if (!data.ok) throw new ApiError(data.code, data.message);
+    if (data.images && data.images.length > 0) return data.images;
+    if (data.taskId && data.images?.length === 0) continue; // still processing
+  }
+  throw new ApiError('UPSTREAM_TIMEOUT', '生图任务轮询超时');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 export class ApiError extends Error {

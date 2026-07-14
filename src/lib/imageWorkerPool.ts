@@ -249,6 +249,18 @@ export async function stitchImages(dataUrls: (string | null | undefined)[]): Pro
   });
 }
 
+export async function stitchRefImages(
+  refs: { base64: string; mime?: string }[],
+): Promise<string> {
+  const dataUrls = refs.map((r) => {
+    const mime = r.mime || 'image/png';
+    return `data:${mime};base64,${r.base64}`;
+  });
+  // stitchImages already handles multi-image horizontal stitching with
+  // max-height capping — same behaviour the old sharp server-side code had.
+  return stitchImages(dataUrls);
+}
+
 export async function embedThumbnail(
   base: string,
   thumb: string,
