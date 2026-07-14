@@ -284,32 +284,51 @@ async function gptImage(req) {
   // degrading to text-only generation (which would ignore the uploaded art).
   if (req.imageBase64) {
     const buffer = Buffer.from(req.imageBase64, 'base64');
+    const payloadBytes = buffer.length;
     const mime = req.imageMime || 'image/png';
-    const blob = new Blob([buffer], { type: mime });
     const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
-    const form = new FormData();
-    form.append('model', model);
-    form.append('prompt', req.prompt);
-    if (req.aspectRatio) {
-      form.append('aspect_ratio', req.aspectRatio);
-    } else {
-      form.append('size', size);
-    }
-    form.append('n', String(n));
-    form.append('image', blob, `image.${ext}`);
+    console.log(`[gpt-image] edits payload: ${payloadBytes} bytes (${(payloadBytes/1024).toFixed(1)} KB) mime=${mime} ext=${ext} size=${size || 'default'}`);
 
-    const json = await withRetry(async () => {
+    async function tryEdits(formBody) {
       const res = await fetchWithTimeout(`${root}/images/edits`, {
         method: 'POST',
-        // Do NOT set Content-Type — fetch adds the multipart boundary itself.
         headers: { Authorization: `Bearer ${key}` },
-        body: form,
+        body: formBody,
       });
-      if (!res.ok) {
+      return res;
+    }
+
+    let res = await tryEdits(new FormData([
+      ['model', model],
+      ['prompt', req.prompt],
+      ...(req.aspectRatio ? [['aspect_ratio', req.aspectRatio]] : [['size', size || '1024x1024']]),
+      ['n', String(n)],
+      ['image', new Blob([buffer], { type: mime }), `image.${ext}`],
+    ]));
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
+      // Cheap relays may reject JPEG or large files. Retry once with PNG.
+      if (res.status === 400 && ext === 'jpg') {
+        console.log(`[gpt-image] retrying with PNG format...`);
+        const pngBlob = new Blob([buffer], { type: 'image/png' });
+        res = await tryEdits(new FormData([
+          ['model', model],
+          ['prompt', req.prompt],
+          ...(req.aspectRatio ? [['aspect_ratio', req.aspectRatio]] : [['size', size || '1024x1024']]),
+          ['n', String(n)],
+          ['image', pngBlob, 'image.png'],
+        ]));
+        if (!res.ok) {
+          const retryText = await res.text().catch(() => '');
+          console.warn(`[gpt-image] PNG retry also failed ${res.status}: ${retryText.slice(0, 200)}`);
+          throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status} (JPEG+PNG 均失败)`, res.status);
+        }
+      } else {
         throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status}`, res.status);
       }
-      return parseJsonSafe(res);
-    });
+    }
+    const json = await parseJsonSafe(res);
     return { images: pluckImages(json), raw: json };
   }
 
