@@ -34,6 +34,41 @@ export function stripDataUrlPrefix(dataUrl: string): string {
 }
 
 /**
+ * Compress an image data URL to a smaller JPEG data URL. Resizes to max 2048px
+ * on the longest side and uses 0.85 JPEG quality. Used to shrink API-returned
+ * PNG images before re-sending them to another upstream API (e.g. gpt-image
+ * /images/edits which is strict about payload size).
+ */
+export async function compressDataUrl(
+  dataUrl: string,
+  maxDim = 2048,
+  quality = 0.85,
+): Promise<string> {
+  const { base64, mime } = parseDataUrl(dataUrl);
+  const byteStr = atob(base64);
+  const bytes = new Uint8Array(byteStr.length);
+  for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mime });
+  const bitmap = await createImageBitmap(blob);
+  let { width, height } = bitmap;
+  if (width > maxDim || height > maxDim) {
+    const scale = maxDim / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  const jpegBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = reject;
+    reader.readAsDataURL(jpegBlob);
+  });
+}
+
+/**
  * Parse a data URL into its mime type and raw base64. Falls back to image/png
  * when the prefix is missing or unparseable. Used so the backend can rebuild a
  * correctly-typed file for multipart image-edit uploads.

@@ -5,7 +5,7 @@ import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName, YINGHUA_UNDRESS_PASS, YINGHUA_UNDRESS_PASS_EN } from '../lib/prompts';
 import { stitchImages, embedThumbnail } from '../lib/stitchImages';
 import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
-import { parseDataUrl, validateImageFile, fileToDataUrl } from '../lib/validation';
+import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { useBuildRequest } from './useBuildRequest';
@@ -113,6 +113,24 @@ export function YinghuaPanel() {
           ? await embedThumbnail(baseImg, threeView)
           : baseImg;
       }
+
+      // gpt-image /images/edits is strict about payload size and format.
+      // API-returned images may be remote URLs or PNG data URLs — both need
+      // to be resolved/compressed to a small JPEG data URL before sending.
+      if (provider === 'gpt-image' && imageOverride) {
+        let src = imageOverride;
+        if (src.startsWith('http://') || src.startsWith('https://')) {
+          const res = await fetch(src);
+          const blob = await res.blob();
+          src = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
+        imageOverride = await compressDataUrl(src, 2048, 0.85);
+      }
     } catch {
       showError('风格参考图合成失败');
       return;
@@ -136,9 +154,24 @@ export function YinghuaPanel() {
         let finalImages = images;
         try {
           const threeView = threeViewSlot.images[0];
-          const undressImageOverride = threeView
+          let undressImageOverride = threeView
             ? await embedThumbnail(images[0], threeView)
             : images[0];
+
+          // Same gpt-image compression fix for the undress pass.
+          if (provider === 'gpt-image' && undressImageOverride) {
+            if (undressImageOverride.startsWith('http://') || undressImageOverride.startsWith('https://')) {
+              const res = await fetch(undressImageOverride);
+              const blob = await res.blob();
+              undressImageOverride = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result));
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+            }
+            undressImageOverride = await compressDataUrl(undressImageOverride, 2048, 0.85);
+          }
           finalImages = await generate(
             buildRequest(undressPrompt, provider === 'seedream'
               ? { size: '2848x1600', imageOverride: undressImageOverride }
