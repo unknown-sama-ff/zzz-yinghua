@@ -7,6 +7,7 @@ import {
   sleep,
   parseJsonSafe,
 } from './http.js';
+import sharp from 'sharp';
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 
@@ -287,7 +288,36 @@ async function gptImage(req) {
     const payloadBytes = buffer.length;
     const mime = req.imageMime || 'image/png';
     const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
-    console.log(`[gpt-image] edits payload: ${payloadBytes} bytes (${(payloadBytes/1024).toFixed(1)} KB) mime=${mime} ext=${ext} size=${size || 'default'}`);
+
+    // Server-side resize for cheap relays with strict size limits.
+    // sharp is available on Railway (not Vercel), so guard with try/catch.
+    let processedBuffer = buffer;
+    let processedMime = mime;
+    let processedExt = ext;
+    try {
+      const maxDim = 1536;
+      const jpegQuality = 0.8;
+      const meta = await sharp(buffer, { failOnError: false }).metadata();
+      const needsResize = meta.width && meta.height && (meta.width > maxDim || meta.height > maxDim);
+      const needsFormatChange = mime !== 'image/jpeg';
+      if (needsResize || needsFormatChange) {
+        const pipeline = sharp(buffer, { failOnError: false });
+        if (needsResize) {
+          pipeline.resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true });
+        }
+        if (needsFormatChange) {
+          processedMime = 'image/jpeg';
+          processedExt = 'jpg';
+          pipeline.jpeg({ quality: jpegQuality });
+        }
+        processedBuffer = await pipeline.toBuffer();
+        console.log(`[gpt-image] server-side processed: ${payloadBytes} -> ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) resize=${needsResize} format=${needsFormatChange ? 'to-jpeg' : 'unchanged'}`);
+      }
+    } catch (e) {
+      console.warn(`[gpt-image] server-side processing failed, using original: ${e.message}`);
+    }
+
+    console.log(`[gpt-image] edits payload: ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) mime=${processedMime} ext=${processedExt} size=${size || 'default'}`);
 
     async function tryEdits(formBody) {
       const res = await fetchWithTimeout(`${root}/images/edits`, {
@@ -303,26 +333,34 @@ async function gptImage(req) {
       ['prompt', req.prompt],
       ...(req.aspectRatio ? [['aspect_ratio', req.aspectRatio]] : [['size', size || '1024x1024']]),
       ['n', String(n)],
-      ['image', new Blob([buffer], { type: mime }), `image.${ext}`],
+      ['image', new Blob([processedBuffer], { type: processedMime }), `image.${processedExt}`],
     ]));
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
       console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
-      // Cheap relays may reject JPEG or large files. Retry once with PNG.
-      if (res.status === 400 && ext === 'jpg') {
-        console.log(`[gpt-image] retrying with PNG format...`);
-        const pngBlob = new Blob([buffer], { type: 'image/png' });
-        res = await tryEdits(new FormData([
-          ['model', model],
-          ['prompt', req.prompt],
-          ...(req.aspectRatio ? [['aspect_ratio', req.aspectRatio]] : [['size', size || '1024x1024']]),
-          ['n', String(n)],
-          ['image', pngBlob, 'image.png'],
-        ]));
-        if (!res.ok) {
-          const retryText = await res.text().catch(() => '');
-          console.warn(`[gpt-image] PNG retry also failed ${res.status}: ${retryText.slice(0, 200)}`);
-          throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status} (JPEG+PNG 均失败)`, res.status);
+      // Cheap relays may still reject. Retry with smaller size if this was a large image.
+      if (res.status === 400 && processedBuffer.length > 500 * 1024) {
+        console.log(`[gpt-image] retrying with reduced quality (768px, 0.70)...`);
+        try {
+          const reduced = await sharp(processedBuffer, { failOnError: false })
+            .resize(768, 768, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 0.7 })
+            .toBuffer();
+          res = await tryEdits(new FormData([
+            ['model', model],
+            ['prompt', req.prompt],
+            ...(req.aspectRatio ? [['aspect_ratio', req.aspectRatio]] : [['size', size || '1024x1024']]),
+            ['n', String(n)],
+            ['image', new Blob([reduced], { type: 'image/jpeg' }), 'image.jpg'],
+          ]));
+          if (!res.ok) {
+            const retryText = await res.text().catch(() => '');
+            console.warn(`[gpt-image] reduced retry also failed ${res.status}: ${retryText.slice(0, 200)}`);
+            throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status} (已尝试原图+降级)`, res.status);
+          }
+        } catch (e) {
+          console.warn(`[gpt-image] reduced retry error: ${e.message}`);
+          throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status}`, res.status);
         }
       } else {
         throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status}`, res.status);
