@@ -56,6 +56,7 @@ function fillPoster(template: string, name: string, dominant: string, accent: st
 /** Section 06 — one-click ZZZ poster generation, author-recommended prompt. */
 export function PosterPanel() {
   const characterName = useStore((s) => s.characterName);
+  const uploadedImage = useStore((s) => s.uploadedImage);
   const palette = useStore((s) => s.palette);
   const posterSlot = useStore((s) => s.posterSlot);
   const setPosterSlot = useStore((s) => s.setPosterSlot);
@@ -93,10 +94,12 @@ export function PosterPanel() {
         return;
       }
     } else {
-      // 其他变体：只使用三视图作为参考图
-      imageOverride = threeViewSlot.images[0];
+      // 其他变体：优先使用三视图作为参考图，没有则回退到主立绘
+      const tv = threeViewSlot.images[0] ?? undefined;
+      const main = uploadedImage ?? undefined;
+      imageOverride = tv || main;
       if (!imageOverride) {
-        showError('请先在 03 模块生成三视图');
+        showError('请先在 01 模块生成三视图，或上传角色立绘');
         return;
       }
     }
