@@ -25,7 +25,7 @@ const ALLOWED_ORIGINS = new Set([
     : []),
 ]);
 
-const corsOrigin = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+const corsOrigin = (origin, callback) => {
   if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);
   return callback(null, false);  // reflect: block unknown origins
 };
@@ -47,16 +47,11 @@ const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 // Vercel serverless functions have execution time limits. When running on
 // Vercel, generate() returns a taskId immediately and the frontend polls
 // GET /api/task/:id for completion.
-const taskStore = new Map<string, {
-  status: 'pending' | 'running' | 'done' | 'error';
-  images?: string[];
-  error?: string;
-  timer?: ReturnType<typeof setTimeout>;
-}>();
+const taskStore = new Map();
 
 const TASK_TTL_MS = 5 * 60_000; // 5 min — long enough for polling, then auto-clean
 
-function cleanupTask(id: string) {
+function cleanupTask(id) {
   const entry = taskStore.get(id);
   if (entry?.timer) clearTimeout(entry.timer);
   taskStore.delete(id);
@@ -258,9 +253,11 @@ function loadEnv() {
 
 // Vercel serverless: export the app so the runtime can use it as a handler.
 // Local / Railway: start the HTTP server as before.
-if (IS_VERCEL) {
-  module.exports = app;
-} else {
+// Vercel serverless: export the app so the runtime uses it as a handler.
+// Local / Railway: also start the HTTP server below.
+export default app;
+
+if (!IS_VERCEL) {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[影画工坊] proxy listening on http://0.0.0.0:${PORT} dist=${hasDist} node=${process.version}`);
   });

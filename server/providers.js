@@ -13,13 +13,13 @@ const IS_VERCEL = Boolean(process.env.VERCEL);
 // When running on Vercel serverless, spawn a Worker thread for long-polling
 // so the function can return immediately and the Worker (own event loop) keeps
 // polling upstream until the task completes.
-let storeCallback: ((id: string, images: string[]) => void) | null = null;
+let storeCallback = null;
 
-export function registerTaskStore(cb: (id: string, images: string[]) => void) {
+export function registerTaskStore(cb) {
   storeCallback = cb;
 }
 
-function spawnPollWorker(base: string, key: string, taskId: string, maxMs = 180000) {
+function spawnPollWorker(base, key, taskId, maxMs = 180000) {
   if (!IS_VERCEL || !storeCallback) return pollSeedreamTask(base, key, taskId, maxMs);
 
   // Vercel: delegate polling to a Worker thread so it outlives the
