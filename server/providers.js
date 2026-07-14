@@ -284,16 +284,37 @@ async function gptImage(req) {
   // endpoint doesn't support edits we surface a clear error rather than silently
   // degrading to text-only generation (which would ignore the uploaded art).
   if (req.imageBase64) {
-    const buffer = Buffer.from(req.imageBase64, 'base64');
+    // Handle remote URLs: fetch server-side (no CORS issues) and convert to buffer.
+    // This covers the case where the upstream API returns image URLs instead
+    // of base64 data (common with some relay channels).
+    let buffer;
+    let mime;
+    let ext;
+    if (req.imageBase64.startsWith('http://') || req.imageBase64.startsWith('https://')) {
+      console.log(`[gpt-image] fetching remote image: ${req.imageBase64.slice(0, 120)}`);
+      try {
+        const res = await fetchWithTimeout(req.imageBase64);
+        if (!res.ok) throw new UpstreamError('UPSTREAM_ERROR', `远程图片获取失败: ${res.status}`, res.status);
+        const blob = await res.blob();
+        const arrayBuf = await blob.arrayBuffer();
+        buffer = Buffer.from(arrayBuf);
+        mime = blob.type || 'image/png';
+        ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
+        console.log(`[gpt-image] remote image fetched: ${buffer.length} bytes (${(buffer.length/1024).toFixed(1)} KB) mime=${mime}`);
+      } catch (e) {
+        console.error(`[gpt-image] remote image fetch failed: ${e.message}`);
+        throw new UpstreamError('UPSTREAM_ERROR', `远程图片获取失败: ${e.message}`);
+      }
+    } else {
+      buffer = Buffer.from(req.imageBase64, 'base64');
+      mime = req.imageMime || 'image/png';
+      ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
+    }
     const payloadBytes = buffer.length;
-    const mime = req.imageMime || 'image/png';
-    const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
-
-    // Server-side resize for cheap relays with strict size limits.
-    // sharp is available on Railway (not Vercel), so guard with try/catch.
     let processedBuffer = buffer;
     let processedMime = mime;
     let processedExt = ext;
+    console.log(`[gpt-image] edits payload (raw): ${payloadBytes} bytes (${(payloadBytes/1024).toFixed(1)} KB) mime=${mime} ext=${ext}`);
     try {
       const maxDim = 1024;
       const jpegQuality = 80;

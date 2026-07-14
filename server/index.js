@@ -20,6 +20,8 @@ const PORT = Number(process.env.PORT || 8080);
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:5173',   // Vite dev server
   'http://localhost:8787',   // direct backend access
+  'https://www.zzz-yinghua.asia',  // production frontend (www)
+  'https://zzz-yinghua.asia',      // production frontend (apex)
   ...(process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim())
     : []),
