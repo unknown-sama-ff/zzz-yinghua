@@ -284,7 +284,9 @@ async function gptImage(req) {
   // degrading to text-only generation (which would ignore the uploaded art).
   if (req.imageBase64) {
     const buffer = Buffer.from(req.imageBase64, 'base64');
-    const blob = new Blob([buffer], { type: req.imageMime || 'image/png' });
+    const mime = req.imageMime || 'image/png';
+    const blob = new Blob([buffer], { type: mime });
+    const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
     const form = new FormData();
     form.append('model', model);
     form.append('prompt', req.prompt);
@@ -294,7 +296,7 @@ async function gptImage(req) {
       form.append('size', size);
     }
     form.append('n', String(n));
-    form.append('image', blob, 'image.png');
+    form.append('image', blob, `image.${ext}`);
 
     const json = await withRetry(async () => {
       const res = await fetchWithTimeout(`${root}/images/edits`, {
