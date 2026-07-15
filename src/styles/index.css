@@ -356,7 +356,92 @@ body::before {
     box-shadow: inset 0 0 120px -20px var(--pulse-color, var(--zzz-primary));
   }
 }
+
+/* ====== Inpaint selection mode glow + particles ====== */
+@keyframes inpaint-glow-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 8px var(--zzz-primary),
+      0 0 16px color-mix(in srgb, var(--zzz-primary) 60%, transparent),
+      0 0 32px color-mix(in srgb, var(--zzz-primary) 30%, transparent);
+    border-color: color-mix(in srgb, var(--zzz-primary) 80%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 14px var(--zzz-primary),
+      0 0 28px color-mix(in srgb, var(--zzz-primary) 85%, transparent),
+      0 0 52px color-mix(in srgb, var(--zzz-primary) 55%, transparent);
+    border-color: var(--zzz-primary);
+  }
+}
+
+@keyframes inpaint-particle-1 {
+  0%, 100% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  25% { opacity: 1; transform: translate(6px, -10px) scale(1); }
+  50% { opacity: 0.6; transform: translate(-4px, -18px) scale(0.8); }
+  75% { opacity: 1; transform: translate(8px, -12px) scale(1.1); }
+}
+
+@keyframes inpaint-particle-2 {
+  0%, 100% { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  30% { opacity: 1; transform: translate(-8px, -6px) scale(1); }
+  60% { opacity: 0.5; transform: translate(4px, -16px) scale(0.7); }
+  90% { opacity: 0.9; transform: translate(-6px, -10px) scale(1); }
+}
+
+/* Activate inpaint selection mode */
+body.inpaint-select-active [data-inpaint-zone] {
+  position: relative;
+}
+
+body.inpaint-select-active [data-inpaint-zone] > img,
+body.inpaint-select-active [data-inpaint-zone] > canvas {
+  cursor: pointer !important;
+  animation: inpaint-glow-pulse 2s ease-in-out infinite;
+  border: 2px solid color-mix(in srgb, var(--zzz-primary) 60%, transparent) !important;
+  border-radius: 12px;
+  z-index: 55;
+  position: relative;
+}
+
+/* Corner particle decorations */
+body.inpaint-select-active [data-inpaint-zone]::before,
+body.inpaint-select-active [data-inpaint-zone]::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zzz-primary);
+  box-shadow: 0 0 8px var(--zzz-primary), 0 0 16px color-mix(in srgb, var(--zzz-primary) 70%, transparent);
+  z-index: 56;
+  pointer-events: none;
+}
+
+body.inpaint-select-active [data-inpaint-zone]::before {
+  top: -4px;
+  right: -4px;
+  animation: inpaint-particle-1 2s ease-in-out infinite;
+}
+
+body.inpaint-select-active [data-inpaint-zone]::after {
+  bottom: -4px;
+  left: -4px;
+  animation: inpaint-particle-2 2.3s ease-in-out infinite 0.5s;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  body.inpaint-select-active [data-inpaint-zone] > img,
+  body.inpaint-select-active [data-inpaint-zone] > canvas {
+    animation: none;
+    border-color: var(--zzz-primary) !important;
+  }
+  body.inpaint-select-active [data-inpaint-zone]::before,
+  body.inpaint-select-active [data-inpaint-zone]::after {
+    animation: none;
+    opacity: 1;
+  }
+
   *,
   *::before,
   *::after {

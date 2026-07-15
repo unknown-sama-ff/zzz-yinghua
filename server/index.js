@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
+import multer from 'multer';
 import { providers, registerTaskStore } from './providers.js';
 import { UpstreamError, fetchWithTimeout, parseJsonSafe, codeFromStatus } from './http.js';
 
@@ -42,6 +43,9 @@ app.use(
 // several images into one PNG, whose base64 is ~33% larger than the bytes —
 // hence the generous ceiling beyond any single 10MB upload.
 app.use(express.json({ limit: '50mb' }));
+
+// Multer for multipart/form-data (inpaint endpoint).
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 
@@ -128,6 +132,72 @@ app.post('/api/generate', async (req, res) => {
       return fail(res, err.status, err.code, err.message);
     }
     console.error('[generate] unexpected error:', err);
+    return fail(res, 500, 'UNKNOWN', '服务端内部错误');
+  }
+});
+
+// ── Inpaint (image + optional mask + prompt) via gpt-image ───────────────────
+app.post('/api/inpaint', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'mask', maxCount: 1 },
+]), async (req, res) => {
+  if (!req.files?.image || !Array.isArray(req.files.image) || req.files.image.length === 0) {
+    return fail(res, 400, 'INVALID_INPUT', '缺少图片文件 (field: image)');
+  }
+  const imageFile = req.files.image[0];
+  const maskFile = req.files.mask?.[0];
+
+  const { prompt, provider, model, apiKey, baseUrl, useServerPreset } = req.body || {};
+  if (!prompt || typeof prompt !== 'string') {
+    return fail(res, 400, 'INVALID_INPUT', '缺少 prompt');
+  }
+
+  const targetProvider = (typeof provider === 'string' && VALID_PROVIDERS.has(provider))
+    ? provider
+    : 'gpt-image';
+  if (targetProvider !== 'gpt-image') {
+    return fail(res, 400, 'INVALID_INPUT', '局部重绘目前仅支持 gpt-image 提供方');
+  }
+
+  const imageBase64 = imageFile.buffer.toString('base64');
+  const maskBase64 = maskFile ? maskFile.buffer.toString('base64') : undefined;
+
+  const body = {
+    provider: targetProvider,
+    prompt,
+    imageBase64,
+    imageMime: imageFile.mimetype,
+    maskBase64,
+    maskMime: maskFile ? maskFile.mimetype : undefined,
+    n: 1,
+    ...(typeof model === 'string' && model ? { model } : {}),
+    ...(typeof apiKey === 'string' && apiKey ? { apiKey } : {}),
+    ...(typeof baseUrl === 'string' && baseUrl ? { baseUrl } : {}),
+    ...(useServerPreset === true ? { useServerPreset: true } : {}),
+  };
+
+  const started = Date.now();
+  try {
+    const result = await providers[targetProvider](body);
+    const taskId = result.taskId;
+    if (taskId && (!result.images || result.images.length === 0)) {
+      taskStore.set(taskId, {
+        status: 'pending',
+        timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS),
+      });
+      console.log(`[inpaint] task queued id=${taskId} (${Date.now() - started}ms)`);
+      return res.json({ ok: true, taskId });
+    }
+    if (!result.images || result.images.length === 0) {
+      return fail(res, 502, 'UPSTREAM_ERROR', '上游未返回图片');
+    }
+    console.log(`[inpaint] ok images=${result.images.length} (${Date.now() - started}ms) mask=${Boolean(maskBase64)}`);
+    return res.json({ ok: true, images: result.images });
+  } catch (err) {
+    if (err instanceof UpstreamError) {
+      return fail(res, err.status, err.code, err.message);
+    }
+    console.error('[inpaint] unexpected error:', err);
     return fail(res, 500, 'UNKNOWN', '服务端内部错误');
   }
 });

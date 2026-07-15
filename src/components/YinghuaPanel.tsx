@@ -9,6 +9,7 @@ import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from 
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { useBuildRequest } from './useBuildRequest';
+import { useInpaintStore } from '../store/useInpaintStore';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
 import type { GallerySaveInfo } from './GallerySaveButton';
@@ -227,7 +228,7 @@ export function YinghuaPanel() {
   };
 
   return (
-    <section className="glass p-6">
+    <section className="glass p-6" data-inpaint-zone="yinghua">
       <div className="flex items-center justify-between">
         <SectionHeader step="04" title="影画动作设计 · 三风格（生图时间可能较长，结果可能不理想，多抽几次卡）" />
         <button
@@ -366,6 +367,11 @@ export function YinghuaPanel() {
                     } satisfies GallerySaveInfo)
                   : undefined
               }
+              onInpaintClick={(src) => {
+                const openWorkspace = useInpaintStore.getState().openWorkspace;
+                openWorkspace({ url: src, type: 'yinghua', slotId: String(style.id), index: 0 });
+              }}
+              inpaintMeta={{ type: 'yinghua', slotId: String(style.id), index: 0 }}
             />
           </div>
           );

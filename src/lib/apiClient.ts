@@ -113,8 +113,101 @@ async function pollTask(taskId: string): Promise<string[]> {
   throw new ApiError('UPSTREAM_TIMEOUT', '生图任务轮询超时');
 }
 
-function sleep(ms: number): Promise<void> {
+async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Call the inpaint endpoint. Uses multipart/form-data with image + optional mask.
+ */
+export async function inpaint(params: {
+  imageDataUrl: string;
+  maskDataUrl?: string;
+  prompt: string;
+  provider?: string;
+  model?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  useServerPreset?: boolean;
+}): Promise<string[]> {
+  const { imageDataUrl, maskDataUrl, prompt, provider = 'gpt-image', model, apiKey, baseUrl, useServerPreset } = params;
+
+  // Parse data URLs to extract base64 and mime
+  function parseDataUrl(dataUrl: string): { base64: string; mime: string } {
+    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) throw new Error('Invalid data URL');
+    return { base64: match[2], mime: match[1] };
+  }
+
+  const { base64: imageBase64, mime: imageMime } = parseDataUrl(imageDataUrl);
+
+  // Convert base64 string to Uint8Array for FormData Blob
+  function base64ToUint8Array(b64: string): Uint8Array {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  const imageBytes = base64ToUint8Array(imageBase64);
+  const imageBlob = new Blob([imageBytes as BlobPart], { type: imageMime });
+  const imageExt = imageMime === 'image/jpeg' || imageMime === 'image/jpg' ? 'jpg' : 'png';
+
+  const form = new FormData();
+  form.append('image', imageBlob, `image.${imageExt}`);
+  form.append('prompt', prompt);
+  form.append('provider', provider);
+  if (model) form.append('model', model);
+  if (apiKey) form.append('apiKey', apiKey);
+  if (baseUrl) form.append('baseUrl', baseUrl);
+  if (useServerPreset) form.append('useServerPreset', 'true');
+
+  if (maskDataUrl) {
+    const { base64: maskBase64, mime: maskMime } = parseDataUrl(maskDataUrl);
+    const maskBytes = base64ToUint8Array(maskBase64);
+    const maskBlob = new Blob([maskBytes as BlobPart], { type: maskMime });
+    const maskExt = maskMime === 'image/jpeg' || maskMime === 'image/jpg' ? 'jpg' : 'png';
+    form.append('mask', maskBlob, `mask.${maskExt}`);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 360000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/inpaint`, {
+      method: 'POST',
+      body: form,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError('UPSTREAM_TIMEOUT', '生成超时（上游耗时过长）// 请重试或稍后再试');
+    }
+    throw new ApiError('UNKNOWN', '无法连接到后端代理 // 请确认服务端已启动或网络连接');
+  }
+
+  let data: ApiResponse;
+  try {
+    data = (await res.json()) as ApiResponse;
+  } catch {
+    clearTimeout(timer);
+    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`);
+  }
+  clearTimeout(timer);
+
+  if (!data.ok) {
+    throw new ApiError(data.code, data.message);
+  }
+
+  const taskId = data.taskId;
+  if (taskId) {
+    const images = await pollTask(taskId);
+    return images;
+  }
+
+  return data.images;
 }
 
 export class ApiError extends Error {

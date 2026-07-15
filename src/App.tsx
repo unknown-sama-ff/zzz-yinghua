@@ -7,6 +7,9 @@ import { YinghuaPanel } from './components/YinghuaPanel';
 import { YinghuaViewer } from './components/YinghuaViewer';
 import { PosterPanel } from './components/PosterPanel';
 import { GalleryPanel } from './components/GalleryPanel';
+import { InpaintWorkspace } from './components/InpaintWorkspace';
+import { FloatingInpaintButton } from './components/FloatingInpaintButton';
+import { InpaintTargetSelector } from './components/InpaintTargetSelector';
 import { Toast } from './components/Toast';
 import { CursorEffects } from './components/CursorEffects';
 
@@ -53,11 +56,16 @@ export default function App() {
         </div>
 
         {/* Generation steps, full width, stacked in order. */}
-        <YinghuaPanel />
-        <YinghuaViewer />
-        <PosterPanel />
-        <GalleryPanel />
+        <InpaintTargetSelector>
+          <YinghuaPanel />
+          <YinghuaViewer />
+          <PosterPanel />
+          <GalleryPanel />
+        </InpaintTargetSelector>
       </main>
+
+      <FloatingInpaintButton />
+      <InpaintWorkspace />
 
       <footer className="mx-auto max-w-6xl px-6 pb-8 text-center font-mono text-[11px] text-zzz-text/40">
         密钥仅存于服务端 · custom-url 出站经基础 SSRF 校验 · 切换特效程序化复刻

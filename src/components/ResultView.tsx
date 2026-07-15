@@ -10,10 +10,13 @@ interface ResultViewProps {
   pickLabel?: string;
   /** When provided, a "save to gallery" button appears next to the download button. */
   saveInfo?: GallerySaveInfo;
+  /** When provided, an inpaint button appears in the hover toolbar. */
+  onInpaintClick?: (src: string, meta: { type: string; slotId?: string; index?: number }) => void;
+  inpaintMeta?: { type: string; slotId?: string; index?: number };
 }
 
 /** Renders a generation slot: skeleton while loading, images + downloads done. */
-export function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo }: ResultViewProps) {
+export function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo, onInpaintClick, inpaintMeta }: ResultViewProps) {
   if (slot.status === 'idle') return null;
 
   if (slot.status === 'loading') {
@@ -52,6 +55,14 @@ export function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo }
                 className="glass-btn px-3 py-1 text-xs text-zzz-cyan"
               >
                 {pickLabel ?? '送入查看器'}
+              </button>
+            )}
+            {onInpaintClick && inpaintMeta && (
+              <button
+                onClick={() => onInpaintClick(src, inpaintMeta)}
+                className="glass-btn px-3 py-1 text-xs text-[var(--zzz-primary)]"
+              >
+                🎨 重绘
               </button>
             )}
             <button

@@ -77,6 +77,8 @@ export function ThreeViewPanel() {
   const setThreeViewPrompt = useStore((s) => s.setThreeViewPrompt);
   const threeViewSlot = useStore((s) => s.threeViewSlot);
   const setThreeViewSlot = useStore((s) => s.setThreeViewSlot);
+  const costumeChangeSlot = useStore((s) => s.costumeChangeSlot);
+  const costumeChangeHistory = useStore((s) => s.costumeChangeHistory);
   const setUpload = useStore((s) => s.setUpload);
   const setPalette = useStore((s) => s.setPalette);
   const provider = useStore((s) => s.provider);
@@ -133,8 +135,9 @@ export function ThreeViewPanel() {
   };
 
   return (
-    <section className="glass p-6">
-      <SectionHeader step="01" title="三视图生成工作台（有三视图直接跳到02）" />
+    <>
+      <section className="glass p-6" data-inpaint-zone="threeview">
+        <SectionHeader step="01" title="三视图生成工作台（有三视图直接跳到02）" />
 
       <p className="mb-4 font-mono text-xs text-zzz-text/55">
         上传正面（必填）+ 侧面/背面（可选），自动拼合后发给 AI 生成完整三视图。（建议上传 PNG 透明背景图；只上传正面可能效果不佳）
@@ -175,5 +178,27 @@ export function ThreeViewPanel() {
         pickLabel="用作主立绘"
       />
     </section>
+
+    {/* Costume change results (02 module) */}
+    <section className="glass mt-4 p-6" data-inpaint-zone="costume">
+      <SectionHeader step="02" title="角色换装三视图" />
+      <ResultView
+        slot={costumeChangeSlot}
+        downloadPrefix="costume-change"
+      />
+      {costumeChangeHistory.length > 0 && (
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {costumeChangeHistory.slice(0, 6).map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt={`换装历史 ${i + 1}`}
+              className="h-24 w-full rounded-lg border border-zzz-text/10 bg-zzz-ink/40 object-contain"
+            />
+          ))}
+        </div>
+      )}
+    </section>
+    </>
   );
 }

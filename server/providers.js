@@ -359,6 +359,13 @@ async function gptImage(req) {
     }
     form.append('n', String(n));
     form.append('image', new Blob([processedBuffer], { type: processedMime }), `image.${processedExt}`);
+    if (req.maskBase64) {
+      const maskBuf = Buffer.from(req.maskBase64, 'base64');
+      const maskMime = req.maskMime || 'image/png';
+      const maskExt = maskMime === 'image/jpeg' || maskMime === 'image/jpg' ? 'jpg' : 'png';
+      form.append('mask', new Blob([maskBuf], { type: maskMime }), `mask.${maskExt}`);
+      console.log(`[gpt-image] mask attached: ${maskBuf.length} bytes (${(maskBuf.length/1024).toFixed(1)} KB)`);
+    }
     let res = await tryEdits(form);
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
@@ -381,6 +388,10 @@ async function gptImage(req) {
           }
           retryForm.append('n', String(n));
           retryForm.append('image', new Blob([reduced], { type: 'image/jpeg' }), 'image.jpg');
+          if (req.maskBase64) {
+            const maskBuf = Buffer.from(req.maskBase64, 'base64');
+            retryForm.append('mask', new Blob([maskBuf], { type: req.maskMime || 'image/png' }), 'mask.png');
+          }
           res = await tryEdits(retryForm);
           if (!res.ok) {
             const retryText = await res.text().catch(() => '');

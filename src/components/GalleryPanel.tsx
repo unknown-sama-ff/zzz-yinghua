@@ -28,6 +28,8 @@ function formatTime(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+import { useInpaintStore } from '../store/useInpaintStore';
+
 export function GalleryPanel() {
   const [rows, setRows] = useState<GalleryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,7 +111,11 @@ export function GalleryPanel() {
                 alt={row.style}
                 loading="lazy"
                 className="w-full cursor-pointer object-contain"
-                onClick={() => setLightbox(row.image_url)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const openWorkspace = useInpaintStore.getState().openWorkspace;
+                  openWorkspace({ url: row.image_url, type: 'gallery', index: row.id });
+                }}
               />
               <div className="p-2 font-mono text-[10px] text-zzz-text/55 leading-relaxed">
                 <div className="text-zzz-primary/80 truncate">{row.style}</div>

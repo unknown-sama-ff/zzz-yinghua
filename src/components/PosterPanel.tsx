@@ -97,7 +97,7 @@ export function PosterPanel() {
   };
 
   return (
-    <section className="glass p-6">
+    <section className="glass p-6" data-inpaint-zone="poster">
       <SectionHeader step="06" title="作者推荐 · 绝区零特色提示词 · 自由 / 海报版 · 一键生成" />
 
       <div className="-mt-2 mb-3 flex items-center gap-2">
