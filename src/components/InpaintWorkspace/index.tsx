@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, memo } from 'react';
 import { useInpaintStore } from '../../store/useInpaintStore';
 import { useToast } from '../../store/useToast';
 import { ToolPanel } from './ToolPanel';
 import { CanvasEditor } from './CanvasEditor';
 import { PromptBar } from './PromptBar';
 
-export function InpaintWorkspace() {
+export const InpaintWorkspace = memo(function InpaintWorkspace() {
   const isWorkspaceOpen = useInpaintStore((s) => s.isWorkspaceOpen);
   const targetImage = useInpaintStore((s) => s.targetImage);
   const closeWorkspace = useInpaintStore((s) => s.closeWorkspace);
@@ -34,6 +34,10 @@ export function InpaintWorkspace() {
     }
     closeWorkspace();
   };
+
+  const handleMaskEmpty = useCallback(() => {
+    // Keep mask but note it's empty
+  }, []);
 
   if (!isWorkspaceOpen || !targetImage) return null;
 
@@ -95,9 +99,7 @@ export function InpaintWorkspace() {
         {/* Center canvas */}
         <CanvasEditor
           onMaskChange={(dataUrl) => setMaskDataUrl(dataUrl)}
-          onMaskEmpty={() => {
-            // Keep mask but note it's empty
-          }}
+          onMaskEmpty={handleMaskEmpty}
         />
       </div>
 
@@ -105,4 +107,4 @@ export function InpaintWorkspace() {
       <PromptBar onResult={handleResult} />
     </div>
   );
-}
+});

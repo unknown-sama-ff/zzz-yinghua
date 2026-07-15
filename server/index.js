@@ -289,6 +289,16 @@ app.get('/', (_req, res) => {
 });
 
 if (hasDist) {
+  // Cache hashed assets (Vite chunks contain `-` in the filename) for 1 year,
+  // and everything else for 1 hour. This avoids re-downloading unchanged JS/CSS.
+  app.use((req, res, next) => {
+    if (req.path.match(/^\/assets\/.*-[a-f0-9]+\.(js|css)$/)) {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (req.path.match(/\.(js|css|woff2|png|webp|jpg|ico)$/)) {
+      res.set('Cache-Control', 'public, max-age=3600');
+    }
+    next();
+  });
   app.use(express.static(distDir));
   // SPA fallback for client-side routes — never swallow /api/*
   app.get(/^(?!\/api\/).*/, (req, _res, next) => {

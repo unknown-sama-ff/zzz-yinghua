@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, memo } from 'react';
 import { useCursorEffectsPref } from '../lib/useCursorEffectsPref';
 import { useStore } from '../store/useStore';
+import { useInpaintStore } from '../store/useInpaintStore';
 
 const THEME_VARS = ['--zzz-primary', '--zzz-magenta', '--zzz-cyan'] as const;
 const MAX_PARTICLES = 150;
@@ -115,17 +116,20 @@ function createThemeColorCache() {
  * no canvas) when the user's saved preference is off or the OS has
  * prefers-reduced-motion set.
  */
-export function CursorEffects() {
+export const CursorEffects = memo(function CursorEffects() {
   const { enabled, reduced, setEnabled } = useCursorEffectsPref();
   const freeloadEnabled = useStore((s) => s.freeloadEnabled);
   const setFreeloadEnabled = useStore((s) => s.setFreeloadEnabled);
+  const isWorkspaceOpen = useInpaintStore((s) => s.isWorkspaceOpen);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const mousePosRef = useRef<{ x: number | null; y: number | null }>({ x: null, y: null });
   const lastTrailRef = useRef<{ x: number; y: number }>({ x: -Infinity, y: -Infinity });
   const enabledRef = useRef(enabled);
+  const workspaceOpenRef = useRef(isWorkspaceOpen);
   enabledRef.current = enabled;
+  workspaceOpenRef.current = isWorkspaceOpen;
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -267,7 +271,7 @@ export function CursorEffects() {
     window.addEventListener('resize', resize);
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!enabledRef.current) return;
+      if (!enabledRef.current || workspaceOpenRef.current) return;
       mouseX = e.clientX;
       mouseY = e.clientY;
       mousePosRef.current = { x: mouseX, y: mouseY };
@@ -291,7 +295,7 @@ export function CursorEffects() {
     };
 
     const onClick = (e: MouseEvent) => {
-      if (!enabledRef.current) return;
+      if (!enabledRef.current || workspaceOpenRef.current) return;
       if (particlesRef.current.length >= maxParticles) particlesRef.current.shift();
       particlesRef.current.push({
         kind: 'ripple',
@@ -307,7 +311,7 @@ export function CursorEffects() {
     };
 
     const onWheel = () => {
-      if (!enabledRef.current) return;
+      if (!enabledRef.current || workspaceOpenRef.current) return;
       const now = performance.now();
       if (now - lastScrollPulse < SCROLL_PULSE_THROTTLE_MS) return;
       lastScrollPulse = now;
@@ -327,7 +331,7 @@ export function CursorEffects() {
     // Mobile touch support: mirror the pointermove trail logic for touchmove
     // so drag-scrolling also produces particle trails.
     const onTouchMove = (e: TouchEvent) => {
-      if (!enabledRef.current) return;
+      if (!enabledRef.current || workspaceOpenRef.current) return;
       const touch = e.touches[0];
       const tx = touch.clientX;
       const ty = touch.clientY;
@@ -458,15 +462,40 @@ export function CursorEffects() {
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }, [enabled]);
 
+  // When the inpaint workspace opens, clear all particles and stop the
+  // animation loop so cursor effects don't waste CPU while painting.
+  useEffect(() => {
+    if (!isWorkspaceOpen) return;
+    particlesRef.current = [];
+    mousePosRef.current = { x: null, y: null };
+    lastTrailRef.current = { x: -Infinity, y: -Infinity };
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }, [isWorkspaceOpen]);
+
   if (reduced) return null;
 
   return (
     <>
-      <canvas ref={canvasRef} className="pointer-events-none fixed inset-0 z-[10000]" style={{ display: enabled ? undefined : 'none' }} aria-hidden="true" />
-      <div ref={pulseRef} className="scroll-pulse-overlay pointer-events-none fixed inset-0 z-[9998]" aria-hidden="true" />
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none fixed inset-0 z-[10000]"
+        style={{ display: (enabled && !isWorkspaceOpen) ? undefined : 'none' }}
+        aria-hidden="true"
+      />
+      <div
+        ref={pulseRef}
+        className="scroll-pulse-overlay pointer-events-none fixed inset-0 z-[9998]"
+        style={{ display: isWorkspaceOpen ? 'none' : undefined }}
+        aria-hidden="true"
+      />
 
       {/* Social link buttons */}
-      <div className="fixed left-4 top-4 z-[10001] flex items-center gap-3">
+      {!isWorkspaceOpen && (
+        <div className="fixed left-4 top-4 z-[10001] flex items-center gap-3">
         <a
           href="https://space.bilibili.com/661830801"
           target="_blank"
@@ -495,24 +524,29 @@ export function CursorEffects() {
           </svg>
         </a>
       </div>
+        )}
 
-      <button
-        onClick={() => setFreeloadEnabled(!freeloadEnabled)}
-        aria-pressed={freeloadEnabled}
-        data-active={freeloadEnabled}
-        className="glass-btn fixed bottom-[3.5rem] right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
-      >
-        白嫖作者 {freeloadEnabled ? '😋' : '😐'}
-      </button>
-      <button
-        onClick={() => setEnabled(!enabled)}
-        aria-pressed={enabled}
-        data-active={enabled}
-        aria-label={enabled ? '关闭鼠标特效' : '开启鼠标特效'}
-        className="glass-btn fixed bottom-4 right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
-      >
-        特效 {enabled ? 'ON' : 'OFF'}
-      </button>
+      {!isWorkspaceOpen && (
+        <>
+          <button
+            onClick={() => setFreeloadEnabled(!freeloadEnabled)}
+            aria-pressed={freeloadEnabled}
+            data-active={freeloadEnabled}
+            className="glass-btn fixed bottom-[3.5rem] right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
+          >
+            白嫖作者 {freeloadEnabled ? '😋' : '😐'}
+          </button>
+          <button
+            onClick={() => setEnabled(!enabled)}
+            aria-pressed={enabled}
+            data-active={enabled}
+            aria-label={enabled ? '关闭鼠标特效' : '开启鼠标特效'}
+            className="glass-btn fixed bottom-4 right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
+          >
+            特效 {enabled ? 'ON' : 'OFF'}
+          </button>
+        </>
+      )}
     </>
   );
-}
+});

@@ -1,6 +1,7 @@
 import { downloadImage } from '../lib/download';
 import { GallerySaveButton, type GallerySaveInfo } from './GallerySaveButton';
 import type { GenSlot } from '../types';
+import { memo } from 'react';
 
 interface ResultViewProps {
   slot: GenSlot;
@@ -16,7 +17,7 @@ interface ResultViewProps {
 }
 
 /** Renders a generation slot: skeleton while loading, images + downloads done. */
-export function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo, onInpaintClick, inpaintMeta }: ResultViewProps) {
+export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo, onInpaintClick, inpaintMeta }: ResultViewProps) {
   if (slot.status === 'idle') return null;
 
   if (slot.status === 'loading') {
@@ -62,7 +63,7 @@ export function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo, 
                 onClick={() => onInpaintClick(src, inpaintMeta)}
                 className="glass-btn px-3 py-1 text-xs text-[var(--zzz-primary)]"
               >
-                🎨 重绘
+                🎨 局部重绘
               </button>
             )}
             <button
@@ -76,4 +77,4 @@ export function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo, 
       ))}
     </div>
   );
-}
+});

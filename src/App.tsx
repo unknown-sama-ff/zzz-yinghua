@@ -6,12 +6,12 @@ import { ThreeViewPanel } from './components/ThreeViewPanel';
 import { YinghuaPanel } from './components/YinghuaPanel';
 import { YinghuaViewer } from './components/YinghuaViewer';
 import { PosterPanel } from './components/PosterPanel';
-import { GalleryPanel } from './components/GalleryPanel';
 import { InpaintWorkspace } from './components/InpaintWorkspace';
 import { FloatingInpaintButton } from './components/FloatingInpaintButton';
 import { InpaintTargetSelector } from './components/InpaintTargetSelector';
 import { Toast } from './components/Toast';
 import { CursorEffects } from './components/CursorEffects';
+import { lazy, Suspense } from 'react';
 
 export default function App() {
   const palette = useStore((s) => s.palette);
@@ -60,7 +60,13 @@ export default function App() {
           <YinghuaPanel />
           <YinghuaViewer />
           <PosterPanel />
-          <GalleryPanel />
+          <Suspense fallback={
+            <div className="mt-3 flex h-48 animate-pulse items-center justify-center rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03]">
+              <span className="font-mono text-xs tracking-widest text-zzz-primary">LOADING…</span>
+            </div>
+          }>
+            <LazyGalleryPanel />
+          </Suspense>
         </InpaintTargetSelector>
       </main>
 
@@ -75,3 +81,7 @@ export default function App() {
     </div>
   );
 }
+
+const LazyGalleryPanel = lazy(() =>
+  import('./components/GalleryPanel').then(m => ({ default: m.GalleryPanel }))
+);

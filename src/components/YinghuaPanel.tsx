@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, memo } from 'react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
@@ -13,10 +13,78 @@ import { useInpaintStore } from '../store/useInpaintStore';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
 import type { GallerySaveInfo } from './GallerySaveButton';
-import type { YinghuaStyleId } from '../types';
+import type { GenSlot, YinghuaStyleId } from '../types';
 
-/** Section 2.4 — generate the three ZZZ yinghua action styles. */
-export function YinghuaPanel() {
+// ---------------------------------------------------------------------------
+// Per-style card — memoized so changes to one style don't re-render the others
+// ---------------------------------------------------------------------------
+const StyleCard = memo(function StyleCard({
+  style,
+  prompt,
+  slot,
+  characterName,
+  provider,
+  onRun,
+  onPromptChange,
+  onInpaintClick,
+}: {
+  style: { id: YinghuaStyleId; label: string; description: string };
+  prompt: string;
+  slot: GenSlot;
+  characterName: string;
+  provider: string;
+  onRun: (id: YinghuaStyleId) => void;
+  onPromptChange: (styleId: YinghuaStyleId, value: string) => void;
+  onInpaintClick: (src: string) => void;
+}) {
+  const zeroReady = slot.status === 'done' && Boolean(slot.images[0]);
+  // 链路：零命→三命→六命
+  const needsBase = (style.id === 2 && !zeroReady);
+
+  return (
+    <div
+      className="flex flex-col rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03] p-3"
+    >
+      <h3 className="font-mono text-sm font-bold text-zzz-magenta">{style.label}</h3>
+      <p className="mb-2 mt-1 text-xs leading-relaxed text-zzz-text/55">{style.description}</p>
+      <textarea
+        value={prompt}
+        onChange={(e) => onPromptChange(style.id, e.target.value)}
+        rows={5}
+        className="glass-input w-full flex-1 resize-y px-2 py-2 text-xs leading-relaxed"
+      />
+      <button
+        onClick={() => onRun(style.id)}
+        disabled={slot.status === 'loading' || needsBase}
+        className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
+      >
+        {needsBase ? '需先生成零命' : '生成'}
+      </button>
+      <ResultView
+        slot={slot}
+        downloadPrefix={`yinghua-style${style.id}`}
+        saveInfo={
+          slot.images[0]
+            ? ({
+                imageUrl: slot.images[0],
+                style: style.label,
+                characterName,
+                prompt,
+                provider,
+              } satisfies GallerySaveInfo)
+            : undefined
+        }
+        onInpaintClick={onInpaintClick}
+        inpaintMeta={{ type: 'yinghua', slotId: String(style.id), index: 0 }}
+      />
+    </div>
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Main panel
+// ---------------------------------------------------------------------------
+export const YinghuaPanel = memo(function YinghuaPanel() {
   // Per-field selectors so this component only re-renders on fields it reads.
   const characterName = useStore((s) => s.characterName);
   const yinghuaPrompts = useStore((s) => s.yinghuaPrompts);
@@ -76,7 +144,6 @@ export function YinghuaPanel() {
   const runFaceDetect = async (src: string) => {
     setDetectFaceError(null);
     try {
-      // Normalize remote URLs from upstream APIs to data URLs.
       let dataUrl = src;
       if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
         const res = await fetch(dataUrl);
@@ -127,9 +194,6 @@ export function YinghuaPanel() {
           : baseImg;
       }
 
-      // gpt-image /images/edits is strict about payload size and format.
-      // API-returned images may be remote URLs or PNG data URLs — both need
-      // to be resolved/compressed to a small JPEG data URL before sending.
       if (provider === 'gpt-image' && imageOverride) {
         let src = imageOverride;
         if (src.startsWith('http://') || src.startsWith('https://')) {
@@ -149,8 +213,6 @@ export function YinghuaPanel() {
       return;
     }
 
-    // Phase 1: set loading state, yield so the browser paints the skeleton
-    // before we enter the long-running generate() + JSON-parse block.
     setYinghuaSlot(id, { status: 'loading', error: undefined });
     await Promise.resolve();
 
@@ -171,7 +233,6 @@ export function YinghuaPanel() {
             ? await embedThumbnail(images[0], threeView)
             : images[0];
 
-          // Same gpt-image compression fix for the undress pass.
           if (provider === 'gpt-image' && undressImageOverride) {
             if (undressImageOverride.startsWith('http://') || undressImageOverride.startsWith('https://')) {
               const res = await fetch(undressImageOverride);
@@ -195,15 +256,9 @@ export function YinghuaPanel() {
           finalImages = images;
         }
 
-        // Phase 2: set done, yield so the new <img> can start decoding
-        // before face-detect + theme-update cascade runs.
         setYinghuaSlot(3, { status: 'done', images: finalImages });
         await Promise.resolve();
 
-        // Phase 3: defer face-detect + theme colour update. Each of these
-        // triggers a separate re-render / style-recalc cascade (MutationObserver
-        // + getComputedStyle on every .glass element). Running them after the
-        // done state has painted keeps the viewer transition smooth.
         const capturedFinalImages = finalImages;
         const capturedPalette = palette;
         setTimeout(() => {
@@ -226,6 +281,15 @@ export function YinghuaPanel() {
       showError(msg);
     }
   };
+
+  const handlePromptChange = useCallback((styleId: YinghuaStyleId, value: string) => {
+    setYinghuaPrompt(styleId, value);
+  }, [setYinghuaPrompt]);
+
+  const handleInpaintClick = useCallback((src: string, styleId: YinghuaStyleId) => {
+    const openWorkspace = useInpaintStore.getState().openWorkspace;
+    openWorkspace({ url: src, type: 'yinghua', slotId: String(styleId), index: 0 });
+  }, []);
 
   return (
     <section className="glass p-6" data-inpaint-zone="yinghua">
@@ -328,55 +392,20 @@ export function YinghuaPanel() {
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {YINGHUA_STYLES.map((style) => {
-          const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
-          const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
-          // 链路：零命→三命→六命。三命(2)依赖零命(1)；六命(3)依赖三命(2)。
-          const needsBase = (style.id === 2 && !zeroReady) || (style.id === 3 && !threeReady);
-          return (
-          <div
+        {YINGHUA_STYLES.map((style) => (
+          <StyleCard
             key={style.id}
-            className="flex flex-col rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03] p-3"
-          >
-            <h3 className="font-mono text-sm font-bold text-zzz-magenta">{style.label}</h3>
-            <p className="mb-2 mt-1 text-xs leading-relaxed text-zzz-text/55">{style.description}</p>
-            <textarea
-              value={yinghuaPrompts[style.id]}
-              onChange={(e) => setYinghuaPrompt(style.id, e.target.value)}
-              rows={5}
-              className="glass-input w-full flex-1 resize-y px-2 py-2 text-xs leading-relaxed"
-            />
-            <button
-              onClick={() => void run(style.id)}
-              disabled={yinghuaSlots[style.id].status === 'loading' || needsBase}
-              className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
-            >
-              {needsBase ? (style.id === 3 ? '需先生成三命' : '需先生成零命') : '生成'}
-            </button>
-            <ResultView
-              slot={yinghuaSlots[style.id]}
-              downloadPrefix={`yinghua-style${style.id}`}
-              saveInfo={
-                yinghuaSlots[style.id].images[0]
-                  ? ({
-                      imageUrl: yinghuaSlots[style.id].images[0],
-                      style: style.label,
-                      characterName,
-                      prompt: yinghuaPrompts[style.id],
-                      provider,
-                    } satisfies GallerySaveInfo)
-                  : undefined
-              }
-              onInpaintClick={(src) => {
-                const openWorkspace = useInpaintStore.getState().openWorkspace;
-                openWorkspace({ url: src, type: 'yinghua', slotId: String(style.id), index: 0 });
-              }}
-              inpaintMeta={{ type: 'yinghua', slotId: String(style.id), index: 0 }}
-            />
-          </div>
-          );
-        })}
+            style={style}
+            prompt={yinghuaPrompts[style.id]}
+            slot={yinghuaSlots[style.id]}
+            characterName={characterName}
+            provider={provider}
+            onRun={run}
+            onPromptChange={handlePromptChange}
+            onInpaintClick={(src) => handleInpaintClick(src, style.id)}
+          />
+        ))}
       </div>
     </section>
   );
-}
+});

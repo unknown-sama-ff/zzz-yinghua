@@ -123,6 +123,7 @@ async function sleep(ms: number): Promise<void> {
 export async function inpaint(params: {
   imageDataUrl: string;
   maskDataUrl?: string;
+  maskBlobUrl?: string;
   prompt: string;
   provider?: string;
   model?: string;
@@ -130,7 +131,7 @@ export async function inpaint(params: {
   baseUrl?: string;
   useServerPreset?: boolean;
 }): Promise<string[]> {
-  const { imageDataUrl, maskDataUrl, prompt, provider = 'gpt-image', model, apiKey, baseUrl, useServerPreset } = params;
+  const { imageDataUrl, maskDataUrl, maskBlobUrl, prompt, provider = 'gpt-image', model, apiKey, baseUrl, useServerPreset } = params;
 
   // Parse data URLs to extract base64 and mime
   function parseDataUrl(dataUrl: string): { base64: string; mime: string } {
@@ -162,7 +163,11 @@ export async function inpaint(params: {
   if (baseUrl) form.append('baseUrl', baseUrl);
   if (useServerPreset) form.append('useServerPreset', 'true');
 
-  if (maskDataUrl) {
+  // Prefer blob URL (memory-efficient) over base64 dataUrl
+  if (maskBlobUrl) {
+    const maskBlob = await fetch(maskBlobUrl).then(r => r.blob());
+    form.append('mask', maskBlob, 'mask.png');
+  } else if (maskDataUrl) {
     const { base64: maskBase64, mime: maskMime } = parseDataUrl(maskDataUrl);
     const maskBytes = base64ToUint8Array(maskBase64);
     const maskBlob = new Blob([maskBytes as BlobPart], { type: maskMime });

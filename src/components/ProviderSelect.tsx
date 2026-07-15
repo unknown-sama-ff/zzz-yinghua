@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useStore } from '../store/useStore';
 import type { ProviderName } from '../types';
 import { SectionHeader } from './SectionHeader';
@@ -9,7 +10,7 @@ const PROVIDERS: { value: ProviderName; label: string }[] = [
 ];
 
 /** Provider dropdown + character name; expands custom-url config when chosen. */
-export function ProviderSelect() {
+export const ProviderSelect = memo(function ProviderSelect() {
   const provider = useStore((s) => s.provider);
   const setProvider = useStore((s) => s.setProvider);
   const custom = useStore((s) => s.custom);
@@ -169,4 +170,4 @@ export function ProviderSelect() {
       )}
     </section>
   );
-}
+});

@@ -6,16 +6,16 @@ import { YINGHUA_SIZE } from '../lib/prompts';
 import { stitchImages } from '../lib/stitchImages';
 import { validateImageFile, fileToDataUrl } from '../lib/validation';
 import { extractPalette } from '../lib/colorExtract';
-import { applyTheme } from '../lib/theme';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
+import { memo } from 'react';
 
 type ViewKey = 'front' | 'side' | 'back';
 
 const VIEW_LABELS: Record<ViewKey, string> = { front: '正面', side: '侧面', back: '背面' };
 
-function ViewSlot({
+const ViewSlot = memo(function ViewSlot({
   label,
   dataUrl,
   onFile,
@@ -67,18 +67,16 @@ function ViewSlot({
       />
     </div>
   );
-}
+});
 
 /** Section 03 — three-view generation workbench. */
-export function ThreeViewPanel() {
+export const ThreeViewPanel = memo(function ThreeViewPanel() {
   const threeViewUploads = useStore((s) => s.threeViewUploads);
   const setThreeViewUpload = useStore((s) => s.setThreeViewUpload);
   const threeViewPrompt = useStore((s) => s.threeViewPrompt);
   const setThreeViewPrompt = useStore((s) => s.setThreeViewPrompt);
   const threeViewSlot = useStore((s) => s.threeViewSlot);
   const setThreeViewSlot = useStore((s) => s.setThreeViewSlot);
-  const costumeChangeSlot = useStore((s) => s.costumeChangeSlot);
-  const costumeChangeHistory = useStore((s) => s.costumeChangeHistory);
   const setUpload = useStore((s) => s.setUpload);
   const setPalette = useStore((s) => s.setPalette);
   const provider = useStore((s) => s.provider);
@@ -130,13 +128,11 @@ export function ThreeViewPanel() {
     setUpload(src, 'three-view.png');
     const palette = await extractPalette(src);
     setPalette(palette);
-    applyTheme(palette);
     showError('✓ 已设为主立绘，主题色已更新');
   };
 
   return (
-    <>
-      <section className="glass p-6" data-inpaint-zone="threeview">
+    <section className="glass p-6">
         <SectionHeader step="01" title="三视图生成工作台（有三视图直接跳到02）" />
 
       <p className="mb-4 font-mono text-xs text-zzz-text/55">
@@ -178,27 +174,5 @@ export function ThreeViewPanel() {
         pickLabel="用作主立绘"
       />
     </section>
-
-    {/* Costume change results (02 module) */}
-    <section className="glass mt-4 p-6" data-inpaint-zone="costume">
-      <SectionHeader step="02" title="角色换装三视图" />
-      <ResultView
-        slot={costumeChangeSlot}
-        downloadPrefix="costume-change"
-      />
-      {costumeChangeHistory.length > 0 && (
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {costumeChangeHistory.slice(0, 6).map((src, i) => (
-            <img
-              key={i}
-              src={src}
-              alt={`换装历史 ${i + 1}`}
-              className="h-24 w-full rounded-lg border border-zzz-text/10 bg-zzz-ink/40 object-contain"
-            />
-          ))}
-        </div>
-      )}
-    </section>
-    </>
   );
-}
+});

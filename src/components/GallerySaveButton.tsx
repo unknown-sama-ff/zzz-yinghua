@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { supabase } from '../lib/supabase';
 import { parseDataUrl } from '../lib/validation';
 
@@ -30,7 +30,7 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-export function GallerySaveButton({ saveInfo }: Props) {
+export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: Props) {
   const [state, setState] = useState<SaveState>('idle');
 
   const handleSave = async () => {
@@ -81,4 +81,4 @@ export function GallerySaveButton({ saveInfo }: Props) {
       {state === 'error' ? '保存失败，重试' : '保存到画廊'}
     </button>
   );
-}
+});

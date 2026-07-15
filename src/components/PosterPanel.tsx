@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
+import { useInpaintStore } from '../store/useInpaintStore';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_SIZE, splitName } from '../lib/prompts';
 import { useBuildRequest } from './useBuildRequest';
@@ -54,7 +55,7 @@ function fillPoster(template: string, name: string, dominant: string, accent: st
 }
 
 /** Section 06 — one-click ZZZ poster generation, author-recommended prompt. */
-export function PosterPanel() {
+export const PosterPanel = memo(function PosterPanel() {
   const characterName = useStore((s) => s.characterName);
   const uploadedImage = useStore((s) => s.uploadedImage);
   const palette = useStore((s) => s.palette);
@@ -116,22 +117,24 @@ export function PosterPanel() {
 
       {/* Reference thumbnails — click to enlarge */}
       <div className="mb-3 flex gap-2 overflow-hidden rounded-lg border border-zzz-text/10 p-2">
-        <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.png`); setLightbox(true); }}>
+        <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.webp`); setLightbox(true); }}>
           <img
             key={`${current.label}-1`}
-            src={`/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.png`}
+            src={`/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.webp`}
             alt={`${current.label} 示例1`}
             className="mx-auto max-w-xs w-full"
+            data-no-inpaint
           />
           <p className="text-center font-mono text-[10px] text-zzz-text/45">参考图1 · 点击放大</p>
         </div>
         {current.id === 'surprise' && (
-          <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.label}_thumb.png`); setLightbox(true); }}>
+          <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.label}_thumb.webp`); setLightbox(true); }}>
             <img
               key={`${current.label}-2`}
-              src={`/作者推荐/${current.label}_thumb.png`}
+              src={`/作者推荐/${current.label}_thumb.webp`}
               alt={`${current.label} 示例2`}
               className="mx-auto max-w-xs w-full"
+              data-no-inpaint
             />
             <p className="text-center font-mono text-[10px] text-zzz-text/45">参考图2 · 点击放大</p>
           </div>
@@ -163,6 +166,11 @@ export function PosterPanel() {
           prompt,
           provider,
         } : undefined}
+        onInpaintClick={(src) => {
+          const openWorkspace = useInpaintStore.getState().openWorkspace;
+          openWorkspace({ url: src, type: 'poster' });
+        }}
+        inpaintMeta={{ type: 'poster' }}
       />
 
       {/* Lightbox overlay */}
@@ -175,9 +183,10 @@ export function PosterPanel() {
             src={lightboxSrc}
             alt={`${current.label} 示例`}
             className="max-h-full max-w-full rounded-lg object-contain"
+            data-no-inpaint
           />
         </div>
       )}
     </section>
   );
-}
+});

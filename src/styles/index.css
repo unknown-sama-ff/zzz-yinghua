@@ -126,7 +126,7 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 9999;
+  z-index: 1;
   background-image:
     repeating-linear-gradient(
       0deg,
@@ -358,21 +358,31 @@ body::before {
 }
 
 /* ====== Inpaint selection mode glow + particles ====== */
+
+/* The glow clone combines a static themed shadow (cheap, painted once)
+   with a transform-only pulse animation (cheap, compositor-only).
+   box-shadow animation is intentionally avoided — it forces repaint every
+   frame and is the main perf killer when many clones are visible. */
 @keyframes inpaint-glow-pulse {
   0%, 100% {
-    box-shadow:
-      0 0 12px var(--zzz-primary),
-      0 0 24px color-mix(in srgb, var(--zzz-primary) 70%, transparent),
-      0 0 48px color-mix(in srgb, var(--zzz-primary) 40%, transparent);
-    border-color: color-mix(in srgb, var(--zzz-primary) 85%, transparent);
+    transform: translateY(0) scale(1);
   }
   50% {
-    box-shadow:
-      0 0 20px var(--zzz-primary),
-      0 0 40px color-mix(in srgb, var(--zzz-primary) 90%, transparent),
-      0 0 72px color-mix(in srgb, var(--zzz-primary) 60%, transparent);
-    border-color: var(--zzz-primary);
+    transform: translateY(-8px) scale(1.015);
   }
+}
+
+/* Hovered glow clone: animation pauses, glow intensifies, z-index rises
+   above siblings so the hovered image feels "lifted out" of the stack. */
+.inpaint-portal-clone-hovered {
+  animation-play-state: paused !important;
+  z-index: 110 !important;
+  border-color: color-mix(in srgb, var(--zzz-primary) 90%, transparent) !important;
+  box-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.75),
+    0 0 30px var(--zzz-primary),
+    0 0 60px color-mix(in srgb, var(--zzz-primary) 95%, transparent),
+    0 0 100px color-mix(in srgb, var(--zzz-primary) 60%, transparent) !important;
 }
 
 @keyframes inpaint-particle-1 {
@@ -389,73 +399,36 @@ body::before {
   90% { opacity: 0.9; transform: translate(-6px, -10px) scale(1); }
 }
 
-/* ====== Inpaint selection mode — blur backdrop + glowing images ====== */
+/* ====== Inpaint selection mode — blur backdrop + portal glow ====== */
 
-/* Global blur layer: covers everything except z-indexed children above it.
-   z-index: 49 so glowing images (z-index: 100) float above and stay sharp. */
-body.inpaint-select-active::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 49;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  pointer-events: none;
+/* When selection is active, mark inpaintable zones so the portal can find them.
+   Visual glow is handled by the InpaintPortal React component (z-index:100 portal). */
+body.inpaint-select-active [data-inpaint-zone] {
+  position: static !important;
 }
-
-/* Glowing images/figures float above the blur layer */
-body.inpaint-select-active [data-inpaint-zone] figure,
-body.inpaint-select-active [data-inpaint-zone] > div > img,
-body.inpaint-select-active [data-inpaint-zone] canvas {
-  animation: inpaint-glow-pulse 2s ease-in-out infinite;
-  border: 2px solid color-mix(in srgb, var(--zzz-primary) 60%, transparent) !important;
-  border-radius: 12px;
-  z-index: 100 !important;
-  position: relative;
-}
-
-/* Allow glow to extend beyond overflow:hidden containers */
-body.inpaint-select-active [data-inpaint-zone] figure {
-  overflow: visible !important;
-}
-
-/* Corner particle decorations on zone containers */
-body.inpaint-select-active [data-inpaint-zone]::before,
 body.inpaint-select-active [data-inpaint-zone]::after {
-  content: '';
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--zzz-primary);
-  box-shadow: 0 0 8px var(--zzz-primary), 0 0 16px color-mix(in srgb, var(--zzz-primary) 70%, transparent);
-  z-index: 101;
-  pointer-events: none;
+  display: none;
 }
 
-body.inpaint-select-active [data-inpaint-zone]::before {
-  top: -4px;
-  right: -4px;
-  animation: inpaint-particle-1 2s ease-in-out infinite;
+/* Disable backdrop-filter on background glass panels during selection mode.
+   The overlay's backdrop-blur only needs to composite simple flat colors
+   (cheap) instead of recursively blurred glass (extremely expensive). */
+body.inpaint-select-active .glass,
+body.inpaint-select-active .glass-btn,
+body.inpaint-select-active .glass-input {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
-body.inpaint-select-active [data-inpaint-zone]::after {
-  bottom: -4px;
-  left: -4px;
-  animation: inpaint-particle-2 2.3s ease-in-out infinite 0.5s;
+/* Module 02 costume history items use color-mix() inside box-shadow with
+   transition-shadow. During selection mode, disable the transition and
+   replace color-mix() with simple rgba() to avoid expensive style
+   recalculations on every mouse move. */
+body.inpaint-select-active [data-inpaint-zone="costume"] .group {
+  transition: none !important;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  body.inpaint-select-active [data-inpaint-zone] figure,
-  body.inpaint-select-active [data-inpaint-zone] > div > img,
-  body.inpaint-select-active [data-inpaint-zone] canvas {
-    animation: none;
-    border-color: var(--zzz-primary) !important;
-  }
-  body.inpaint-select-active [data-inpaint-zone]::before,
-  body.inpaint-select-active [data-inpaint-zone]::after {
-    animation: none;
-    opacity: 1;
-  }
+/* Also disable group-hover reveal of action buttons during selection mode
+   to avoid hover-state style recalculations on the dense history list. */
+body.inpaint-select-active [data-inpaint-zone="costume"] .group > div:last-child {
+  display: none !important;
 }

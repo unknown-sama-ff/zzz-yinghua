@@ -1,4 +1,5 @@
 import { useInpaintStore } from '../../store/useInpaintStore';
+import { memo } from 'react';
 
 const TOOLS = [
   { key: 'brush' as const, icon: '🖌', label: '画笔 (B)', shortcut: 'B' },
@@ -6,11 +7,10 @@ const TOOLS = [
   { key: 'rect' as const, icon: '⬜', label: '矩形 (R)', shortcut: 'R' },
 ] as const;
 
-export function ToolPanel() {
+export const ToolPanel = memo(function ToolPanel() {
   const mode = useInpaintStore((s) => s.mode);
   const tool = useInpaintStore((s) => s.tool);
   const setTool = useInpaintStore((s) => s.setTool);
-  const undo = useInpaintStore((s) => s.undo);
   const clearMask = useInpaintStore((s) => s.clearMask);
 
   if (mode === 'smart') {
@@ -50,7 +50,10 @@ export function ToolPanel() {
       <div className="h-px w-8 bg-[var(--zzz-text)]/10 my-1" />
 
       <button
-        onClick={undo}
+        onClick={() => {
+          const canvas = (window as unknown as Record<string, { undo: () => void }>).__inpaintCanvas;
+          if (canvas?.undo) canvas.undo();
+        }}
         className="flex h-10 w-10 items-center justify-center rounded-xl text-sm text-[var(--zzz-text)]/60 border border-transparent hover:border-[var(--zzz-text)]/20 hover:text-[var(--zzz-text)] transition-all"
         title="撤销 (Ctrl+Z)"
       >
@@ -66,4 +69,4 @@ export function ToolPanel() {
       </button>
     </div>
   );
-}
+});

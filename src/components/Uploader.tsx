@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, memo } from 'react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
+import { useInpaintStore } from '../store/useInpaintStore';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
 import { extractPalette } from '../lib/colorExtract';
 import { applyTheme, resetTheme } from '../lib/theme';
@@ -9,10 +10,11 @@ import { YINGHUA_SIZE } from '../lib/prompts';
 import { downloadImage } from '../lib/download';
 import { combineImagesSideBySide } from '../lib/combineImages';
 import { useBuildRequest } from './useBuildRequest';
+import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
 
 /** Image upload with drag/drop, validation, preview and palette extraction. */
-export function Uploader() {
+export const Uploader = memo(function Uploader() {
   const uploadedImage = useStore((s) => s.uploadedImage);
   const uploadedName = useStore((s) => s.uploadedName);
   const setUpload = useStore((s) => s.setUpload);
@@ -145,7 +147,7 @@ export function Uploader() {
       />
 
       {/* Costume-change three-view section */}
-      <div className="mt-4 border-t border-zzz-text/10 pt-4">
+      <div className="mt-4 border-t border-zzz-text/10 pt-4" data-inpaint-zone="costume">
         <h3 className="mb-2 font-mono text-sm font-semibold text-zzz-text/80">角色换装三视图</h3>
 
         <div className="flex flex-col gap-4 sm:flex-row">
@@ -207,6 +209,15 @@ export function Uploader() {
                 </span>
               </div>
             )}
+            <ResultView
+              slot={costumeChangeSlot}
+              downloadPrefix="costume-change"
+              onInpaintClick={(src) => {
+                const openWorkspace = useInpaintStore.getState().openWorkspace;
+                openWorkspace({ url: src, type: 'costume' });
+              }}
+              inpaintMeta={{ type: 'costume' }}
+            />
           </div>
 
           {/* Right: ref image + prompt + button */}
@@ -220,6 +231,7 @@ export function Uploader() {
                     src={costumeChangeRefImage}
                     alt="服装参考"
                     className="h-16 w-full object-contain bg-zzz-ink/40"
+                    data-no-inpaint
                   />
                   <button
                     onClick={() => {
@@ -307,4 +319,4 @@ export function Uploader() {
       </div>
     </section>
   );
-}
+});

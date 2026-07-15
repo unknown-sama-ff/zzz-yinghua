@@ -1,5 +1,6 @@
 import { useStore } from '../store/useStore';
 import type { LayerPart } from '../types';
+import { memo } from 'react';
 
 interface ControlBarProps {
   onToggle: (code: string) => void;
@@ -10,7 +11,7 @@ interface ControlBarProps {
  * Left vertical control bar — 6 cartridge-style buttons (01..06) split into two
  * STAGE groups of three. Mirrors the 六种样式 reference layout.
  */
-export function ControlBar({ onToggle, fullscreen }: ControlBarProps) {
+export const ControlBar = memo(function ControlBar({ onToggle, fullscreen }: ControlBarProps) {
   const parts = useStore((s) => s.parts);
   const setAllParts = useStore((s) => s.setAllParts);
   const setStageVisible = useStore((s) => s.setStageVisible);
@@ -54,9 +55,9 @@ export function ControlBar({ onToggle, fullscreen }: ControlBarProps) {
       />
     </div>
   );
-}
+});
 
-function StageGroup({
+const StageGroup = memo(function StageGroup({
   parts,
   onToggle,
   onStage,
@@ -83,9 +84,9 @@ function StageGroup({
       </button>
     </div>
   );
-}
+});
 
-function PartButton({ part, onToggle, compact }: { part: LayerPart; onToggle: (code: string) => void; compact?: boolean }) {
+const PartButton = memo(function PartButton({ part, onToggle, compact }: { part: LayerPart; onToggle: (code: string) => void; compact?: boolean }) {
   const active = part.visible;
   return (
     <button
@@ -104,4 +105,4 @@ function PartButton({ part, onToggle, compact }: { part: LayerPart; onToggle: (c
       )}
     </button>
   );
-}
+});

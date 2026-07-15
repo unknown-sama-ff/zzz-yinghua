@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, memo } from 'react';
 
 interface ToastProps {
   message: string;
@@ -6,7 +6,7 @@ interface ToastProps {
 }
 
 /** ZZZ-styled transient error banner (replaces native alert). */
-export function Toast({ message, onClose }: ToastProps) {
+export const Toast = memo(function Toast({ message, onClose }: ToastProps) {
   useEffect(() => {
     const t = setTimeout(onClose, 5000);
     return () => clearTimeout(t);
@@ -33,4 +33,4 @@ export function Toast({ message, onClose }: ToastProps) {
       </div>
     </div>
   );
-}
+});

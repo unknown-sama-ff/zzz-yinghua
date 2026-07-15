@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useInpaintStore } from '../../store/useInpaintStore';
 import { inpaint, ApiError } from '../../lib/apiClient';
 import { useToast } from '../../store/useToast';
 import { ModeSwitch } from './ModeSwitch';
 
-export function PromptBar({ onResult }: { onResult: (images: string[]) => void }) {
+export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (images: string[]) => void }) {
   const prompt = useInpaintStore((s) => s.prompt);
   const setPrompt = useInpaintStore((s) => s.setPrompt);
   const mode = useInpaintStore((s) => s.mode);
@@ -47,6 +47,9 @@ export function PromptBar({ onResult }: { onResult: (images: string[]) => void }
       const images = await inpaint({
         imageDataUrl: targetImage.url,
         maskDataUrl: mode === 'precise' ? maskDataUrl || undefined : undefined,
+        maskBlobUrl: mode === 'precise'
+          ? (window as unknown as Record<string, { getMaskBlobUrl: () => string | null }>).__inpaintCanvas?.getMaskBlobUrl?.() || undefined
+          : undefined,
         prompt: localPrompt,
         provider: 'gpt-image',
       });
@@ -143,4 +146,4 @@ export function PromptBar({ onResult }: { onResult: (images: string[]) => void }
       </div>
     </div>
   );
-}
+});

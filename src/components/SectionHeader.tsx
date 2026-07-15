@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { memo } from 'react';
 
 interface SectionHeaderProps {
   step: string;
@@ -8,7 +9,7 @@ interface SectionHeaderProps {
 }
 
 /** Consistent numbered step header used across every panel. */
-export function SectionHeader({ step, title, action }: SectionHeaderProps) {
+export const SectionHeader = memo(function SectionHeader({ step, title, action }: SectionHeaderProps) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
       <div className="flex items-center gap-3">
@@ -18,4 +19,4 @@ export function SectionHeader({ step, title, action }: SectionHeaderProps) {
       {action}
     </div>
   );
-}
+});

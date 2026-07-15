@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { useStore } from '../store/useStore';
 import { useToast } from '../store/useToast';
 import { validateImageFile, fileToDataUrl, parseDataUrl } from '../lib/validation';
@@ -21,7 +21,7 @@ const prefersReducedMotion = () =>
  * the picture builds progressively from 零命 up to a full 六命, with a
  * programmatic transition (scanline sweep + glitch). Honors reduced-motion.
  */
-export function YinghuaViewer() {
+export const YinghuaViewer = memo(function YinghuaViewer() {
   const parts = useStore((s) => s.parts);
   const togglePart = useStore((s) => s.togglePart);
   const yinghuaSlots = useStore((s) => s.yinghuaSlots);
@@ -71,11 +71,6 @@ export function YinghuaViewer() {
     return () => {
       img.removeEventListener('load', updateAspectRatio);
     };
-  }, [baseImg]);
-
-  // 当零命图片切换时，重置宽高比
-  useEffect(() => {
-    setImageAspectRatio(16 / 9); // 重置为默认，等待新图片加载
   }, [baseImg]);
 
   useEffect(() => {
@@ -316,4 +311,4 @@ export function YinghuaViewer() {
       </div>
     </section>
   );
-}
+});

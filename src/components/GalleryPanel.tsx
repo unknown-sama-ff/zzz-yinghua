@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, memo } from 'react';
 import { supabase } from '../lib/supabase';
 import { SectionHeader } from './SectionHeader';
 
@@ -28,9 +28,7 @@ function formatTime(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-import { useInpaintStore } from '../store/useInpaintStore';
-
-export function GalleryPanel() {
+export const GalleryPanel = memo(function GalleryPanel() {
   const [rows, setRows] = useState<GalleryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -110,12 +108,7 @@ export function GalleryPanel() {
                 src={row.image_url}
                 alt={row.style}
                 loading="lazy"
-                className="w-full cursor-pointer object-contain"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const openWorkspace = useInpaintStore.getState().openWorkspace;
-                  openWorkspace({ url: row.image_url, type: 'gallery', index: row.id });
-                }}
+                className="w-full object-contain"
               />
               <div className="p-2 font-mono text-[10px] text-zzz-text/55 leading-relaxed">
                 <div className="text-zzz-primary/80 truncate">{row.style}</div>
@@ -149,4 +142,4 @@ export function GalleryPanel() {
       )}
     </section>
   );
-}
+});
