@@ -361,16 +361,16 @@ body::before {
 @keyframes inpaint-glow-pulse {
   0%, 100% {
     box-shadow:
-      0 0 8px var(--zzz-primary),
-      0 0 16px color-mix(in srgb, var(--zzz-primary) 60%, transparent),
-      0 0 32px color-mix(in srgb, var(--zzz-primary) 30%, transparent);
-    border-color: color-mix(in srgb, var(--zzz-primary) 80%, transparent);
+      0 0 12px var(--zzz-primary),
+      0 0 24px color-mix(in srgb, var(--zzz-primary) 70%, transparent),
+      0 0 48px color-mix(in srgb, var(--zzz-primary) 40%, transparent);
+    border-color: color-mix(in srgb, var(--zzz-primary) 85%, transparent);
   }
   50% {
     box-shadow:
-      0 0 14px var(--zzz-primary),
-      0 0 28px color-mix(in srgb, var(--zzz-primary) 85%, transparent),
-      0 0 52px color-mix(in srgb, var(--zzz-primary) 55%, transparent);
+      0 0 20px var(--zzz-primary),
+      0 0 40px color-mix(in srgb, var(--zzz-primary) 90%, transparent),
+      0 0 72px color-mix(in srgb, var(--zzz-primary) 60%, transparent);
     border-color: var(--zzz-primary);
   }
 }
@@ -394,14 +394,19 @@ body.inpaint-select-active [data-inpaint-zone] {
   position: relative;
 }
 
-body.inpaint-select-active [data-inpaint-zone] > img,
-body.inpaint-select-active [data-inpaint-zone] > canvas {
-  cursor: pointer !important;
+body.inpaint-select-active [data-inpaint-zone] figure,
+body.inpaint-select-active [data-inpaint-zone] > div > img,
+body.inpaint-select-active [data-inpaint-zone] canvas {
   animation: inpaint-glow-pulse 2s ease-in-out infinite;
   border: 2px solid color-mix(in srgb, var(--zzz-primary) 60%, transparent) !important;
   border-radius: 12px;
-  z-index: 55;
+  z-index: 100 !important;
   position: relative;
+}
+
+/* Allow glow to extend beyond overflow:hidden containers */
+body.inpaint-select-active [data-inpaint-zone] figure {
+  overflow: visible !important;
 }
 
 /* Corner particle decorations */
