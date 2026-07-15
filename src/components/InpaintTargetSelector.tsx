@@ -53,10 +53,12 @@ export function InpaintTargetSelector({ children }: { children: React.ReactNode 
     <div className="relative">
       {children}
 
-      {/* Dark overlay - pointer-events:none so clicks pass through to glowing images */}
+      {/* Dark overlay is now handled by body::before in CSS (z-index: 49).
+          Inpaintable images float above at z-index: 100, so they stay clear
+          while everything else is blurred. */}
       {isSelecting && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm pointer-events-none">
-          {/* Tooltip - re-enable pointer events for the label itself */}
+        <div className="fixed inset-0 z-[60] pointer-events-none">
+          {/* Tooltip */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
             <div className="flex items-center gap-3 rounded-full border border-[var(--zzz-primary)]/40 bg-[var(--zzz-primary)]/15 px-5 py-2.5 backdrop-blur-md">
               <span className="font-mono text-sm text-[var(--zzz-text)]">
@@ -67,7 +69,7 @@ export function InpaintTargetSelector({ children }: { children: React.ReactNode 
         </div>
       )}
 
-      {/* Floating button always on top of overlay */}
+      {/* Floating button always on top */}
       <FloatingInpaintButton />
     </div>
   );
