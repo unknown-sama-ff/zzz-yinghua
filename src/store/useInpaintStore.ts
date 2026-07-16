@@ -21,8 +21,10 @@ interface InpaintState {
   setBrushSize: (s: number) => void;
   featherRadius: number;
   setFeatherRadius: (r: number) => void;
-  tool: 'brush' | 'eraser' | 'rect';
-  setTool: (t: 'brush' | 'eraser' | 'rect') => void;
+  tool: 'brush' | 'eraser' | 'rect' | 'shape';
+  setTool: (t: 'brush' | 'eraser' | 'rect' | 'shape') => void;
+  shapeType: 'rect' | 'ellipse' | 'circle';
+  setShapeType: (t: 'rect' | 'ellipse' | 'circle') => void;
   history: string[];
   pushHistory: () => void;
   undo: () => void;
@@ -77,6 +79,7 @@ const initialState = {
   brushSize: 24,
   featherRadius: 12,
   tool: 'brush' as const,
+  shapeType: 'rect' as const,
   history: [] as string[],
   isGenerating: false,
 };
@@ -115,6 +118,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
   setBrushSize: (s) => set({ brushSize: Math.max(5, Math.min(80, s)) }),
   setFeatherRadius: (r) => set({ featherRadius: Math.max(0, Math.min(30, r)) }),
   setTool: (t) => set({ tool: t }),
+  setShapeType: (t) => set({ shapeType: t }),
 
   pushHistory: () => {
     const { maskDataUrl, history } = get();
