@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, memo } from 'react';
-import { useStore } from '../store/useStore';
+import { useIdentityStore } from '../store/useIdentityStore';
+import { useProviderStore } from '../store/useProviderStore';
+import { useUploadStore } from '../store/useUploadStore';
+import { useWorkbenchStore } from '../store/useWorkbenchStore';
+import { useYinghuaStore } from '../store/useYinghuaStore';
+import { useViewerStore } from '../store/useViewerStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName, YINGHUA_UNDRESS_PASS, YINGHUA_UNDRESS_PASS_EN } from '../lib/prompts';
-import { stitchImages, embedThumbnail } from '../lib/stitchImages';
+import { stitchImages, embedThumbnail } from '../lib/imageWorkerPool';
 import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
 import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
@@ -24,6 +29,7 @@ const StyleCard = memo(function StyleCard({
   slot,
   characterName,
   provider,
+  yinghuaSlots,
   onRun,
   onPromptChange,
   onInpaintClick,
@@ -33,13 +39,18 @@ const StyleCard = memo(function StyleCard({
   slot: GenSlot;
   characterName: string;
   provider: string;
+  yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
   onRun: (id: YinghuaStyleId) => void;
   onPromptChange: (styleId: YinghuaStyleId, value: string) => void;
   onInpaintClick: (src: string) => void;
 }) {
   const zeroReady = slot.status === 'done' && Boolean(slot.images[0]);
   // 链路：零命→三命→六命
-  const needsBase = (style.id === 2 && !zeroReady);
+  const needsBase = style.id === 2
+    ? !zeroReady
+    : style.id === 3
+      ? !(yinghuaSlots[2].images[0])
+      : false;
 
   return (
     <div
@@ -58,7 +69,9 @@ const StyleCard = memo(function StyleCard({
         disabled={slot.status === 'loading' || needsBase}
         className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
       >
-        {needsBase ? '需先生成零命' : '生成'}
+        {needsBase
+          ? (style.id === 2 ? '需先生成零命' : '需先生成三命')
+          : '生成'}
       </button>
       <ResultView
         slot={slot}
@@ -86,32 +99,32 @@ const StyleCard = memo(function StyleCard({
 // ---------------------------------------------------------------------------
 export const YinghuaPanel = memo(function YinghuaPanel() {
   // Per-field selectors so this component only re-renders on fields it reads.
-  const characterName = useStore((s) => s.characterName);
-  const yinghuaPrompts = useStore((s) => s.yinghuaPrompts);
-  const setYinghuaPrompt = useStore((s) => s.setYinghuaPrompt);
-  const yinghuaSlots = useStore((s) => s.yinghuaSlots);
-  const setYinghuaSlot = useStore((s) => s.setYinghuaSlot);
-  const yinghuaShowText = useStore((s) => s.yinghuaShowText);
-  const setYinghuaShowText = useStore((s) => s.setYinghuaShowText);
-  const yinghuaCharacterDynamic = useStore((s) => s.yinghuaCharacterDynamic);
-  const setYinghuaCharacterDynamic = useStore((s) => s.setYinghuaCharacterDynamic);
-  const yinghuaMicroDynamic = useStore((s) => s.yinghuaMicroDynamic);
-  const setYinghuaMicroDynamic = useStore((s) => s.setYinghuaMicroDynamic);
-  const yinghuaCharacterTraits = useStore((s) => s.yinghuaCharacterTraits);
-  const setYinghuaCharacterTraits = useStore((s) => s.setYinghuaCharacterTraits);
-  const yinghuaAddonImage = useStore((s) => s.yinghuaAddonImage);
-  const setYinghuaAddonImage = useStore((s) => s.setYinghuaAddonImage);
-  const yinghuaLang = useStore((s) => s.yinghuaLang);
-  const setYinghuaLang = useStore((s) => s.setYinghuaLang);
-  const uploadedImage = useStore((s) => s.uploadedImage);
-  const palette = useStore((s) => s.palette);
-  const provider = useStore((s) => s.provider);
-  const freeloadEnabled = useStore((s) => s.freeloadEnabled);
-  const visionCred = useStore((s) => s.visionCred);
-  const setViewerClipRegions = useStore((s) => s.setViewerClipRegions);
-  const setDetectFaceError = useStore((s) => s.setDetectFaceError);
-  const setFaceBounds = useStore((s) => s.setFaceBounds);
-  const threeViewSlot = useStore((s) => s.threeViewSlot);
+  const characterName = useIdentityStore((s) => s.characterName);
+  const yinghuaPrompts = useYinghuaStore((s) => s.yinghuaPrompts);
+  const setYinghuaPrompt = useYinghuaStore((s) => s.setYinghuaPrompt);
+  const yinghuaSlots = useYinghuaStore((s) => s.yinghuaSlots);
+  const setYinghuaSlot = useYinghuaStore((s) => s.setYinghuaSlot);
+  const yinghuaShowText = useYinghuaStore((s) => s.yinghuaShowText);
+  const setYinghuaShowText = useYinghuaStore((s) => s.setYinghuaShowText);
+  const yinghuaCharacterDynamic = useYinghuaStore((s) => s.yinghuaCharacterDynamic);
+  const setYinghuaCharacterDynamic = useYinghuaStore((s) => s.setYinghuaCharacterDynamic);
+  const yinghuaMicroDynamic = useYinghuaStore((s) => s.yinghuaMicroDynamic);
+  const setYinghuaMicroDynamic = useYinghuaStore((s) => s.setYinghuaMicroDynamic);
+  const yinghuaCharacterTraits = useYinghuaStore((s) => s.yinghuaCharacterTraits);
+  const setYinghuaCharacterTraits = useYinghuaStore((s) => s.setYinghuaCharacterTraits);
+  const yinghuaAddonImage = useYinghuaStore((s) => s.yinghuaAddonImage);
+  const setYinghuaAddonImage = useYinghuaStore((s) => s.setYinghuaAddonImage);
+  const yinghuaLang = useYinghuaStore((s) => s.yinghuaLang);
+  const setYinghuaLang = useYinghuaStore((s) => s.setYinghuaLang);
+  const uploadedImage = useUploadStore((s) => s.uploadedImage);
+  const palette = useUploadStore((s) => s.palette);
+  const provider = useProviderStore((s) => s.provider);
+  const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
+  const visionCred = useProviderStore((s) => s.visionCred);
+  const setViewerClipRegions = useViewerStore((s) => s.setViewerClipRegions);
+  const setDetectFaceError = useViewerStore((s) => s.setDetectFaceError);
+  const setFaceBounds = useViewerStore((s) => s.setFaceBounds);
+  const threeViewSlot = useWorkbenchStore((s) => s.threeViewSlot);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
 
@@ -400,6 +413,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             slot={yinghuaSlots[style.id]}
             characterName={characterName}
             provider={provider}
+            yinghuaSlots={yinghuaSlots}
             onRun={run}
             onPromptChange={handlePromptChange}
             onInpaintClick={(src) => handleInpaintClick(src, style.id)}

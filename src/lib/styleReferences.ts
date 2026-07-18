@@ -1,5 +1,5 @@
 import type { YinghuaStyleId } from '../types';
-import { stitchImages } from './stitchImages';
+import { stitchImages } from './imageWorkerPool';
 
 const STYLE_REFERENCE_URLS: Record<YinghuaStyleId, string[]> = {
   1: [

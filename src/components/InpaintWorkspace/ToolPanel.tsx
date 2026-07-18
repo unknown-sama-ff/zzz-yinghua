@@ -82,7 +82,7 @@ export const ToolPanel = memo(function ToolPanel() {
 
       <button
         onClick={() => {
-          const canvas = (window as unknown as Record<string, { undo: () => void }>).__inpaintCanvas;
+          const canvas = window.__inpaintCanvas;
           if (canvas?.undo) canvas.undo();
         }}
         className="flex h-10 w-10 items-center justify-center rounded-xl text-sm text-[var(--zzz-text)]/60 border border-transparent hover:border-[var(--zzz-text)]/20 hover:text-[var(--zzz-text)] transition-all"

@@ -1,4 +1,5 @@
-import { useStore } from '../store/useStore';
+import { useProviderStore } from '../store/useProviderStore';
+import { useUploadStore } from '../store/useUploadStore';
 import { parseDataUrl } from '../lib/validation';
 import type { GenRequest } from '../types';
 
@@ -25,7 +26,11 @@ export function parseHeaders(raw: string): Record<string, string> {
  * - custom-url: passes both size and aspectRatio (provider decides)
  */
 export function useBuildRequest() {
-  const { provider, uploadedImage, custom, creds, freeloadEnabled } = useStore();
+  const provider = useProviderStore((s) => s.provider);
+  const uploadedImage = useUploadStore((s) => s.uploadedImage);
+  const custom = useProviderStore((s) => s.custom);
+  const creds = useProviderStore((s) => s.creds);
+  const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
 
   return (prompt: string, opts?: { imageOverride?: string; size?: string; aspectRatio?: string; refImages?: { base64: string; mime: string }[] }): GenRequest => {
     const image = opts?.imageOverride ?? uploadedImage ?? undefined;

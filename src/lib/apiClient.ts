@@ -1,9 +1,6 @@
 import type { ApiResponse, GenRequest } from '../types';
 import { API_BASE } from './apiBase';
-
-// ── JSON-parse Worker (offload res.json() from the main thread) ───────────────
-
-const JSON_WORKER_TIMEOUT = 60_000;
+import { GENERATE_TIMEOUT_MS, JSON_WORKER_TIMEOUT_MS, POLL_DEADLINE_MS, POLL_INTERVAL_MS } from './constants';
 
 let jsonWorker: Worker | null = null;
 
@@ -31,7 +28,7 @@ async function parseJsonOffThread(response: Response): Promise<ApiResponse> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error('json worker timed out')),
-      JSON_WORKER_TIMEOUT,
+      JSON_WORKER_TIMEOUT_MS,
     );
     const handler = (e: MessageEvent) => {
       const data = e.data as { type: string; data?: ApiResponse; message?: string };
@@ -49,60 +46,75 @@ async function parseJsonOffThread(response: Response): Promise<ApiResponse> {
   });
 }
 
-/**
- * Call the Node proxy to generate images. The proxy handles upstream auth,
- * retries, timeouts and long-task polling, then returns the unified envelope.
- *
- * The response body (potentially multi-MB with embedded base64 images) is
- * parsed in a Web Worker so JSON.parse doesn't block the main thread.
- */
-export async function generate(req: GenRequest): Promise<string[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 360000);
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new ApiError('UPSTREAM_TIMEOUT', '生成超时（上游耗时过长）// 请重试或稍后再试');
-    }
-    throw new ApiError('UNKNOWN', '无法连接到后端代理 // 请确认服务端已启动或网络连接');
-  }
+// ── Shared primitives ────────────────────────────────────────────────────────
 
-  let data: ApiResponse;
-  try {
-    data = await parseJsonOffThread(res);
-  } catch {
-    clearTimeout(timer);
+export class ApiError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+const TIMEOUT_ERROR = new ApiError('UPSTREAM_TIMEOUT', '生成超时（上游耗时过长）// 请重试或稍后再试');
+const NETWORK_ERROR = new ApiError('UNKNOWN', '无法连接到后端代理 // 请确认服务端已启动或网络连接');
+
+/** Create an AbortController with an auto-fire timeout. */
+function withAbortTimeout<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+): Promise<{ data: T; clear: () => void }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fn(controller.signal).then(
+    (data) => ({
+      data,
+      clear: () => clearTimeout(timer),
+    }),
+    (err) => {
+      clearTimeout(timer);
+      throw err;
+    },
+  );
+}
+
+/** Wrap a fetch call with abort-timeout + error normalization. */
+async function fetchJson(
+  url: string,
+  init: RequestInit & { timeout?: number },
+): Promise<ApiResponse> {
+  const useWorker = init.timeout !== 0;
+  const timeoutMs = init.timeout ?? GENERATE_TIMEOUT_MS;
+  delete init.timeout;
+
+  const { data: res, clear } = await withAbortTimeout(
+    (signal) => fetch(url, { ...init, signal }),
+    timeoutMs,
+  );
+
+  clear();
+
+  if (!res.ok) {
     throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`);
   }
-  clearTimeout(timer);
 
-  if (!data.ok) {
-    throw new ApiError(data.code, data.message);
+  try {
+    return useWorker ? await parseJsonOffThread(res) : (await res.json()) as ApiResponse;
+  } catch {
+    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`);
   }
+}
 
-  // Long-task: if the backend returns a task_id, poll until completion.
-  const taskId = data.taskId;
-  if (taskId) {
-    const images = await pollTask(taskId);
-    return images;
-  }
-
-  return data.images;
+async function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function pollTask(taskId: string): Promise<string[]> {
-  const maxMs = 180_000;
-  const deadline = Date.now() + maxMs;
+  const deadline = Date.now() + POLL_DEADLINE_MS;
   while (Date.now() < deadline) {
-    await sleep(3000);
+    await sleep(POLL_INTERVAL_MS);
     const res = await fetch(`${API_BASE}/task/${encodeURIComponent(taskId)}`);
     if (!res.ok) continue;
     const data = (await res.json()) as ApiResponse;
@@ -113,13 +125,33 @@ async function pollTask(taskId: string): Promise<string[]> {
   throw new ApiError('UPSTREAM_TIMEOUT', '生图任务轮询超时');
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+// ── Public API ───────────────────────────────────────────────────────────────
+
+export async function generate(req: GenRequest): Promise<string[]> {
+  try {
+    const data = await fetchJson(`${API_BASE}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+      timeout: GENERATE_TIMEOUT_MS,
+    });
+
+    if (!data.ok) {
+      throw new ApiError(data.code, data.message);
+    }
+
+    if (data.taskId) {
+      return pollTask(data.taskId);
+    }
+
+    return data.images;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (err instanceof DOMException && err.name === 'AbortError') throw TIMEOUT_ERROR;
+    throw NETWORK_ERROR;
+  }
 }
 
-/**
- * Call the inpaint endpoint. Uses multipart/form-data with image + optional mask.
- */
 export async function inpaint(params: {
   imageDataUrl: string;
   maskDataUrl?: string;
@@ -131,18 +163,24 @@ export async function inpaint(params: {
   baseUrl?: string;
   useServerPreset?: boolean;
 }): Promise<string[]> {
-  const { imageDataUrl, maskDataUrl, maskBlobUrl, prompt, provider = 'gpt-image', model, apiKey, baseUrl, useServerPreset } = params;
+  const {
+    imageDataUrl,
+    maskDataUrl,
+    maskBlobUrl,
+    prompt,
+    provider = 'gpt-image',
+    model,
+    apiKey,
+    baseUrl,
+    useServerPreset,
+  } = params;
 
-  // Parse data URLs to extract base64 and mime
   function parseDataUrl(dataUrl: string): { base64: string; mime: string } {
     const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
     if (!match) throw new Error('Invalid data URL');
     return { base64: match[2], mime: match[1] };
   }
 
-  const { base64: imageBase64, mime: imageMime } = parseDataUrl(imageDataUrl);
-
-  // Convert base64 string to Uint8Array for FormData Blob
   function base64ToUint8Array(b64: string): Uint8Array {
     const binary = atob(b64);
     const bytes = new Uint8Array(binary.length);
@@ -150,6 +188,7 @@ export async function inpaint(params: {
     return bytes;
   }
 
+  const { base64: imageBase64, mime: imageMime } = parseDataUrl(imageDataUrl);
   const imageBytes = base64ToUint8Array(imageBase64);
   const imageBlob = new Blob([imageBytes as BlobPart], { type: imageMime });
   const imageExt = imageMime === 'image/jpeg' || imageMime === 'image/jpg' ? 'jpg' : 'png';
@@ -163,9 +202,8 @@ export async function inpaint(params: {
   if (baseUrl) form.append('baseUrl', baseUrl);
   if (useServerPreset) form.append('useServerPreset', 'true');
 
-  // Prefer blob URL (memory-efficient) over base64 dataUrl
   if (maskBlobUrl) {
-    const maskBlob = await fetch(maskBlobUrl).then(r => r.blob());
+    const maskBlob = await fetch(maskBlobUrl).then((r) => r.blob());
     form.append('mask', maskBlob, 'mask.png');
   } else if (maskDataUrl) {
     const { base64: maskBase64, mime: maskMime } = parseDataUrl(maskDataUrl);
@@ -175,52 +213,26 @@ export async function inpaint(params: {
     form.append('mask', maskBlob, `mask.${maskExt}`);
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 360000);
-
-  let res: Response;
   try {
-    res = await fetch(`${API_BASE}/inpaint`, {
+    const data = await fetchJson(`${API_BASE}/inpaint`, {
       method: 'POST',
       body: form,
-      signal: controller.signal,
+      timeout: GENERATE_TIMEOUT_MS,
     });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new ApiError('UPSTREAM_TIMEOUT', '生成超时（上游耗时过长）// 请重试或稍后再试');
+
+    if (!data.ok) {
+      throw new ApiError(data.code, data.message);
     }
-    throw new ApiError('UNKNOWN', '无法连接到后端代理 // 请确认服务端已启动或网络连接');
-  }
 
-  let data: ApiResponse;
-  try {
-    data = (await res.json()) as ApiResponse;
-  } catch {
-    clearTimeout(timer);
-    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`);
-  }
-  clearTimeout(timer);
+    if (data.taskId) {
+      return pollTask(data.taskId);
+    }
 
-  if (!data.ok) {
-    throw new ApiError(data.code, data.message);
-  }
-
-  const taskId = data.taskId;
-  if (taskId) {
-    const images = await pollTask(taskId);
-    return images;
-  }
-
-  return data.images;
-}
-
-export class ApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ApiError';
+    return data.images;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (err instanceof DOMException && err.name === 'AbortError') throw TIMEOUT_ERROR;
+    throw NETWORK_ERROR;
   }
 }
+

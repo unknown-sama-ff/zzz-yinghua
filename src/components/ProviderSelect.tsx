@@ -1,5 +1,6 @@
 import { memo } from 'react';
-import { useStore } from '../store/useStore';
+import { useIdentityStore } from '../store/useIdentityStore';
+import { useProviderStore } from '../store/useProviderStore';
 import type { ProviderName } from '../types';
 import { SectionHeader } from './SectionHeader';
 
@@ -11,17 +12,17 @@ const PROVIDERS: { value: ProviderName; label: string }[] = [
 
 /** Provider dropdown + character name; expands custom-url config when chosen. */
 export const ProviderSelect = memo(function ProviderSelect() {
-  const provider = useStore((s) => s.provider);
-  const setProvider = useStore((s) => s.setProvider);
-  const custom = useStore((s) => s.custom);
-  const setCustom = useStore((s) => s.setCustom);
-  const characterName = useStore((s) => s.characterName);
-  const setCharacterName = useStore((s) => s.setCharacterName);
-  const creds = useStore((s) => s.creds);
-  const setCred = useStore((s) => s.setCred);
-  const freeloadEnabled = useStore((s) => s.freeloadEnabled);
-  const visionCred = useStore((s) => s.visionCred);
-  const setVisionCred = useStore((s) => s.setVisionCred);
+  const provider = useProviderStore((s) => s.provider);
+  const setProvider = useProviderStore((s) => s.setProvider);
+  const custom = useProviderStore((s) => s.custom);
+  const setCustom = useProviderStore((s) => s.setCustom);
+  const characterName = useIdentityStore((s) => s.characterName);
+  const setCharacterName = useIdentityStore((s) => s.setCharacterName);
+  const creds = useProviderStore((s) => s.creds);
+  const setCred = useProviderStore((s) => s.setCred);
+  const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
+  const visionCred = useProviderStore((s) => s.visionCred);
+  const setVisionCred = useProviderStore((s) => s.setVisionCred);
 
   const isKeyed = provider === 'seedream' || provider === 'gpt-image' || provider === 'custom-url';
   const baseUrlPlaceholder =

@@ -39,16 +39,16 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
     setIsGenerating(true);
     try {
       // Apply feather before generating
-      const canvas = (window as unknown as Record<string, unknown>).__inpaintCanvas;
-      if (mode === 'precise' && canvas && typeof (canvas as Record<string, unknown>).applyFeather === 'function') {
-        await (canvas as { applyFeather: () => void }).applyFeather();
+      const canvas = window.__inpaintCanvas;
+      if (mode === 'precise' && canvas) {
+        await canvas.applyFeather();
       }
 
       const images = await inpaint({
         imageDataUrl: targetImage.url,
         maskDataUrl: mode === 'precise' ? maskDataUrl || undefined : undefined,
         maskBlobUrl: mode === 'precise'
-          ? (window as unknown as Record<string, { getMaskBlobUrl: () => string | null }>).__inpaintCanvas?.getMaskBlobUrl?.() || undefined
+          ? window.__inpaintCanvas?.getMaskBlobUrl?.() || undefined
           : undefined,
         prompt: localPrompt,
         provider: 'gpt-image',

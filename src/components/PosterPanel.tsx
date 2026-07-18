@@ -1,5 +1,8 @@
 import { useState, memo } from 'react';
-import { useStore } from '../store/useStore';
+import { useIdentityStore } from '../store/useIdentityStore';
+import { useProviderStore } from '../store/useProviderStore';
+import { useUploadStore } from '../store/useUploadStore';
+import { useWorkbenchStore } from '../store/useWorkbenchStore';
 import { useToast } from '../store/useToast';
 import { useInpaintStore } from '../store/useInpaintStore';
 import { generate, ApiError } from '../lib/apiClient';
@@ -56,13 +59,13 @@ function fillPoster(template: string, name: string, dominant: string, accent: st
 
 /** Section 06 — one-click ZZZ poster generation, author-recommended prompt. */
 export const PosterPanel = memo(function PosterPanel() {
-  const characterName = useStore((s) => s.characterName);
-  const uploadedImage = useStore((s) => s.uploadedImage);
-  const palette = useStore((s) => s.palette);
-  const posterSlot = useStore((s) => s.posterSlot);
-  const setPosterSlot = useStore((s) => s.setPosterSlot);
-  const provider = useStore((s) => s.provider);
-  const threeViewSlot = useStore((s) => s.threeViewSlot);
+  const characterName = useIdentityStore((s) => s.characterName);
+  const uploadedImage = useUploadStore((s) => s.uploadedImage);
+  const palette = useUploadStore((s) => s.palette);
+  const posterSlot = useWorkbenchStore((s) => s.posterSlot);
+  const setPosterSlot = useWorkbenchStore((s) => s.setPosterSlot);
+  const provider = useProviderStore((s) => s.provider);
+  const threeViewSlot = useWorkbenchStore((s) => s.threeViewSlot);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [variant, setVariant] = useState<string>(POSTER_VARIANTS[1].id);

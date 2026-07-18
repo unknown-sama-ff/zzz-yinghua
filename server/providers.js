@@ -7,7 +7,16 @@ import {
   sleep,
   parseJsonSafe,
 } from './http.js';
+import { pluckImages } from './lib/pluckImages.js';
 import sharp from 'sharp';
+import {
+  POLL_DEADLINE_MS,
+  MAX_COMPRESS_DIM,
+  JPEG_QUALITY,
+  RETRY_RESIZE_DIM,
+  RETRY_SIZE_KB_THRESHOLD,
+  RETRY_JPEG_QUALITY,
+} from './lib/constants.js';
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 
@@ -20,123 +29,68 @@ export function registerTaskStore(cb) {
   storeCallback = cb;
 }
 
-function spawnPollWorker(base, key, taskId, maxMs = 180000) {
+function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
   if (!IS_VERCEL || !storeCallback) return pollSeedreamTask(base, key, taskId, maxMs);
 
   // Vercel: delegate polling to a Worker thread so it outlives the
   // serverless function's execution window.
   try {
-    const { Worker, isMainThread, parentPort } = require('worker_threads');
-    if (isMainThread) {
-      const worker = new Worker(
-        // Use an inline worker via a data URL — Node 20+ supports this.
-        // We build the worker script inline so it has access to fetchWithTimeout
-        // via a minimal reimplementation.
-        `'use strict';
-        const { parentPort } = require('worker_threads');
-        async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-        async function fetchWithTimeout(url, opts = {}) {
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 180000);
-          try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
-          finally { clearTimeout(t); }
-        }
-        async function parseJsonSafe(res) {
-          try { return await res.json(); } catch { return {}; }
-        }
-        function pluckImages(json) {
-          const out = [];
-          if (Array.isArray(json?.data)) for (const d of json.data) { if (d.url) out.push(d.url); else if (d.b64_json) out.push('data:image/png;base64,' + d.b64_json); }
-          if (Array.isArray(json?.images)) for (const im of json.images) { if (typeof im === 'string') out.push(im); else if (im?.url) out.push(im.url); else if (im?.b64_json) out.push('data:image/png;base64,' + im.b64_json); }
-          if (typeof json?.output === 'string') out.push(json.output);
-          if (Array.isArray(json?.output)) out.push(...json.output.filter(v => typeof v === 'string'));
-          return out;
-        }
-        (async () => {
-          const { base, key, taskId } = JSON.parse(process.env.WORKER_ARGS || '{}');
-          const deadline = Date.now() + 180000;
-          while (Date.now() < deadline) {
-            await sleep(2000);
-            const res = await fetchWithTimeout(base + '/tasks/' + taskId, { headers: { Authorization: 'Bearer ' + key } });
-            if (!res.ok) continue;
-            const json = await parseJsonSafe(res);
-            const status = json.status || json.state;
-            if (status === 'succeeded' || status === 'completed' || status === 'success') {
-              parentPort.postMessage({ type: 'done', images: pluckImages(json) });
-              return;
-            }
-            if (status === 'failed' || status === 'error') {
-              parentPort.postMessage({ type: 'error', message: 'seedream 任务失败' });
-              return;
-            }
+    const { Worker } = require('worker_threads');
+    const wrappedScript = `
+      'use strict';
+      const WORKER_ARGS = ${JSON.stringify({ base, key, taskId })};
+      const { parentPort } = require('worker_threads');
+      async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+      async function fetchWithTimeout(url, opts = {}) {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 180000);
+        try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+        finally { clearTimeout(t); }
+      }
+      async function parseJsonSafe(res) {
+        try { return await res.json(); } catch { return {}; }
+      }
+      function pluckImages(json) {
+        const out = [];
+        if (Array.isArray(json?.data)) for (const d of json.data) { if (d.url) out.push(d.url); else if (d.b64_json) out.push('data:image/png;base64,' + d.b64_json); }
+        if (Array.isArray(json?.images)) for (const im of json.images) { if (typeof im === 'string') out.push(im); else if (im?.url) out.push(im.url); else if (im?.b64_json) out.push('data:image/png;base64,' + im.b64_json); }
+        if (typeof json?.output === 'string') out.push(json.output);
+        if (Array.isArray(json?.output)) out.push(...json.output.filter(v => typeof v === 'string'));
+        return out;
+      }
+      (async () => {
+        const deadline = Date.now() + 180000;
+        while (Date.now() < deadline) {
+          await sleep(2000);
+          const res = await fetchWithTimeout(WORKER_ARGS.base + '/tasks/' + WORKER_ARGS.taskId, { headers: { Authorization: 'Bearer ' + WORKER_ARGS.key } });
+          if (!res.ok) continue;
+          const json = await parseJsonSafe(res);
+          const status = json.status || json.state;
+          if (status === 'succeeded' || status === 'completed' || status === 'success') {
+            parentPort.postMessage({ type: 'done', images: pluckImages(json) });
+            return;
           }
-          parentPort.postMessage({ type: 'error', message: 'seedream 任务轮询超时' });
-        })().catch(e => parentPort.postMessage({ type: 'error', message: e.message }));
-        `,
-        { eval: true },
-      );
-      const args = JSON.stringify({ base, key, taskId });
-      worker.threadData = { base, key, taskId };
-      // We can't easily pass env vars to eval'd worker, so we pass via threadData
-      // and read from process.env.WORKER_ARGS in the worker... Actually, let's
-      // use a different approach: pass via message channel.
-      // The eval'd worker above uses process.env.WORKER_ARGS — let's set it.
-      const wrappedScript = `
-        'use strict';
-        const WORKER_ARGS = ${JSON.stringify({ base, key, taskId })};
-        const { parentPort } = require('worker_threads');
-        async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-        async function fetchWithTimeout(url, opts = {}) {
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 180000);
-          try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
-          finally { clearTimeout(t); }
-        }
-        async function parseJsonSafe(res) {
-          try { return await res.json(); } catch { return {}; }
-        }
-        function pluckImages(json) {
-          const out = [];
-          if (Array.isArray(json?.data)) for (const d of json.data) { if (d.url) out.push(d.url); else if (d.b64_json) out.push('data:image/png;base64,' + d.b64_json); }
-          if (Array.isArray(json?.images)) for (const im of json.images) { if (typeof im === 'string') out.push(im); else if (im?.url) out.push(im.url); else if (im?.b64_json) out.push('data:image/png;base64,' + im.b64_json); }
-          if (typeof json?.output === 'string') out.push(json.output);
-          if (Array.isArray(json?.output)) out.push(...json.output.filter(v => typeof v === 'string'));
-          return out;
-        }
-        (async () => {
-          const deadline = Date.now() + 180000;
-          while (Date.now() < deadline) {
-            await sleep(2000);
-            const res = await fetchWithTimeout(WORKER_ARGS.base + '/tasks/' + WORKER_ARGS.taskId, { headers: { Authorization: 'Bearer ' + WORKER_ARGS.key } });
-            if (!res.ok) continue;
-            const json = await parseJsonSafe(res);
-            const status = json.status || json.state;
-            if (status === 'succeeded' || status === 'completed' || status === 'success') {
-              parentPort.postMessage({ type: 'done', images: pluckImages(json) });
-              return;
-            }
-            if (status === 'failed' || status === 'error') {
-              parentPort.postMessage({ type: 'error', message: 'seedream 任务失败' });
-              return;
-            }
+          if (status === 'failed' || status === 'error') {
+            parentPort.postMessage({ type: 'error', message: 'seedream 任务失败' });
+            return;
           }
-          parentPort.postMessage({ type: 'error', message: 'seedream 任务轮询超时' });
-        })().catch(e => parentPort.postMessage({ type: 'error', message: e.message }));
-      `;
-      const w = new Worker(wrappedScript, { eval: true });
-      w.on('message', (msg) => {
-        if (msg.type === 'done' && storeCallback) {
-          storeCallback(taskId, msg.images);
-        } else if (msg.type === 'error') {
-          taskStore.set(taskId, { status: 'error', error: msg.message, timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS) });
         }
-        w.terminate();
-      });
-      w.on('error', () => {
-        taskStore.set(taskId, { status: 'error', error: 'Worker 启动失败', timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS) });
-      });
-      return;
-    }
+        parentPort.postMessage({ type: 'error', message: 'seedream 任务轮询超时' });
+      })().catch(e => parentPort.postMessage({ type: 'error', message: e.message }));
+    `;
+    const w = new Worker(wrappedScript, { eval: true });
+    w.on('message', (msg) => {
+      if (msg.type === 'done' && storeCallback) {
+        storeCallback(taskId, msg.images);
+      } else if (msg.type === 'error') {
+        taskStore.set(taskId, { status: 'error', error: msg.message, timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS) });
+      }
+      w.terminate();
+    });
+    w.on('error', () => {
+      taskStore.set(taskId, { status: 'error', error: 'Worker 启动失败', timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS) });
+    });
+    return;
   } catch {
     // worker_threads not available (older Node) — fall through to inline poll
   }
@@ -153,27 +107,6 @@ function spawnPollWorker(base, key, taskId, maxMs = 180000) {
  * target the common conventions (OpenAI images edit, a seedream-style task API)
  * and normalize the result. Adjust field names if your endpoint differs.
  */
-
-function pluckImages(json) {
-  // Try the common shapes: OpenAI {data:[{url|b64_json}]}, or {images:[...]}.
-  const out = [];
-  if (Array.isArray(json?.data)) {
-    for (const d of json.data) {
-      if (d.url) out.push(d.url);
-      else if (d.b64_json) out.push(`data:image/png;base64,${d.b64_json}`);
-    }
-  }
-  if (Array.isArray(json?.images)) {
-    for (const im of json.images) {
-      if (typeof im === 'string') out.push(im);
-      else if (im?.url) out.push(im.url);
-      else if (im?.b64_json) out.push(`data:image/png;base64,${im.b64_json}`);
-    }
-  }
-  if (typeof json?.output === 'string') out.push(json.output);
-  if (Array.isArray(json?.output)) out.push(...json.output.filter((v) => typeof v === 'string'));
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // seedream — image-to-image / edit endpoint, may return a task_id to poll.
@@ -223,7 +156,7 @@ async function seedream(req) {
   return { images: pluckImages(json), raw: json };
 }
 
-async function pollSeedreamTask(base, key, taskId, maxMs = 180000) {
+async function pollSeedreamTask(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     await sleep(2000);
@@ -316,8 +249,8 @@ async function gptImage(req) {
     let processedExt = ext;
     console.log(`[gpt-image] edits payload (raw): ${payloadBytes} bytes (${(payloadBytes/1024).toFixed(1)} KB) mime=${mime} ext=${ext}`);
     try {
-      const maxDim = 1024;
-      const jpegQuality = 80;
+      const maxDim = MAX_COMPRESS_DIM;
+      const jpegQuality = JPEG_QUALITY;
       const meta = await sharp(buffer, { failOnError: false }).metadata();
       const needsResize = meta.width && meta.height && (meta.width > maxDim || meta.height > maxDim);
       const needsFormatChange = mime !== 'image/jpeg';
@@ -371,12 +304,12 @@ async function gptImage(req) {
       const bodyText = await res.text().catch(() => '');
       console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
       // Cheap relays may still reject. Retry with smaller size if this was a large image.
-      if (res.status === 400 && processedBuffer.length > 300 * 1024) {
-        console.log(`[gpt-image] retrying with reduced quality (512px, 0.70)...`);
+      if (res.status === 400 && processedBuffer.length > RETRY_SIZE_KB_THRESHOLD * 1024) {
+        console.log(`[gpt-image] retrying with reduced quality (${RETRY_RESIZE_DIM}px, ${RETRY_JPEG_QUALITY})...`);
         try {
           const reduced = await sharp(processedBuffer, { failOnError: false })
-            .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: 70 })
+            .resize(RETRY_RESIZE_DIM, RETRY_RESIZE_DIM, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: RETRY_JPEG_QUALITY })
             .toBuffer();
           const retryForm = new FormData();
           retryForm.append('model', model);

@@ -10,6 +10,8 @@ import { UpstreamError, fetchWithTimeout, parseJsonSafe, codeFromStatus } from '
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
 loadEnv();
 
+import { TASK_TTL_MS, MAX_UPLOAD_BYTES } from './lib/constants.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const IS_VERCEL = Boolean(process.env.VERCEL);
@@ -45,7 +47,7 @@ app.use(
 app.use(express.json({ limit: '50mb' }));
 
 // Multer for multipart/form-data (inpaint endpoint).
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } });
 
 const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 
@@ -54,8 +56,6 @@ const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 // Vercel, generate() returns a taskId immediately and the frontend polls
 // GET /api/task/:id for completion.
 const taskStore = new Map();
-
-const TASK_TTL_MS = 5 * 60_000; // 5 min — long enough for polling, then auto-clean
 
 function cleanupTask(id) {
   const entry = taskStore.get(id);

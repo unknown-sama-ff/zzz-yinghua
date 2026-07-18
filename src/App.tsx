@@ -1,4 +1,4 @@
-import { useStore } from './store/useStore';
+import { useUploadStore } from './store/useUploadStore';
 import { useToast } from './store/useToast';
 import { Uploader } from './components/Uploader';
 import { ProviderSelect } from './components/ProviderSelect';
@@ -12,9 +12,10 @@ import { InpaintTargetSelector } from './components/InpaintTargetSelector';
 import { Toast } from './components/Toast';
 import { CursorEffects } from './components/CursorEffects';
 import { lazy, Suspense } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
-  const palette = useStore((s) => s.palette);
+  const palette = useUploadStore((s) => s.palette);
   const { message, clear } = useToast();
 
   return (
@@ -46,28 +47,30 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 px-6 pb-10">
-        {/* Step 01: three-view generation workbench — first. */}
-        <ThreeViewPanel />
+        <ErrorBoundary>
+          {/* Step 01: three-view generation workbench — first. */}
+          <ThreeViewPanel />
 
-        {/* Setup row: upload + provider side by side. */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Uploader />
-          <ProviderSelect />
-        </div>
+          {/* Setup row: upload + provider side by side. */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Uploader />
+            <ProviderSelect />
+          </div>
 
-        {/* Generation steps, full width, stacked in order. */}
-        <InpaintTargetSelector>
-          <YinghuaPanel />
-          <YinghuaViewer />
-          <PosterPanel />
-          <Suspense fallback={
-            <div className="mt-3 flex h-48 animate-pulse items-center justify-center rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03]">
-              <span className="font-mono text-xs tracking-widest text-zzz-primary">LOADING…</span>
-            </div>
-          }>
-            <LazyGalleryPanel />
-          </Suspense>
-        </InpaintTargetSelector>
+          {/* Generation steps, full width, stacked in order. */}
+          <InpaintTargetSelector>
+            <YinghuaPanel />
+            <YinghuaViewer />
+            <PosterPanel />
+            <Suspense fallback={
+              <div className="mt-3 flex h-48 animate-pulse items-center justify-center rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03]">
+                <span className="font-mono text-xs tracking-widest text-zzz-primary">LOADING…</span>
+              </div>
+            }>
+              <LazyGalleryPanel />
+            </Suspense>
+          </InpaintTargetSelector>
+        </ErrorBoundary>
       </main>
 
       <FloatingInpaintButton />

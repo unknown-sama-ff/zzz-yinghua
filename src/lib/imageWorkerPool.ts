@@ -23,7 +23,7 @@ interface CacheEntry {
   dataUrl: string;
   ts: number;
 }
-const CACHE_TTL_MS = 5 * 60_000; // 5 minutes — matches the per-slot styleRef cache TTL
+import { CACHE_TTL_MS, CACHE_PURGE_INTERVAL_MS, WORKER_TIMEOUT_MS } from './constants';
 const stitchCache = new Map<StitchKey, CacheEntry>();
 const embedCache = new Map<EmbedKey, CacheEntry>();
 
@@ -32,12 +32,12 @@ setInterval(() => {
   const now = Date.now();
   for (const [k, v] of stitchCache) if (now - v.ts > CACHE_TTL_MS) stitchCache.delete(k);
   for (const [k, v] of embedCache)   if (now - v.ts > CACHE_TTL_MS) embedCache.delete(k);
-}, 60_000);
+}, CACHE_PURGE_INTERVAL_MS);
 
 // ── Worker reference ──────────────────────────────────────────────────────────
 
 let worker: Worker | null = null;
-const WORKER_TIMEOUT = 360_000; // 6 min — matches generate() upstream timeout
+const WORKER_TIMEOUT = WORKER_TIMEOUT_MS; // 6 min — matches generate() upstream timeout
 
 function getWorker(): Worker | null {
   if (!worker || (worker as any)._disposed) {

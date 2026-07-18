@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState, memo } from 'react';
-import { useStore } from '../store/useStore';
+import { useUploadStore } from '../store/useUploadStore';
+import { useProviderStore } from '../store/useProviderStore';
+import { useWorkbenchStore } from '../store/useWorkbenchStore';
 import { useToast } from '../store/useToast';
 import { useInpaintStore } from '../store/useInpaintStore';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
@@ -15,21 +17,21 @@ import { SectionHeader } from './SectionHeader';
 
 /** Image upload with drag/drop, validation, preview and palette extraction. */
 export const Uploader = memo(function Uploader() {
-  const uploadedImage = useStore((s) => s.uploadedImage);
-  const uploadedName = useStore((s) => s.uploadedName);
-  const setUpload = useStore((s) => s.setUpload);
-  const setPalette = useStore((s) => s.setPalette);
-  const clearUpload = useStore((s) => s.clearUpload);
-  const costumeChangePrompt = useStore((s) => s.costumeChangePrompt);
-  const setCostumeChangePrompt = useStore((s) => s.setCostumeChangePrompt);
-  const costumeChangeSlot = useStore((s) => s.costumeChangeSlot);
-  const setCostumeChangeSlot = useStore((s) => s.setCostumeChangeSlot);
-  const costumeChangeHistory = useStore((s) => s.costumeChangeHistory);
-  const addCostumeChangeImages = useStore((s) => s.addCostumeChangeImages);
-  const clearCostumeChangeHistory = useStore((s) => s.clearCostumeChangeHistory);
-  const costumeChangeRefImage = useStore((s) => s.costumeChangeRefImage);
-  const setCostumeChangeRefImage = useStore((s) => s.setCostumeChangeRefImage);
-  const provider = useStore((s) => s.provider);
+  const uploadedImage = useUploadStore((s) => s.uploadedImage);
+  const uploadedName = useUploadStore((s) => s.uploadedName);
+  const setUpload = useUploadStore((s) => s.setUpload);
+  const setPalette = useUploadStore((s) => s.setPalette);
+  const clearUpload = useUploadStore((s) => s.clearUpload);
+  const costumeChangePrompt = useWorkbenchStore((s) => s.costumeChangePrompt);
+  const setCostumeChangePrompt = useWorkbenchStore((s) => s.setCostumeChangePrompt);
+  const costumeChangeSlot = useWorkbenchStore((s) => s.costumeChangeSlot);
+  const setCostumeChangeSlot = useWorkbenchStore((s) => s.setCostumeChangeSlot);
+  const costumeChangeHistory = useWorkbenchStore((s) => s.costumeChangeHistory);
+  const addCostumeChangeImages = useWorkbenchStore((s) => s.addCostumeChangeImages);
+  const clearCostumeChangeHistory = useWorkbenchStore((s) => s.clearCostumeChangeHistory);
+  const costumeChangeRefImage = useWorkbenchStore((s) => s.costumeChangeRefImage);
+  const setCostumeChangeRefImage = useWorkbenchStore((s) => s.setCostumeChangeRefImage);
+  const provider = useProviderStore((s) => s.provider);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [dragging, setDragging] = useState(false);

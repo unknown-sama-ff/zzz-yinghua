@@ -1,5 +1,4 @@
-export const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-export const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+import { ACCEPTED_UPLOAD_TYPES, MAX_UPLOAD_BYTES } from './constants';
 
 export interface FileCheck {
   ok: boolean;
@@ -8,10 +7,10 @@ export interface FileCheck {
 
 /** Validate an uploaded image file against the type/size whitelist. */
 export function validateImageFile(file: File): FileCheck {
-  if (!ACCEPTED_TYPES.includes(file.type)) {
+  if (!ACCEPTED_UPLOAD_TYPES.includes(file.type as typeof ACCEPTED_UPLOAD_TYPES[number])) {
     return { ok: false, message: '格式不支持 // 仅接受 PNG / JPEG / WEBP' };
   }
-  if (file.size > MAX_BYTES) {
+  if (file.size > MAX_UPLOAD_BYTES) {
     return { ok: false, message: '文件过大 // 单文件上限 10 MB' };
   }
   return { ok: true };

@@ -1,9 +1,11 @@
 import { useCallback, useRef } from 'react';
-import { useStore } from '../store/useStore';
+import { useUploadStore } from '../store/useUploadStore';
+import { useProviderStore } from '../store/useProviderStore';
+import { useWorkbenchStore } from '../store/useWorkbenchStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_SIZE } from '../lib/prompts';
-import { stitchImages } from '../lib/stitchImages';
+import { stitchImages } from '../lib/imageWorkerPool';
 import { validateImageFile, fileToDataUrl } from '../lib/validation';
 import { extractPalette } from '../lib/colorExtract';
 import { useBuildRequest } from './useBuildRequest';
@@ -71,16 +73,16 @@ const ViewSlot = memo(function ViewSlot({
 
 /** Section 03 — three-view generation workbench. */
 export const ThreeViewPanel = memo(function ThreeViewPanel() {
-  const threeViewUploads = useStore((s) => s.threeViewUploads);
-  const setThreeViewUpload = useStore((s) => s.setThreeViewUpload);
-  const threeViewPrompt = useStore((s) => s.threeViewPrompt);
-  const setThreeViewPrompt = useStore((s) => s.setThreeViewPrompt);
-  const threeViewSlot = useStore((s) => s.threeViewSlot);
-  const setThreeViewSlot = useStore((s) => s.setThreeViewSlot);
-  const setUpload = useStore((s) => s.setUpload);
-  const setPalette = useStore((s) => s.setPalette);
-  const provider = useStore((s) => s.provider);
-  const addCostumeChangeImages = useStore((s) => s.addCostumeChangeImages);
+  const threeViewUploads = useWorkbenchStore((s) => s.threeViewUploads);
+  const setThreeViewUpload = useWorkbenchStore((s) => s.setThreeViewUpload);
+  const threeViewPrompt = useWorkbenchStore((s) => s.threeViewPrompt);
+  const setThreeViewPrompt = useWorkbenchStore((s) => s.setThreeViewPrompt);
+  const threeViewSlot = useWorkbenchStore((s) => s.threeViewSlot);
+  const setThreeViewSlot = useWorkbenchStore((s) => s.setThreeViewSlot);
+  const setUpload = useUploadStore((s) => s.setUpload);
+  const setPalette = useUploadStore((s) => s.setPalette);
+  const provider = useProviderStore((s) => s.provider);
+  const addCostumeChangeImages = useWorkbenchStore((s) => s.addCostumeChangeImages);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
 

@@ -102,3 +102,18 @@ export interface GenSlot {
   images: string[];
   error?: string;
 }
+
+/** Canvas API exposed via window.__inpaintCanvas for InpaintWorkspace. */
+export interface InpaintCanvasAPI {
+  applyFeather: () => void;
+  exportMask: () => string | null;
+  getMaskBlobUrl: () => string | null;
+  undo: () => void;
+  clearMask: () => void;
+}
+
+declare global {
+  interface Window {
+    __inpaintCanvas?: InpaintCanvasAPI;
+  }
+}

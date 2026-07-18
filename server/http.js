@@ -3,7 +3,7 @@
 // Image-to-image editing (gpt-image-2 etc.) can genuinely take several minutes,
 // so the per-request ceiling is large by default. Override with
 // UPSTREAM_TIMEOUT_MS in .env if your endpoint is faster/slower.
-const DEFAULT_TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT_MS || 300000);
+import { DEFAULT_TIMEOUT_MS, UPSTREAM_RETRIES } from './lib/constants.js';
 
 /** Normalized upstream error carrying a stable code for the client. */
 export class UpstreamError extends Error {
@@ -15,7 +15,7 @@ export class UpstreamError extends Error {
 }
 
 /** fetch() with an AbortController timeout. */
-export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIMEOUT) {
+export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   const started = Date.now();
@@ -34,7 +34,7 @@ export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIME
 }
 
 /** Run an async fn with up to `retries` exponential-backoff retries. */
-export async function withRetry(fn, retries = 2) {
+export async function withRetry(fn, retries = UPSTREAM_RETRIES) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {

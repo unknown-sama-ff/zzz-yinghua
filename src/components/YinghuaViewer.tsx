@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState, memo } from 'react';
-import { useStore } from '../store/useStore';
+import { useProviderStore } from '../store/useProviderStore';
+import { useYinghuaStore } from '../store/useYinghuaStore';
+import { useViewerStore } from '../store/useViewerStore';
 import { useToast } from '../store/useToast';
 import { validateImageFile, fileToDataUrl, parseDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { ControlBar } from './ControlBar';
 import '../styles/viewer.css';
-import type { YinghuaStyleId } from '../types';
+import type { ClipRegions } from '../lib/clipRegions';
+import type { GenSlot, LayerPart, YinghuaStyleId } from '../types';
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
@@ -21,17 +24,53 @@ const prefersReducedMotion = () =>
  * the picture builds progressively from 零命 up to a full 六命, with a
  * programmatic transition (scanline sweep + glitch). Honors reduced-motion.
  */
+/**
+ * Shared stage content — identical for fullscreen and non-fullscreen modes.
+ * Only the outer wrapper className differs, handled by the caller.
+ */
+const StageContent = memo(function StageContent({
+  baseImg,
+  parts,
+  viewerClipRegions,
+  sweeping,
+  yinghuaSlots,
+  imageAspectRatio,
+}: {
+  baseImg: string | undefined;
+  parts: LayerPart[];
+  viewerClipRegions: ClipRegions | null;
+  sweeping: boolean;
+  yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
+  imageAspectRatio: number;
+}) {
+  const tierImage = (id: 1 | 2 | 3): string | undefined => yinghuaSlots[id].images[0];
+  return (
+    <div className="relative h-full w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
+      {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
+      {parts.map((p) => {
+        const src = tierImage(p.styleId);
+        if (!src || !p.visible) return null;
+        const regionStyle = viewerClipRegions
+          ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
+          : {};
+        return <img key={p.code} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part fx-enter${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
+      })}
+      {sweeping && <div className="fx-sweep" />}
+    </div>
+  );
+});
+
 export const YinghuaViewer = memo(function YinghuaViewer() {
-  const parts = useStore((s) => s.parts);
-  const togglePart = useStore((s) => s.togglePart);
-  const yinghuaSlots = useStore((s) => s.yinghuaSlots);
-  const setSlotManual = useStore((s) => s.setSlotManual);
-  const freeloadEnabled = useStore((s) => s.freeloadEnabled);
-  const visionCred = useStore((s) => s.visionCred);
-  const viewerClipRegions = useStore((s) => s.viewerClipRegions);
-  const setViewerClipRegions = useStore((s) => s.setViewerClipRegions);
-  const detectFaceError = useStore((s) => s.detectFaceError);
-  const setDetectFaceError = useStore((s) => s.setDetectFaceError);
+  const parts = useViewerStore((s) => s.parts);
+  const togglePart = useViewerStore((s) => s.togglePart);
+  const yinghuaSlots = useYinghuaStore((s) => s.yinghuaSlots);
+  const setSlotManual = useYinghuaStore((s) => s.setSlotManual);
+  const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
+  const visionCred = useProviderStore((s) => s.visionCred);
+  const viewerClipRegions = useViewerStore((s) => s.viewerClipRegions);
+  const setViewerClipRegions = useViewerStore((s) => s.setViewerClipRegions);
+  const detectFaceError = useViewerStore((s) => s.detectFaceError);
+  const setDetectFaceError = useViewerStore((s) => s.setDetectFaceError);
   const showError = useToast((s) => s.show);
   const [sweeping, setSweeping] = useState(false);
   const [glitch, setGlitch] = useState(false);
@@ -205,33 +244,14 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
           className={`flex-1 min-h-0 relative overflow-hidden bg-zzz-bg flex items-center justify-center ${glitch ? 'fx-glitch' : ''}`}
           style={{ aspectRatio: `${imageAspectRatio}` }}
         >
-          {fullscreen ? (
-            <div className="relative h-full w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
-              {baseImg && <img ref={baseImgRef} src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
-              {parts.map((p) => {
-                const src = tierImage(p.styleId);
-                if (!src || !p.visible) return null;
-                const regionStyle = viewerClipRegions
-                  ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
-                  : {};
-                return <img key={p.code} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part fx-enter${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
-              })}
-              {sweeping && <div className="fx-sweep" />}
-            </div>
-          ) : (
-            <div className="relative h-full w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
-              {baseImg && <img ref={baseImgRef} src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
-              {parts.map((p) => {
-                const src = tierImage(p.styleId);
-                if (!src || !p.visible) return null;
-                const regionStyle = viewerClipRegions
-                  ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
-                  : {};
-                return <img key={p.code} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part fx-enter${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
-              })}
-              {sweeping && <div className="fx-sweep" />}
-            </div>
-          )}
+          <StageContent
+            baseImg={baseImg}
+            parts={parts}
+            viewerClipRegions={viewerClipRegions}
+            sweeping={sweeping}
+            yinghuaSlots={yinghuaSlots}
+            imageAspectRatio={imageAspectRatio}
+          />
 
           {/* Fullscreen exit button */}
           {fullscreen && (

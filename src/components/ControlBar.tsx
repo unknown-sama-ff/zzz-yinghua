@@ -1,4 +1,4 @@
-import { useStore } from '../store/useStore';
+import { useViewerStore } from '../store/useViewerStore';
 import type { LayerPart } from '../types';
 import { memo } from 'react';
 
@@ -12,9 +12,9 @@ interface ControlBarProps {
  * STAGE groups of three. Mirrors the 六种样式 reference layout.
  */
 export const ControlBar = memo(function ControlBar({ onToggle, fullscreen }: ControlBarProps) {
-  const parts = useStore((s) => s.parts);
-  const setAllParts = useStore((s) => s.setAllParts);
-  const setStageVisible = useStore((s) => s.setStageVisible);
+  const parts = useViewerStore((s) => s.parts);
+  const setAllParts = useViewerStore((s) => s.setAllParts);
+  const setStageVisible = useViewerStore((s) => s.setStageVisible);
   const stage1 = parts.filter((p) => p.stage === 1);
   const stage2 = parts.filter((p) => p.stage === 2);
   const allOn = parts.every((p) => p.visible);

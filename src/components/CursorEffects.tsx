@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, memo } from 'react';
 import { useCursorEffectsPref } from '../lib/useCursorEffectsPref';
-import { useStore } from '../store/useStore';
+import { useProviderStore } from '../store/useProviderStore';
 import { useInpaintStore } from '../store/useInpaintStore';
 
 const THEME_VARS = ['--zzz-primary', '--zzz-magenta', '--zzz-cyan'] as const;
@@ -118,8 +118,8 @@ function createThemeColorCache() {
  */
 export const CursorEffects = memo(function CursorEffects() {
   const { enabled, reduced, setEnabled } = useCursorEffectsPref();
-  const freeloadEnabled = useStore((s) => s.freeloadEnabled);
-  const setFreeloadEnabled = useStore((s) => s.setFreeloadEnabled);
+  const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
+  const setFreeloadEnabled = useProviderStore((s) => s.setFreeloadEnabled);
   const isWorkspaceOpen = useInpaintStore((s) => s.isWorkspaceOpen);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);

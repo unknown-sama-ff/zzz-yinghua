@@ -375,7 +375,7 @@ export function CanvasEditor({
 
   // Expose to PromptBar
   useEffect(() => {
-    (window as unknown as Record<string, unknown>).__inpaintCanvas = {
+    window.__inpaintCanvas = {
       applyFeather: () => {
         if (featherRadius === 0) return;
         const mask = maskRef.current;

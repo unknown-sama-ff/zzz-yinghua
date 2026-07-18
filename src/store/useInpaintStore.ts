@@ -40,7 +40,7 @@ interface InpaintState {
   reset: () => void;
 }
 
-const MAX_HISTORY = 20;
+import { MAX_UNDO_HISTORY } from '../lib/constants';
 
 const LS_KEY = 'inpaint-state';
 
@@ -124,7 +124,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
     const { maskDataUrl, history } = get();
     if (!maskDataUrl) return;
     const next = [...history, maskDataUrl];
-    if (next.length > MAX_HISTORY) next.shift();
+    if (next.length > MAX_UNDO_HISTORY) next.shift();
     set({ history: next });
   },
 
