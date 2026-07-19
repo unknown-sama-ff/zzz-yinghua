@@ -44,7 +44,7 @@ const StyleCard = memo(function StyleCard({
   onPromptChange: (styleId: YinghuaStyleId, value: string) => void;
   onInpaintClick: (src: string) => void;
 }) {
-  const zeroReady = slot.status === 'done' && Boolean(slot.images[0]);
+  const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
   // 链路：零命→三命→六命
   const needsBase = style.id === 2
     ? !zeroReady
