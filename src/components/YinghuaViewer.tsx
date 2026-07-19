@@ -6,6 +6,7 @@ import { useToast } from '../store/useToast';
 import { validateImageFile, fileToDataUrl, parseDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
+import { resolveYinghuaFaceImage } from '../lib/yinghuaFace';
 import { ControlBar } from './ControlBar';
 import '../styles/viewer.css';
 import type { ClipRegions } from '../lib/clipRegions';
@@ -35,6 +36,7 @@ const StageContent = memo(function StageContent({
   sweeping,
   yinghuaSlots,
   imageAspectRatio,
+  style3Face,
 }: {
   baseImg: string | undefined;
   parts: LayerPart[];
@@ -42,8 +44,25 @@ const StageContent = memo(function StageContent({
   sweeping: boolean;
   yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
   imageAspectRatio: number;
+  style3Face: 'front' | 'back';
 }) {
-  const tierImage = (id: 1 | 2 | 3): string | undefined => yinghuaSlots[id].images[0];
+  const displayedSixImage = resolveYinghuaFaceImage(yinghuaSlots[3].images, style3Face);
+  const previousDisplayedFace = useRef(displayedSixImage?.face);
+  const previousVisibleParts = useRef(new Set(parts.filter((part) => part.visible).map((part) => part.code)));
+  const shouldFlipSix = Boolean(
+    displayedSixImage &&
+    previousDisplayedFace.current &&
+    previousDisplayedFace.current !== displayedSixImage.face,
+  );
+
+  useEffect(() => {
+    previousDisplayedFace.current = displayedSixImage?.face;
+    previousVisibleParts.current = new Set(parts.filter((part) => part.visible).map((part) => part.code));
+  }, [displayedSixImage?.face, parts]);
+
+  const tierImage = (id: 1 | 2 | 3): string | undefined =>
+    id === 3 ? displayedSixImage?.src : yinghuaSlots[id].images[0];
+
   return (
     <div className="relative h-full w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
       {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
@@ -53,7 +72,17 @@ const StageContent = memo(function StageContent({
         const regionStyle = viewerClipRegions
           ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
           : {};
-        return <img key={p.code} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part fx-enter${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
+        const isSixLayer = p.styleId === 3;
+        const layerKey = isSixLayer && displayedSixImage
+          ? `${p.code}-${displayedSixImage.face}`
+          : p.code;
+        const isNewlyVisible = !previousVisibleParts.current.has(p.code);
+        const effectClass = isSixLayer && shouldFlipSix
+          ? 'fx-face-flip'
+          : isNewlyVisible
+            ? 'fx-enter'
+            : '';
+        return <img key={layerKey} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part ${effectClass}${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
       })}
       {sweeping && <div className="fx-sweep" />}
     </div>
@@ -64,6 +93,8 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   const parts = useViewerStore((s) => s.parts);
   const togglePart = useViewerStore((s) => s.togglePart);
   const yinghuaSlots = useYinghuaStore((s) => s.yinghuaSlots);
+  const setYinghuaSlot = useYinghuaStore((s) => s.setYinghuaSlot);
+  const style3Face = useYinghuaStore((s) => s.style3Face);
   const setSlotManual = useYinghuaStore((s) => s.setSlotManual);
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
   const visionCred = useProviderStore((s) => s.visionCred);
@@ -82,7 +113,7 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   const sectionRef = useRef<HTMLElement>(null);
   const baseImgRef = useRef<HTMLImageElement>(null);
   const timers = useRef<number[]>([]);
-  const slotInputRefs = useRef<Record<YinghuaStyleId, HTMLInputElement | null>>({ 1: null, 2: null, 3: null });
+  const slotInputRefs = useRef<Record<string, HTMLInputElement | null>>({ 1: null, 2: null, 3: null, '3-front': null, '3-back': null });
 
   // The three generated tiers; first image of each yinghua style slot.
   const tierImage = (id: 1 | 2 | 3): string | undefined => yinghuaSlots[id].images[0];
@@ -203,15 +234,13 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   }, [isMobile]);
 
   const handleRefreshClip = useCallback(() => {
-    // 检查六命图片是否已生成
-    const sixSlot = yinghuaSlots[3];
-    if (sixSlot.status !== 'done' || !sixSlot.images[0]) {
+    const displayedSixImage = resolveYinghuaFaceImage(yinghuaSlots[3].images, style3Face);
+    if (yinghuaSlots[3].status !== 'done' || !displayedSixImage) {
       showError('请先完成六命图片生成');
       return;
     }
-    const src = sixSlot.images[0];
-    void runFaceDetect(src);
-  }, [yinghuaSlots, runFaceDetect, showError]);
+    void runFaceDetect(displayedSixImage.src);
+  }, [yinghuaSlots, style3Face, runFaceDetect, showError]);
 
   const handleSlotUpload = useCallback(
     async (id: YinghuaStyleId, file: File) => {
@@ -222,6 +251,21 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
       if (id === 3) void runFaceDetect(dataUrl);
     },
     [setSlotManual, showError, runFaceDetect],
+  );
+
+  const handleSixSlotUpload = useCallback(
+    async (id: YinghuaStyleId, file: File, face: 'front' | 'back') => {
+      const check = validateImageFile(file);
+      if (!check.ok) { showError(check.message ?? '文件校验失败'); return; }
+      const dataUrl = await fileToDataUrl(file);
+      const existing = yinghuaSlots[id].images;
+      const newImages = [...existing];
+      newImages[face === 'front' ? 0 : 1] = dataUrl;
+      // Use setYinghuaSlot to preserve both front and back images
+      setYinghuaSlot(id, { status: 'done', images: newImages });
+      if (id === 3) void runFaceDetect(dataUrl);
+    },
+    [setYinghuaSlot, showError, runFaceDetect, yinghuaSlots],
   );
 
   return (
@@ -254,6 +298,7 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
             sweeping={sweeping}
             yinghuaSlots={yinghuaSlots}
             imageAspectRatio={imageAspectRatio}
+            style3Face={style3Face}
           />
 
           {/* Fullscreen exit button */}
@@ -308,7 +353,6 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
         {([
           { id: 1 as YinghuaStyleId, label: '零命 = 底图（始终显示）' },
           { id: 2 as YinghuaStyleId, label: '01–03 = 三命对角区域' },
-          { id: 3 as YinghuaStyleId, label: '04–06 = 六命对角区域' },
         ] as const).map(({ id, label }) => (
           <div key={id} className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-zzz-text/55">{label}</span>
@@ -326,6 +370,32 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) void handleSlotUpload(id, f);
+                e.target.value = '';
+              }}
+            />
+          </div>
+        ))}
+        {/* 六命分阳阴上传 */}
+        {[
+          { face: 'front' as const, label: '04–06 = 六命阳' },
+          { face: 'back' as const, label: '04–06 = 六命阴' },
+        ].map(({ face, label }) => (
+          <div key={face} className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-zzz-text/55">{label}</span>
+            <button
+              onClick={() => slotInputRefs.current[`3-${face}`]?.click()}
+              className="glass-btn px-2 py-0.5 font-mono text-[10px] text-zzz-text/70"
+            >
+              上传
+            </button>
+            <input
+              ref={(el) => { slotInputRefs.current[`3-${face}`] = el; }}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleSixSlotUpload(3, f, face);
                 e.target.value = '';
               }}
             />

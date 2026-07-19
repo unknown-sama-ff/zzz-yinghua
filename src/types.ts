@@ -75,6 +75,8 @@ export interface YinghuaStyle {
   promptTemplateEn?: string;
   promptTemplateFront?: string;
   promptTemplateFrontEn?: string;
+  promptTemplateBack?: string;
+  promptTemplateBackEn?: string;
 }
 
 /**

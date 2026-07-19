@@ -13,6 +13,7 @@ import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/st
 import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
+import { resolveYinghuaFaceImage } from '../lib/yinghuaFace';
 import { useBuildRequest } from './useBuildRequest';
 import { useInpaintStore } from '../store/useInpaintStore';
 import { ResultView } from './ResultView';
@@ -35,6 +36,7 @@ const StyleCard = memo(function StyleCard({
   onPromptChange,
   onInpaintClick,
   onFlipStyle3,
+  onPick,
 }: {
   style: { id: YinghuaStyleId; label: string; description: string };
   prompt: string;
@@ -47,6 +49,7 @@ const StyleCard = memo(function StyleCard({
   onPromptChange: (styleId: YinghuaStyleId, value: string) => void;
   onInpaintClick: (src: string) => void;
   onFlipStyle3: () => void;
+  onPick?: (src: string) => void;
 }) {
   const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
   const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
@@ -64,8 +67,16 @@ const StyleCard = memo(function StyleCard({
   const isBack = style.id === 3 && style3Face === 'back';
   const cardBg = isBack ? 'bg-zzz-magenta/[0.08]' : 'bg-zzz-text/[0.03]';
   const cardBorder = isBack ? 'border-zzz-magenta/20' : 'border-zzz-text/10';
-  const titleColor = isBack ? 'text-zzz-text' : 'text-zzz-magenta';
+  const titleColor = 'text-zzz-magenta';
   const errorColor = isBack ? 'text-zzz-text/70' : 'text-red-400';
+  const displayedSixImage = style.id === 3
+    ? resolveYinghuaFaceImage(slot.images, style3Face)
+    : undefined;
+
+  const displayedSlot = style.id === 3
+    ? { ...slot, images: displayedSixImage ? [displayedSixImage.src] : [] }
+    : slot;
+  const displayedImage = style.id === 3 ? displayedSixImage?.src : slot.images[0];
 
   return (
     <div
@@ -77,9 +88,9 @@ const StyleCard = memo(function StyleCard({
           <button
             onClick={onFlipStyle3}
             className="glass-btn px-2 py-0.5 font-mono text-[10px] tracking-widest text-zzz-text"
-            title={style3Face === 'front' ? '切换到反面' : '切换到正面'}
+            title={style3Face === 'front' ? '切换到阴' : '切换到阳'}
           >
-            {style3Face === 'front' ? '↻ 正面' : '↻ 反面'}
+            {style3Face === 'front' ? '↻ 阳' : '↻ 阴'}
           </button>
         )}
       </div>
@@ -95,24 +106,37 @@ const StyleCard = memo(function StyleCard({
         disabled={slot.status === 'loading' || needsBase || backNeedsFront}
         className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
       >
-        {backNeedsFront ? '需先生成正面六命' : needsBase ? (style.id === 2 ? '需先生成零命' : '需先生成三命') : '生成'}
+        {backNeedsFront ? '需先生成六命阳' : needsBase ? (style.id === 2 ? '需先生成零命' : '需先生成三命') : '生成'}
       </button>
       {slot.error && (
         <p className={`mt-1 font-mono text-[11px] ${errorColor}`}>{slot.error}</p>
       )}
       <ResultView
-        slot={slot}
+        slot={displayedSlot}
         downloadPrefix={`yinghua-style${style.id}`}
         saveInfo={
-          slot.images[0]
+          displayedImage
             ? ({
-                imageUrl: slot.images[0],
+                imageUrl: displayedImage,
                 style: style.label,
                 characterName,
                 prompt,
                 provider,
               } satisfies GallerySaveInfo)
             : undefined
+        }
+        imageClassName={style.id === 3 && displayedSixImage ? 'fx-face-flip' : undefined}
+        imageKey={style.id === 3 && displayedSixImage ? `style3-${displayedSixImage.face}` : undefined}
+        pickLabel="使用该六命图"
+        topLeftAction={
+          style.id === 3 && displayedSixImage && onPick ? (
+            <button
+              onClick={() => onPick(displayedSixImage.src)}
+              className="glass-btn px-3 py-1 text-xs text-zzz-cyan"
+            >
+              使用该六命图
+            </button>
+          ) : undefined
         }
         onInpaintClick={onInpaintClick}
         inpaintMeta={{ type: 'yinghua', slotId: String(style.id), index: 0 }}
@@ -162,10 +186,17 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const computedPrompts = useMemo(() => {
     const prompts: Record<number, string> = {};
     for (const style of YINGHUA_STYLES) {
-      if (style.id === 3 && style3Face === 'front' && style.promptTemplateFront) {
-        // 六命正面：使用干净的正面提示词（无撕衣内容）
+      if (style.id === 3 && style.promptTemplateFront && style.promptTemplateBack) {
+        const tmpl =
+          style3Face === 'front'
+            ? (yinghuaLang === 'en' && style.promptTemplateFrontEn
+                ? style.promptTemplateFrontEn
+                : style.promptTemplateFront)
+            : (yinghuaLang === 'en' && style.promptTemplateBackEn
+                ? style.promptTemplateBackEn
+                : style.promptTemplateBack);
         prompts[style.id] = fillName(
-          yinghuaLang === 'en' && style.promptTemplateFrontEn ? style.promptTemplateFrontEn : style.promptTemplateFront,
+          tmpl,
           characterName, palette ?? undefined, yinghuaShowText,
           yinghuaCharacterDynamic, yinghuaMicroDynamic,
           yinghuaCharacterTraits, yinghuaLang, style.id,
@@ -240,8 +271,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       }
     }
     // 六命反面需要先有正面
-    if (id === 3 && style3Face === 'back' && !(yinghuaSlots[3].images[0])) {
-      showError('请先生成正面六命，再生成反面');
+    if (id === 3 && style3Face === 'back' && !yinghuaSlots[3].images[0]) {
+      showError('请先生成六命阳，再生成六命阴');
       return;
     }
     let imageOverride: string | undefined;
@@ -250,7 +281,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         const styleSheet = await buildStyleReferenceSheet(id);
         imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
       } else {
-        const baseImg = id === 3 ? yinghuaSlots[2].images[0] : yinghuaSlots[1].images[0];
+        const baseImg = id === 3
+          ? (style3Face === 'back' ? yinghuaSlots[3].images[0] : yinghuaSlots[2].images[0])
+          : yinghuaSlots[1].images[0];
         if (!baseImg) {
           showError(id === 3
             ? '请先生成三命，六命以三命成图为底图'
@@ -293,7 +326,15 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         buildRequest(yinghuaPrompts[id], sizeOpts),
       );
 
-      setYinghuaSlot(id, { status: 'done', images });
+      // 六命：正面存 images[0]，反面存 images[1]，不互相覆盖
+      if (id === 3) {
+        const existing = yinghuaSlots[3].images;
+        const newImages = [...existing];
+        newImages[style3Face === 'front' ? 0 : 1] = images[0];
+        setYinghuaSlot(id, { status: 'done', images: newImages });
+      } else {
+        setYinghuaSlot(id, { status: 'done', images });
+      }
       await Promise.resolve();
 
       const capturedImages = images;
@@ -338,7 +379,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       </div>
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁脸位/大致身位/配色）。六命可切换「正面/反面」：正面为全彩高饱和赛璐珞；反面为服装精简版（自然精简服装、顺势露肤），需先出正面再生成反面；配色统一以三视图原色为准。
+          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁脸位/大致身位/配色）。六命可切换「阳/阴」：阳为全彩高饱和赛璐珞；阴为服装精简版（自然精简服装、顺势露肤），需先出阳再生成阴；配色统一以三视图原色为准。
         </p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}
@@ -440,6 +481,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             onPromptChange={handlePromptChange}
             onInpaintClick={(src) => handleInpaintClick(src, style.id)}
             onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
+            onPick={style.id === 3 && yinghuaSlots[3].images.length > 0 ? () => {
+              showError(`✓ 查看器已切换至六命${style3Face === 'front' ? '阳' : '阴'}`);
+            } : undefined}
           />
         ))}
       </div>

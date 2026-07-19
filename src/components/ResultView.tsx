@@ -1,7 +1,7 @@
 import { downloadImage } from '../lib/download';
 import { GallerySaveButton, type GallerySaveInfo } from './GallerySaveButton';
 import type { GenSlot } from '../types';
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 
 interface ResultViewProps {
   slot: GenSlot;
@@ -14,10 +14,15 @@ interface ResultViewProps {
   /** When provided, an inpaint button appears in the hover toolbar. */
   onInpaintClick?: (src: string, meta: { type: string; slotId?: string; index?: number }) => void;
   inpaintMeta?: { type: string; slotId?: string; index?: number };
+  /** When provided, an action button appears in the top-left corner of the image. */
+  topLeftAction?: ReactNode;
+  /** Optional image class and key used by callers that animate image replacement. */
+  imageClassName?: string;
+  imageKey?: string;
 }
 
 /** Renders a generation slot: skeleton while loading, images + downloads done. */
-export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo, onInpaintClick, inpaintMeta }: ResultViewProps) {
+export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPick, pickLabel, saveInfo, onInpaintClick, inpaintMeta, topLeftAction, imageClassName, imageKey }: ResultViewProps) {
   if (slot.status === 'idle') return null;
 
   if (slot.status === 'loading') {
@@ -41,12 +46,17 @@ export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPic
   return (
     <div className="mt-3 grid grid-cols-1 gap-3">
       {slot.images.map((src, i) => (
-        <figure key={i} className="group relative overflow-hidden rounded-xl">
+        <figure key={imageKey ? `${imageKey}-${i}` : i} className="group relative overflow-hidden rounded-xl">
+          {topLeftAction && (
+            <div className="absolute left-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
+              {topLeftAction}
+            </div>
+          )}
           <img
             src={src}
             alt={`${downloadPrefix}-${i + 1}`}
             loading="lazy"
-            className="w-full object-contain"
+            className={`w-full object-contain${imageClassName ? ` ${imageClassName}` : ''}`}
           />
           <figcaption className="absolute bottom-0 right-0 flex gap-2 p-2 opacity-0 transition-opacity group-hover:opacity-100">
             {saveInfo && <GallerySaveButton saveInfo={saveInfo} />}
