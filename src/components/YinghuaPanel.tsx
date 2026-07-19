@@ -120,6 +120,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const palette = useUploadStore((s) => s.palette);
   const provider = useProviderStore((s) => s.provider);
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
+  const creds = useProviderStore((s) => s.creds);
   const visionCred = useProviderStore((s) => s.visionCred);
   const setViewerClipRegions = useViewerStore((s) => s.setViewerClipRegions);
   const setDetectFaceError = useViewerStore((s) => s.setDetectFaceError);
@@ -187,6 +188,17 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     if (!uploadedImage) {
       showError('请先上传角色正面图片');
       return;
+    }
+    if (!freeloadEnabled) {
+      const cred = creds[provider];
+      if (!cred.apiKey.trim()) {
+        showError('请先在「接口与角色」模块填写 API Key');
+        return;
+      }
+      if (!cred.baseUrl.trim()) {
+        showError('请先在「接口与角色」模块填写 Base URL');
+        return;
+      }
     }
     let imageOverride: string | undefined;
     try {
