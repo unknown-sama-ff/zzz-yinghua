@@ -20,6 +20,8 @@ interface YinghuaState {
   setYinghuaCharacterTraits: (t: string) => void;
   yinghuaAddonImage: string | null;
   setYinghuaAddonImage: (dataUrl: string | null) => void;
+  style3Face: 'front' | 'back';
+  setStyle3Face: (face: 'front' | 'back') => void;
 }
 
 interface GenSlotLike {
@@ -59,4 +61,7 @@ export const useYinghuaStore = create<YinghuaState>((set) => ({
 
   yinghuaAddonImage: null,
   setYinghuaAddonImage: (dataUrl) => set({ yinghuaAddonImage: dataUrl }),
+
+  style3Face: 'front' as 'front' | 'back',
+  setStyle3Face: (face: 'front' | 'back') => set({ style3Face: face }),
 }));

@@ -30,9 +30,11 @@ const StyleCard = memo(function StyleCard({
   characterName,
   provider,
   yinghuaSlots,
+  style3Face,
   onRun,
   onPromptChange,
   onInpaintClick,
+  onFlipStyle3,
 }: {
   style: { id: YinghuaStyleId; label: string; description: string };
   prompt: string;
@@ -40,23 +42,47 @@ const StyleCard = memo(function StyleCard({
   characterName: string;
   provider: string;
   yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
+  style3Face: 'front' | 'back';
   onRun: (id: YinghuaStyleId) => void;
   onPromptChange: (styleId: YinghuaStyleId, value: string) => void;
   onInpaintClick: (src: string) => void;
+  onFlipStyle3: () => void;
 }) {
   const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
+  const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
+  const frontReady = yinghuaSlots[3].status === 'done' && Boolean(yinghuaSlots[3].images[0]);
   // 链路：零命→三命→六命
   const needsBase = style.id === 2
     ? !zeroReady
     : style.id === 3
-      ? !(yinghuaSlots[2].images[0])
+      ? !threeReady
       : false;
+  // 反面需要正面已完成
+  const backNeedsFront = style.id === 3 && style3Face === 'back' && !frontReady;
+
+  // 反面模式：背景与标题/报错颜色互换
+  const isBack = style.id === 3 && style3Face === 'back';
+  const cardBg = isBack ? 'bg-zzz-magenta/[0.08]' : 'bg-zzz-text/[0.03]';
+  const cardBorder = isBack ? 'border-zzz-magenta/20' : 'border-zzz-text/10';
+  const titleColor = isBack ? 'text-zzz-text' : 'text-zzz-magenta';
+  const errorColor = isBack ? 'text-zzz-text/70' : 'text-red-400';
 
   return (
     <div
-      className="flex flex-col rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03] p-3"
+      className={`flex flex-col rounded-xl border ${cardBorder} ${cardBg} p-3`}
     >
-      <h3 className="font-mono text-sm font-bold text-zzz-magenta">{style.label}</h3>
+      <div className="flex items-center justify-between">
+        <h3 className={`font-mono text-sm font-bold ${titleColor}`}>{style.label}</h3>
+        {style.id === 3 && (
+          <button
+            onClick={onFlipStyle3}
+            className="glass-btn px-2 py-0.5 font-mono text-[10px] tracking-widest text-zzz-text"
+            title={style3Face === 'front' ? '切换到反面' : '切换到正面'}
+          >
+            {style3Face === 'front' ? '↻ 正面' : '↻ 反面'}
+          </button>
+        )}
+      </div>
       <p className="mb-2 mt-1 text-xs leading-relaxed text-zzz-text/55">{style.description}</p>
       <textarea
         value={prompt}
@@ -66,13 +92,14 @@ const StyleCard = memo(function StyleCard({
       />
       <button
         onClick={() => onRun(style.id)}
-        disabled={slot.status === 'loading' || needsBase}
+        disabled={slot.status === 'loading' || needsBase || backNeedsFront}
         className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
       >
-        {needsBase
-          ? (style.id === 2 ? '需先生成零命' : '需先生成三命')
-          : '生成'}
+        {backNeedsFront ? '需先生成正面六命' : needsBase ? (style.id === 2 ? '需先生成零命' : '需先生成三命') : '生成'}
       </button>
+      {slot.error && (
+        <p className={`mt-1 font-mono text-[11px] ${errorColor}`}>{slot.error}</p>
+      )}
       <ResultView
         slot={slot}
         downloadPrefix={`yinghua-style${style.id}`}
@@ -116,6 +143,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const setYinghuaAddonImage = useYinghuaStore((s) => s.setYinghuaAddonImage);
   const yinghuaLang = useYinghuaStore((s) => s.yinghuaLang);
   const setYinghuaLang = useYinghuaStore((s) => s.setYinghuaLang);
+  const style3Face = useYinghuaStore((s) => s.style3Face);
+  const setStyle3Face = useYinghuaStore((s) => s.setStyle3Face);
   const uploadedImage = useUploadStore((s) => s.uploadedImage);
   const palette = useUploadStore((s) => s.palette);
   const provider = useProviderStore((s) => s.provider);
@@ -133,16 +162,26 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const computedPrompts = useMemo(() => {
     const prompts: Record<number, string> = {};
     for (const style of YINGHUA_STYLES) {
-      prompts[style.id] = fillName(
-        yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate,
-        characterName, palette ?? undefined, yinghuaShowText,
-        yinghuaCharacterDynamic, yinghuaMicroDynamic,
-        yinghuaCharacterTraits, yinghuaLang, style.id,
-      );
+      // 六命反面使用撕衣提示词
+      if (style.id === 3 && style3Face === 'back') {
+        prompts[style.id] = fillName(
+          yinghuaLang === 'en' ? YINGHUA_UNDRESS_PASS_EN : YINGHUA_UNDRESS_PASS,
+          characterName, palette ?? undefined, yinghuaShowText,
+          yinghuaCharacterDynamic, yinghuaMicroDynamic,
+          yinghuaCharacterTraits, yinghuaLang, style.id,
+        );
+      } else {
+        prompts[style.id] = fillName(
+          yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate,
+          characterName, palette ?? undefined, yinghuaShowText,
+          yinghuaCharacterDynamic, yinghuaMicroDynamic,
+          yinghuaCharacterTraits, yinghuaLang, style.id,
+        );
+      }
     }
     return prompts;
   }, [characterName, palette, yinghuaShowText, yinghuaCharacterDynamic,
-      yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang]);
+      yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang, style3Face]);
 
   useEffect(() => {
     for (const [id, prompt] of Object.entries(computedPrompts)) {
@@ -200,6 +239,11 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         return;
       }
     }
+    // 六命反面需要先有正面
+    if (id === 3 && style3Face === 'back' && !(yinghuaSlots[3].images[0])) {
+      showError('请先生成正面六命，再生成反面');
+      return;
+    }
     let imageOverride: string | undefined;
     try {
       if (id === 1) {
@@ -209,7 +253,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         const baseImg = id === 3 ? yinghuaSlots[2].images[0] : yinghuaSlots[1].images[0];
         if (!baseImg) {
           showError(id === 3
-            ? '请先生成三命，六命以三命成图为底图（姿态基准，就地撕衣露肤）'
+            ? '请先生成三命，六命以三命成图为底图'
             : '请先生成零命，三命需要零命结果锁定姿势与文字位置');
           return;
         }
@@ -249,57 +293,22 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         buildRequest(yinghuaPrompts[id], sizeOpts),
       );
 
-      if (id === 3 && images[0]) {
-        const undressPrompt = yinghuaLang === 'en' ? YINGHUA_UNDRESS_PASS_EN : YINGHUA_UNDRESS_PASS;
-        let finalImages = images;
-        try {
-          const threeView = threeViewSlot.images[0];
-          let undressImageOverride = threeView
-            ? await embedThumbnail(images[0], threeView)
-            : images[0];
+      setYinghuaSlot(id, { status: 'done', images });
+      await Promise.resolve();
 
-          if (provider === 'gpt-image' && undressImageOverride) {
-            if (undressImageOverride.startsWith('http://') || undressImageOverride.startsWith('https://')) {
-              const res = await fetch(undressImageOverride);
-              const blob = await res.blob();
-              undressImageOverride = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result));
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-              });
-            }
-            undressImageOverride = await compressDataUrl(undressImageOverride);
-          }
-          finalImages = await generate(
-            buildRequest(undressPrompt, provider === 'seedream'
-              ? { size: '2848x1600', imageOverride: undressImageOverride }
-              : { size: YINGHUA_SIZE, imageOverride: undressImageOverride }),
-          );
-        } catch {
-          showError('二次撕衣失败，保留一次成图（可重试生成）');
-          finalImages = images;
+      const capturedImages = images;
+      const capturedPalette = palette;
+      setTimeout(() => {
+        if (capturedImages[0]) {
+          void runFaceDetect(capturedImages[0]);
         }
-
-        setYinghuaSlot(3, { status: 'done', images: finalImages });
-        await Promise.resolve();
-
-        const capturedFinalImages = finalImages;
-        const capturedPalette = palette;
-        setTimeout(() => {
-          if (capturedFinalImages[0]) {
-            void runFaceDetect(capturedFinalImages[0]);
-          }
-          if (capturedPalette) {
-            const root = document.documentElement.style;
-            root.setProperty('--zzz-primary', capturedPalette.textTopBright);
-            root.setProperty('--zzz-magenta', capturedPalette.textBottom);
-            root.setProperty('--zzz-accent', capturedPalette.textBottom);
-          }
-        }, 0);
-      } else {
-        setYinghuaSlot(id, { status: 'done', images });
-      }
+        if (capturedPalette) {
+          const root = document.documentElement.style;
+          root.setProperty('--zzz-primary', capturedPalette.textTopBright);
+          root.setProperty('--zzz-magenta', capturedPalette.textBottom);
+          root.setProperty('--zzz-accent', capturedPalette.textBottom);
+        }
+      }, 0);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
       setYinghuaSlot(id, { status: 'error', error: msg });
@@ -329,7 +338,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       </div>
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁脸位/大致身位/配色）。六命为【两遍生图】：先出连贯全彩图，再自动做一次专职「自然精简服装、顺势露肤」编辑，故耗时约翻倍；配色统一以三视图原色为准。
+          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁脸位/大致身位/配色）。六命可切换「正面/反面」：正面为全彩高饱和赛璐珞；反面为服装精简版（自然精简服装、顺势露肤），需先出正面再生成反面；配色统一以三视图原色为准。
         </p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}
@@ -426,9 +435,11 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             characterName={characterName}
             provider={provider}
             yinghuaSlots={yinghuaSlots}
+            style3Face={style3Face}
             onRun={run}
             onPromptChange={handlePromptChange}
             onInpaintClick={(src) => handleInpaintClick(src, style.id)}
+            onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
           />
         ))}
       </div>
