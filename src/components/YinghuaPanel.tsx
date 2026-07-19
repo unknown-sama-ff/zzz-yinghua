@@ -7,7 +7,7 @@ import { useYinghuaStore } from '../store/useYinghuaStore';
 import { useViewerStore } from '../store/useViewerStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
-import { YINGHUA_STYLES, YINGHUA_SIZE, fillName, YINGHUA_UNDRESS_PASS, YINGHUA_UNDRESS_PASS_EN } from '../lib/prompts';
+import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
 import { stitchImages, embedThumbnail } from '../lib/imageWorkerPool';
 import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
 import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
@@ -162,10 +162,10 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const computedPrompts = useMemo(() => {
     const prompts: Record<number, string> = {};
     for (const style of YINGHUA_STYLES) {
-      // 六命反面使用撕衣提示词
-      if (style.id === 3 && style3Face === 'back') {
+      if (style.id === 3 && style3Face === 'front' && style.promptTemplateFront) {
+        // 六命正面：使用干净的正面提示词（无撕衣内容）
         prompts[style.id] = fillName(
-          yinghuaLang === 'en' ? YINGHUA_UNDRESS_PASS_EN : YINGHUA_UNDRESS_PASS,
+          yinghuaLang === 'en' && style.promptTemplateFrontEn ? style.promptTemplateFrontEn : style.promptTemplateFront,
           characterName, palette ?? undefined, yinghuaShowText,
           yinghuaCharacterDynamic, yinghuaMicroDynamic,
           yinghuaCharacterTraits, yinghuaLang, style.id,
