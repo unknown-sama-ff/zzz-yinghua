@@ -46,13 +46,14 @@ export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPic
   return (
     <div className="mt-3 grid grid-cols-1 gap-3">
       {slot.images.map((src, i) => (
-        <figure key={imageKey ? `${imageKey}-${i}` : i} className="group relative overflow-hidden rounded-xl">
+        <figure key={i} className="group relative overflow-hidden rounded-xl">
           {topLeftAction && (
-            <div className="absolute left-2 top-2 z-10 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="absolute left-2 top-2 z-10 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
               {topLeftAction}
             </div>
           )}
           <img
+            key={imageKey ? `${imageKey}-${i}` : i}
             src={src}
             alt={`${downloadPrefix}-${i + 1}`}
             loading="lazy"

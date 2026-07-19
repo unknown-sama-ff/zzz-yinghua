@@ -88,17 +88,14 @@
   0% {
     opacity: 0;
     transform: perspective(900px) rotateY(-88deg) scale(0.98);
-    filter: brightness(1.8) drop-shadow(0 0 18px var(--zzz-magenta));
   }
   65% {
     opacity: 1;
     transform: perspective(900px) rotateY(6deg) scale(1.01);
-    filter: brightness(1.2) drop-shadow(0 0 8px var(--zzz-primary));
   }
   100% {
     opacity: 1;
     transform: perspective(900px) rotateY(0deg) scale(1);
-    filter: brightness(1) drop-shadow(0 0 0 transparent);
   }
 }
 

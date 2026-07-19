@@ -115,9 +115,7 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   const timers = useRef<number[]>([]);
   const slotInputRefs = useRef<Record<string, HTMLInputElement | null>>({ 1: null, 2: null, 3: null, '3-front': null, '3-back': null });
 
-  // The three generated tiers; first image of each yinghua style slot.
-  const tierImage = (id: 1 | 2 | 3): string | undefined => yinghuaSlots[id].images[0];
-  const baseImg = tierImage(1); // 零命
+  const baseImg = yinghuaSlots[1].images[0]; // 零命
   const hasBase = Boolean(baseImg);
 
   // 监听底图加载，获取实际宽高比

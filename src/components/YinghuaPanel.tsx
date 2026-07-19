@@ -88,6 +88,8 @@ const StyleCard = memo(function StyleCard({
           <button
             onClick={onFlipStyle3}
             className="glass-btn px-2 py-0.5 font-mono text-[10px] tracking-widest text-zzz-text"
+            aria-label={style3Face === 'front' ? '切换到六命阴' : '切换到六命阳'}
+            aria-pressed={style3Face === 'back'}
             title={style3Face === 'front' ? '切换到阴' : '切换到阳'}
           >
             {style3Face === 'front' ? '↻ 阳' : '↻ 阴'}
@@ -127,7 +129,6 @@ const StyleCard = memo(function StyleCard({
         }
         imageClassName={style.id === 3 && displayedSixImage ? 'fx-face-flip' : undefined}
         imageKey={style.id === 3 && displayedSixImage ? `style3-${displayedSixImage.face}` : undefined}
-        pickLabel="使用该六命图"
         topLeftAction={
           style.id === 3 && displayedSixImage && onPick ? (
             <button
