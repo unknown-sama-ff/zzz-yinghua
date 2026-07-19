@@ -69,6 +69,7 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   const visionCred = useProviderStore((s) => s.visionCred);
   const viewerClipRegions = useViewerStore((s) => s.viewerClipRegions);
   const setViewerClipRegions = useViewerStore((s) => s.setViewerClipRegions);
+  const setViewerFullscreen = useViewerStore((s) => s.setViewerFullscreen);
   const detectFaceError = useViewerStore((s) => s.detectFaceError);
   const setDetectFaceError = useViewerStore((s) => s.setDetectFaceError);
   const showError = useToast((s) => s.show);
@@ -172,6 +173,7 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
         try { await document.exitFullscreen(); } catch {}
       }
       setFullscreen(false);
+      setViewerFullscreen(false);
     } else {
       if (isMobile) {
         const el = sectionRef.current;
@@ -184,8 +186,9 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
         } catch {}
       }
       setFullscreen(true);
+      setViewerFullscreen(true);
     }
-  }, [fullscreen, isMobile]);
+  }, [fullscreen, isMobile, setViewerFullscreen]);
 
   useEffect(() => {
     if (!isMobile) return;

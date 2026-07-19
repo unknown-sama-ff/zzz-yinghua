@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, memo } from 'react';
 import { useCursorEffectsPref } from '../lib/useCursorEffectsPref';
 import { useProviderStore } from '../store/useProviderStore';
+import { useViewerStore } from '../store/useViewerStore';
 import { useInpaintStore } from '../store/useInpaintStore';
 
 const THEME_VARS = ['--zzz-primary', '--zzz-magenta', '--zzz-cyan'] as const;
@@ -120,6 +121,7 @@ export const CursorEffects = memo(function CursorEffects() {
   const { enabled, reduced, setEnabled } = useCursorEffectsPref();
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
   const setFreeloadEnabled = useProviderStore((s) => s.setFreeloadEnabled);
+  const viewerFullscreen = useViewerStore((s) => s.viewerFullscreen);
   const isWorkspaceOpen = useInpaintStore((s) => s.isWorkspaceOpen);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);
@@ -494,7 +496,7 @@ export const CursorEffects = memo(function CursorEffects() {
       />
 
       {/* Social link buttons */}
-      {!isWorkspaceOpen && (
+      {!isWorkspaceOpen && !viewerFullscreen && (
         <div className="fixed left-4 top-4 z-[10001] flex items-center gap-3">
         <a
           href="https://space.bilibili.com/661830801"
@@ -526,7 +528,7 @@ export const CursorEffects = memo(function CursorEffects() {
       </div>
         )}
 
-      {!isWorkspaceOpen && (
+      {!isWorkspaceOpen && !viewerFullscreen && (
         <>
           <button
             onClick={() => setFreeloadEnabled(!freeloadEnabled)}

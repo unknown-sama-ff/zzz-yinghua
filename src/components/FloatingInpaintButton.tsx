@@ -1,9 +1,12 @@
 import { memo } from 'react';
 import { useInpaintStore } from '../store/useInpaintStore';
 
+import { useViewerStore } from '../store/useViewerStore';
+
 export const FloatingInpaintButton = memo(function FloatingInpaintButton() {
   const isSelecting = useInpaintStore((s) => s.isSelecting);
   const setIsSelecting = useInpaintStore((s) => s.setIsSelecting);
+  const viewerFullscreen = useViewerStore((s) => s.viewerFullscreen);
 
   return (
     <button
@@ -14,6 +17,7 @@ export const FloatingInpaintButton = memo(function FloatingInpaintButton() {
         font-mono text-xs font-medium tracking-wide
         backdrop-blur-md
         transition-all duration-300
+        ${viewerFullscreen ? 'hidden' : ''}
         ${isSelecting
           ? 'bg-[var(--zzz-primary)] text-white shadow-[0_0_32px_var(--zzz-primary)] scale-110'
           : 'bg-[var(--zzz-ink)]/80 text-[var(--zzz-primary)] border border-[var(--zzz-text)]/20 hover:border-[var(--zzz-primary)]/60 hover:shadow-[0_0_20px_var(--zzz-primary)]'

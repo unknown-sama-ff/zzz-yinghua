@@ -16,6 +16,8 @@ interface ViewerState {
   setNamePlacement: (p: NamePlacement) => void;
   faceBounds: FaceBounds | null;
   setFaceBounds: (b: FaceBounds | null) => void;
+  viewerFullscreen: boolean;
+  setViewerFullscreen: (v: boolean) => void;
 }
 
 const initialParts = (): LayerPart[] =>
@@ -51,4 +53,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setNamePlacement: (p) => set({ namePlacement: p }),
   faceBounds: null,
   setFaceBounds: (b) => set({ faceBounds: b }),
+
+  viewerFullscreen: false,
+  setViewerFullscreen: (v) => set({ viewerFullscreen: v }),
 }));
