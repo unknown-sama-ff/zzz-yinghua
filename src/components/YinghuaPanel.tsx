@@ -203,6 +203,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const setDetectFaceError = useViewerStore((s) => s.setDetectFaceError);
   const setFaceBounds = useViewerStore((s) => s.setFaceBounds);
   const threeViewSlot = useWorkbenchStore((s) => s.threeViewSlot);
+  const costumeChangeHistory = useWorkbenchStore((s) => s.costumeChangeHistory);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
 
@@ -314,7 +315,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             : '请先生成零命，三命需要零命结果锁定姿势与文字位置');
           return;
         }
-        const threeView = threeViewSlot.images[0];
+        const threeView = costumeChangeHistory[0] ?? threeViewSlot.images[0];
         const thumbs: ThumbEntry[] = [];
         if (yinghuaAddonImage) {
           thumbs.push({ url: yinghuaAddonImage, size: 0.18, position: 'bottom-left' });

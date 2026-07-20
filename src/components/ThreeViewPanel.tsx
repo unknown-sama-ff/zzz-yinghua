@@ -85,6 +85,7 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
   const addCostumeChangeImages = useWorkbenchStore((s) => s.addCostumeChangeImages);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
+  const uploadRevisionRef = useRef(0);
 
   const handleFile = useCallback(
     async (view: ViewKey, file: File) => {
@@ -94,9 +95,27 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
         return;
       }
       const dataUrl = await fileToDataUrl(file);
+      const revision = ++uploadRevisionRef.current;
       setThreeViewUpload(view, dataUrl);
+      const nextUploads = useWorkbenchStore.getState().threeViewUploads;
+      if (nextUploads.front) {
+        try {
+          const stitched = await stitchImages([
+            nextUploads.front,
+            nextUploads.side,
+            nextUploads.back,
+          ]);
+          if (revision === uploadRevisionRef.current) {
+            addCostumeChangeImages([stitched]);
+          }
+        } catch {
+          if (revision === uploadRevisionRef.current) {
+            showError('三视图历史快照合成失败');
+          }
+        }
+      }
     },
-    [setThreeViewUpload, showError],
+    [addCostumeChangeImages, setThreeViewUpload, showError],
   );
 
   const run = async () => {
