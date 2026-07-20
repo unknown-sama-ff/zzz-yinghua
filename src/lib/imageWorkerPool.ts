@@ -12,11 +12,21 @@ function hasOffscreenCanvas(): boolean {
   return typeof OffscreenCanvas !== 'undefined';
 }
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type ThumbPosition = 'bottom-left' | 'bottom-right';
+
+export interface ThumbEntry {
+  url: string;
+  size?: number;
+  position: ThumbPosition;
+}
+
 // ── Cache ─────────────────────────────────────────────────────────────────────
 
 // stitchImages: key = JSON of the stable input signature
 type StitchKey = string;
-// embedThumbnail: key = JSON of [baseDataUrl, thumbDataUrl, size]
+// embedThumbnail(s): key = JSON of [baseDataUrl, thumbsArray, size]
 type EmbedKey = string;
 
 interface CacheEntry {
@@ -58,7 +68,12 @@ function getWorker(): Worker | null {
 // ── Request/response plumbing ─────────────────────────────────────────────────
 
 type StitchPayload = { type: 'stitch'; op: 'stitch'; dataUrls: string[] };
-type EmbedPayload = { type: 'embedThumbnail'; op: 'embedThumbnail'; base: string; thumb: string; size?: number };
+type EmbedPayload = {
+  type: 'embedThumbnail';
+  op: 'embedThumbnail';
+  base: string;
+  thumbs: { url: string; size?: number; position: ThumbPosition }[];
+};
 type Msg = StitchPayload | EmbedPayload;
 
 const drainQueue: {
@@ -194,23 +209,64 @@ async function fallbackStitch(dataUrls: string[]): Promise<string> {
   });
 }
 
-async function fallbackEmbed(base: string, thumb: string, size = 0.2): Promise<string> {
-  const [baseImg, thumbImg] = await Promise.all([loadImg(base), loadImg(thumb)]);
+async function fallbackEmbed(
+  base: string,
+  thumbs: { url: string; size?: number; position: ThumbPosition }[],
+): Promise<string> {
+  const [baseImg, ...thumbImgs] = await Promise.all([
+    loadImg(base),
+    ...thumbs.map((t) => loadImg(t.url)),
+  ]);
   const c = document.createElement('canvas');
   c.width = baseImg.naturalWidth;
   c.height = baseImg.naturalHeight;
   const ctx = c.getContext('2d')!;
   ctx.drawImage(baseImg, 0, 0);
 
-  const thumbH = Math.round(baseImg.naturalHeight * size);
-  const thumbW = Math.round((thumbImg.naturalWidth / thumbImg.naturalHeight) * thumbH);
   const margin = Math.round(baseImg.naturalHeight * 0.02);
-  const tx = c.width - thumbW - margin;
-  const ty = c.height - thumbH - margin;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(tx - 4, ty - 4, thumbW + 8, thumbH + 8);
-  ctx.drawImage(thumbImg, tx, ty, thumbW, thumbH);
+  // Group thumbs by position
+  const leftThumbs: { img: HTMLImageElement; w: number; h: number; spec: typeof thumbs[0] }[] = [];
+  const rightThumbs: { img: HTMLImageElement; w: number; h: number; spec: typeof thumbs[0] }[] = [];
+
+  for (let i = 0; i < thumbs.length; i++) {
+    const spec = thumbs[i];
+    const img = thumbImgs[i];
+    const size = spec.size ?? 0.2;
+    const thumbH = Math.round(baseImg.naturalHeight * size);
+    const thumbW = Math.round((img.naturalWidth / img.naturalHeight) * thumbH);
+    const entry = { img, w: thumbW, h: thumbH, spec };
+    if (spec.position === 'bottom-left') {
+      leftThumbs.push(entry);
+    } else {
+      rightThumbs.push(entry);
+    }
+  }
+
+  // Draw left thumbs (left-to-right from margin)
+  let leftX = margin;
+  for (const t of leftThumbs) {
+    const tx = leftX;
+    const ty = baseImg.naturalHeight - t.h - margin;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(tx - 4, ty - 4, t.w + 8, t.h + 8);
+    ctx.drawImage(t.img, tx, ty, t.w, t.h);
+    leftX += t.w + margin;
+  }
+
+  // Draw right thumbs (right-to-left from right edge)
+  const totalRightW = rightThumbs.reduce((s, t) => s + t.w, 0)
+    + (rightThumbs.length - 1) * margin;
+  let rightX = baseImg.naturalWidth - totalRightW;
+
+  for (const t of rightThumbs) {
+    const tx = rightX;
+    const ty = baseImg.naturalHeight - t.h - margin;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(tx - 4, ty - 4, t.w + 8, t.h + 8);
+    ctx.drawImage(t.img, tx, ty, t.w, t.h);
+    rightX += t.w + margin;
+  }
 
   return new Promise((resolve, reject) => {
     c.toBlob(
@@ -265,8 +321,16 @@ export async function embedThumbnail(
   base: string,
   thumb: string,
   size = 0.2,
+  position: ThumbPosition = 'bottom-right',
 ): Promise<string> {
-  const key = JSON.stringify([base, thumb, size]) as EmbedKey;
+  return embedThumbnails(base, [{ url: thumb, size, position }]);
+}
+
+export async function embedThumbnails(
+  base: string,
+  thumbs: ThumbEntry[],
+): Promise<string> {
+  const key = JSON.stringify([base, thumbs]) as EmbedKey;
   return cachedOrRun(embedCache, key, async () => {
     const w = getWorker();
     if (w) {
@@ -275,13 +339,16 @@ export async function embedThumbnail(
           type: 'embedThumbnail',
           op: 'embedThumbnail',
           base,
-          thumb,
-          size,
+          thumbs: thumbs.map((t) => ({
+            url: t.url,
+            size: t.size,
+            position: t.position,
+          })),
         });
       } catch {
         // fall through
       }
     }
-    return fallbackEmbed(base, thumb, size);
+    return fallbackEmbed(base, thumbs);
   });
 }

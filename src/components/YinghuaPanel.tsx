@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, memo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useIdentityStore } from '../store/useIdentityStore';
 import { useProviderStore } from '../store/useProviderStore';
 import { useUploadStore } from '../store/useUploadStore';
@@ -8,7 +8,8 @@ import { useViewerStore } from '../store/useViewerStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
-import { stitchImages, embedThumbnail } from '../lib/imageWorkerPool';
+import { stitchImages, embedThumbnails } from '../lib/imageWorkerPool';
+import type { ThumbEntry } from '../lib/imageWorkerPool';
 import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
 import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
@@ -78,9 +79,31 @@ const StyleCard = memo(function StyleCard({
     : slot;
   const displayedImage = style.id === 3 ? displayedSixImage?.src : slot.images[0];
 
+  // --- Card flip animation for style 3 (六命) ---
+  const prevFaceRef = useRef(style3Face);
+  const isFirstRender = useRef(true);
+  const [cardFlipping, setCardFlipping] = useState(false);
+
+  useEffect(() => {
+    if (style.id !== 3) return;
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      prevFaceRef.current = style3Face;
+      return;
+    }
+    if (prevFaceRef.current !== style3Face) {
+      prevFaceRef.current = style3Face;
+      setCardFlipping(true);
+      const timer = setTimeout(() => setCardFlipping(false), 460);
+      return () => clearTimeout(timer);
+    }
+  }, [style3Face, style.id]);
+
   return (
     <div
-      className={`flex flex-col rounded-xl border ${cardBorder} ${cardBg} p-3`}
+      className={`flex flex-col rounded-xl border ${cardBorder} ${cardBg} p-3${
+        style.id === 3 && cardFlipping ? ' fx-face-flip' : ''
+      }`}
     >
       <div className="flex items-center justify-between">
         <h3 className={`font-mono text-sm font-bold ${titleColor}`}>{style.label}</h3>
@@ -292,8 +315,15 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           return;
         }
         const threeView = threeViewSlot.images[0];
-        imageOverride = threeView
-          ? await embedThumbnail(baseImg, threeView)
+        const thumbs: ThumbEntry[] = [];
+        if (yinghuaAddonImage) {
+          thumbs.push({ url: yinghuaAddonImage, size: 0.18, position: 'bottom-left' });
+        }
+        if (threeView) {
+          thumbs.push({ url: threeView, size: 0.2, position: 'bottom-right' });
+        }
+        imageOverride = thumbs.length > 0
+          ? await embedThumbnails(baseImg, thumbs)
           : baseImg;
       }
 
