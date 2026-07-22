@@ -23,7 +23,7 @@ async function parseJsonOffThread(response: Response): Promise<ApiResponse> {
     return response.json();
   }
 
-  const buffer = await response.clone().arrayBuffer();
+  const buffer = await response.arrayBuffer();
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
