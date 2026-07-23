@@ -1,12 +1,20 @@
 import { create } from 'zustand';
 import type { YinghuaStyleId } from '../types';
 
+type ActiveGeneration = {
+  id: YinghuaStyleId;
+  idempotencyKey: string;
+};
+
 interface YinghuaState {
   yinghuaPrompts: Record<YinghuaStyleId, string>;
   setYinghuaPrompt: (id: YinghuaStyleId, p: string) => void;
   yinghuaSlots: Record<YinghuaStyleId, GenSlotLike>;
   setYinghuaSlot: (id: YinghuaStyleId, patch: Partial<GenSlotLike>) => void;
   setSlotManual: (id: YinghuaStyleId, dataUrl: string) => void;
+  activeGeneration: ActiveGeneration | null;
+  beginYinghuaGeneration: (id: YinghuaStyleId) => ActiveGeneration | null;
+  endYinghuaGeneration: (idempotencyKey: string) => void;
 
   yinghuaShowText: boolean;
   setYinghuaShowText: (show: boolean) => void;
@@ -43,6 +51,28 @@ export const useYinghuaStore = create<YinghuaState>((set) => ({
     set((s) => ({
       yinghuaSlots: { ...s.yinghuaSlots, [id]: { status: 'done', images: [dataUrl] } },
     })),
+  activeGeneration: null,
+  beginYinghuaGeneration: (id) => {
+    let generation: ActiveGeneration | null = null;
+    set((s) => {
+      if (s.activeGeneration) return s;
+      generation = { id, idempotencyKey: crypto.randomUUID() };
+      return {
+        activeGeneration: generation,
+        yinghuaSlots: {
+          ...s.yinghuaSlots,
+          [id]: { ...s.yinghuaSlots[id], status: 'loading', error: undefined },
+        },
+      };
+    });
+    return generation;
+  },
+  endYinghuaGeneration: (idempotencyKey) =>
+    set((s) => (
+      s.activeGeneration?.idempotencyKey === idempotencyKey
+        ? { activeGeneration: null }
+        : s
+    )),
 
   yinghuaShowText: true,
   setYinghuaShowText: (show) => set({ yinghuaShowText: show }),

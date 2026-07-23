@@ -32,12 +32,12 @@ const StyleCard = memo(function StyleCard({
   characterName,
   provider,
   yinghuaSlots,
+  activeGeneration,
   style3Face,
   onRun,
   onPromptChange,
   onInpaintClick,
   onFlipStyle3,
-  onPick,
 }: {
   style: { id: YinghuaStyleId; label: string; description: string };
   prompt: string;
@@ -45,12 +45,12 @@ const StyleCard = memo(function StyleCard({
   characterName: string;
   provider: string;
   yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
+  activeGeneration: { id: YinghuaStyleId } | null;
   style3Face: 'front' | 'back';
   onRun: (id: YinghuaStyleId) => void;
   onPromptChange: (styleId: YinghuaStyleId, value: string) => void;
   onInpaintClick: (src: string) => void;
   onFlipStyle3: () => void;
-  onPick?: (src: string) => void;
 }) {
   const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
   const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
@@ -78,6 +78,14 @@ const StyleCard = memo(function StyleCard({
     ? { ...slot, images: displayedSixImage ? [displayedSixImage.src] : [] }
     : slot;
   const displayedImage = style.id === 3 ? displayedSixImage?.src : slot.images[0];
+  const isActiveGeneration = activeGeneration?.id === style.id;
+  const generateLabel = backNeedsFront
+    ? '需先生成六命阳'
+    : needsBase
+      ? (style.id === 2 ? '需先生成零命' : '需先生成三命')
+      : isActiveGeneration
+        ? '生成中…'
+        : '生成';
 
   // --- Card flip animation for style 3 (六命) ---
   const prevFaceRef = useRef(style3Face);
@@ -128,10 +136,10 @@ const StyleCard = memo(function StyleCard({
       />
       <button
         onClick={() => onRun(style.id)}
-        disabled={slot.status === 'loading' || needsBase || backNeedsFront}
+        disabled={Boolean(activeGeneration) || needsBase || backNeedsFront}
         className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
       >
-        {backNeedsFront ? '需先生成六命阳' : needsBase ? (style.id === 2 ? '需先生成零命' : '需先生成三命') : '生成'}
+        {generateLabel}
       </button>
       {slot.error && (
         <p className={`mt-1 font-mono text-[11px] ${errorColor}`}>{slot.error}</p>
@@ -152,16 +160,6 @@ const StyleCard = memo(function StyleCard({
         }
         imageClassName={style.id === 3 && displayedSixImage ? 'fx-face-flip' : undefined}
         imageKey={style.id === 3 && displayedSixImage ? `style3-${displayedSixImage.face}` : undefined}
-        topLeftAction={
-          style.id === 3 && displayedSixImage && onPick ? (
-            <button
-              onClick={() => onPick(displayedSixImage.src)}
-              className="glass-btn px-3 py-1 text-xs text-zzz-cyan"
-            >
-              使用该六命图
-            </button>
-          ) : undefined
-        }
         onInpaintClick={onInpaintClick}
         inpaintMeta={{ type: 'yinghua', slotId: String(style.id), index: 0 }}
       />
@@ -179,6 +177,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const setYinghuaPrompt = useYinghuaStore((s) => s.setYinghuaPrompt);
   const yinghuaSlots = useYinghuaStore((s) => s.yinghuaSlots);
   const setYinghuaSlot = useYinghuaStore((s) => s.setYinghuaSlot);
+  const activeGeneration = useYinghuaStore((s) => s.activeGeneration);
+  const beginYinghuaGeneration = useYinghuaStore((s) => s.beginYinghuaGeneration);
+  const endYinghuaGeneration = useYinghuaStore((s) => s.endYinghuaGeneration);
   const yinghuaShowText = useYinghuaStore((s) => s.yinghuaShowText);
   const setYinghuaShowText = useYinghuaStore((s) => s.setYinghuaShowText);
   const yinghuaCharacterDynamic = useYinghuaStore((s) => s.yinghuaCharacterDynamic);
@@ -300,25 +301,39 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       showError('请先生成六命阳，再生成六命阴');
       return;
     }
+    const generation = beginYinghuaGeneration(id);
+    if (!generation) return;
+
+    const { idempotencyKey } = generation;
+    const selectedFace = style3Face;
+    const prompt = yinghuaPrompts[id];
+    const sourceImage = uploadedImage;
+    const addonImage = yinghuaAddonImage;
+    const sourceSlots = yinghuaSlots;
+    const sourceThreeView = costumeChangeHistory[0] ?? threeViewSlot.images[0];
+    const selectedProvider = provider;
+    const capturedPalette = palette;
+    setYinghuaSlot(id, { status: 'loading', error: undefined });
+
     let imageOverride: string | undefined;
     try {
       if (id === 1) {
         const styleSheet = await buildStyleReferenceSheet(id);
-        imageOverride = await stitchImages([uploadedImage, yinghuaAddonImage, styleSheet]);
+        imageOverride = await stitchImages([sourceImage, addonImage, styleSheet]);
       } else {
         const baseImg = id === 3
-          ? (style3Face === 'back' ? yinghuaSlots[3].images[0] : yinghuaSlots[2].images[0])
-          : yinghuaSlots[1].images[0];
+          ? (selectedFace === 'back' ? sourceSlots[3].images[0] : sourceSlots[2].images[0])
+          : sourceSlots[1].images[0];
         if (!baseImg) {
           showError(id === 3
             ? '请先生成三命，六命以三命成图为底图'
             : '请先生成零命，三命需要零命结果锁定姿势与文字位置');
           return;
         }
-        const threeView = costumeChangeHistory[0] ?? threeViewSlot.images[0];
+        const threeView = sourceThreeView;
         const thumbs: ThumbEntry[] = [];
-        if (yinghuaAddonImage) {
-          thumbs.push({ url: yinghuaAddonImage, size: 0.18, position: 'bottom-left' });
+        if (addonImage) {
+          thumbs.push({ url: addonImage, size: 0.18, position: 'bottom-left' });
         }
         if (threeView) {
           thumbs.push({ url: threeView, size: 0.2, position: 'bottom-right' });
@@ -328,7 +343,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           : baseImg;
       }
 
-      if (provider === 'gpt-image' && imageOverride) {
+      if (selectedProvider === 'gpt-image' && imageOverride) {
         let src = imageOverride;
         if (src.startsWith('http://') || src.startsWith('https://')) {
           const res = await fetch(src);
@@ -343,26 +358,27 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         imageOverride = await compressDataUrl(src);
       }
     } catch {
-      showError('风格参考图合成失败');
+      const msg = '风格参考图合成失败';
+      setYinghuaSlot(id, { status: 'error', error: msg });
+      showError(msg);
+      endYinghuaGeneration(idempotencyKey);
       return;
     }
 
-    setYinghuaSlot(id, { status: 'loading', error: undefined });
-    await Promise.resolve();
-
     try {
-      const sizeOpts = provider === 'seedream'
+      const sizeOpts = selectedProvider === 'seedream'
         ? { size: '2848x1600', imageOverride }
         : { size: YINGHUA_SIZE, imageOverride };
-      const images = await generate(
-        buildRequest(yinghuaPrompts[id], sizeOpts),
-      );
+      const images = await generate({
+        ...buildRequest(prompt, sizeOpts),
+        idempotencyKey,
+      });
 
       // 六命：正面存 images[0]，反面存 images[1]，不互相覆盖
       if (id === 3) {
-        const existing = yinghuaSlots[3].images;
+        const existing = useYinghuaStore.getState().yinghuaSlots[3].images;
         const newImages = [...existing];
-        newImages[style3Face === 'front' ? 0 : 1] = images[0];
+        newImages[selectedFace === 'front' ? 0 : 1] = images[0];
         setYinghuaSlot(id, { status: 'done', images: newImages });
       } else {
         setYinghuaSlot(id, { status: 'done', images });
@@ -370,9 +386,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       await Promise.resolve();
 
       const capturedImages = images;
-      const capturedPalette = palette;
+      const shouldAutoDetectFace = id === 3 && selectedFace === 'front';
       setTimeout(() => {
-        if (capturedImages[0]) {
+        if (shouldAutoDetectFace && capturedImages[0]) {
           void runFaceDetect(capturedImages[0]);
         }
         if (capturedPalette) {
@@ -386,6 +402,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       const msg = err instanceof ApiError ? err.message : '生成失败';
       setYinghuaSlot(id, { status: 'error', error: msg });
       showError(msg);
+    } finally {
+      endYinghuaGeneration(idempotencyKey);
     }
   };
 
@@ -508,14 +526,12 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             characterName={characterName}
             provider={provider}
             yinghuaSlots={yinghuaSlots}
+            activeGeneration={activeGeneration}
             style3Face={style3Face}
             onRun={run}
             onPromptChange={handlePromptChange}
             onInpaintClick={(src) => handleInpaintClick(src, style.id)}
             onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
-            onPick={style.id === 3 && yinghuaSlots[3].images.length > 0 ? () => {
-              showError(`✓ 查看器已切换至六命${style3Face === 'front' ? '阳' : '阴'}`);
-            } : undefined}
           />
         ))}
       </div>

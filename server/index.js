@@ -56,6 +56,14 @@ const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 // Vercel, generate() returns a taskId immediately and the frontend polls
 // GET /api/task/:id for completion.
 const taskStore = new Map();
+const generationFlights = new Map();
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,128}$/;
+
+function cleanupGenerationFlight(idempotencyKey) {
+  const entry = generationFlights.get(idempotencyKey);
+  if (entry?.timer) clearTimeout(entry.timer);
+  generationFlights.delete(idempotencyKey);
+}
 
 function cleanupTask(id) {
   const entry = taskStore.get(id);
@@ -91,19 +99,47 @@ app.get('/api/task/:id', (req, res) => {
 
 app.post('/api/generate', async (req, res) => {
   const body = req.body || {};
+  const idempotencyKey = typeof body.idempotencyKey === 'string' && IDEMPOTENCY_KEY_RE.test(body.idempotencyKey)
+    ? body.idempotencyKey
+    : null;
+
+  if (typeof body.idempotencyKey === 'string' && !idempotencyKey) {
+    return fail(res, 400, 'INVALID_INPUT', '无效的 idempotencyKey');
+  }
+
+  if (idempotencyKey) {
+    const existing = generationFlights.get(idempotencyKey);
+    if (existing) {
+      const outcome = await existing.outcome;
+      return res.status(outcome.status).json(outcome.body);
+    }
+  }
+
+  const outcome = executeGeneration(body, idempotencyKey);
+  if (idempotencyKey) {
+    const timer = setTimeout(() => cleanupGenerationFlight(idempotencyKey), TASK_TTL_MS);
+    generationFlights.set(idempotencyKey, { outcome, timer });
+  }
+
+  const result = await outcome;
+  return res.status(result.status).json(result.body);
+});
+
+async function executeGeneration(body, idempotencyKey) {
   const { provider, prompt } = body;
 
   if (!provider || !VALID_PROVIDERS.has(provider)) {
-    return fail(res, 400, 'INVALID_INPUT', '无效的 provider');
+    return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: '无效的 provider' } };
   }
   if (!prompt || typeof prompt !== 'string') {
-    return fail(res, 400, 'INVALID_INPUT', '缺少 prompt');
+    return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: '缺少 prompt' } };
   }
 
   const started = Date.now();
   const hasImage = Boolean(body.imageBase64 || body.imageUrl);
+  const operation = idempotencyKey ? ` operation=${idempotencyKey}` : '';
   console.log(
-    `[generate] provider=${provider} hasImage=${hasImage} size=${body.size || 'default'} endpoint=${body.customEndpoint || body.baseUrl || '(env/default)'}`,
+    `[generate] provider=${provider} hasImage=${hasImage} size=${body.size || 'default'} endpoint=${body.customEndpoint || body.baseUrl || '(env/default)'}${operation}`,
   );
 
   try {
@@ -116,25 +152,25 @@ app.post('/api/generate', async (req, res) => {
         status: 'pending',
         timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS),
       });
-      console.log(`[generate] provider=${provider} task queued id=${taskId} (${Date.now() - started}ms)`);
-      return res.json({ ok: true, taskId });
+      console.log(`[generate] provider=${provider} task queued id=${taskId} (${Date.now() - started}ms)${operation}`);
+      return { status: 200, body: { ok: true, taskId } };
     }
 
     if (!result.images || result.images.length === 0) {
-      console.warn(`[generate] provider=${provider} 上游未返回图片 (${Date.now() - started}ms)`);
-      return fail(res, 502, 'UPSTREAM_ERROR', '上游未返回图片');
+      console.warn(`[generate] provider=${provider} 上游未返回图片 (${Date.now() - started}ms)${operation}`);
+      return { status: 502, body: { ok: false, code: 'UPSTREAM_ERROR', message: '上游未返回图片' } };
     }
-    console.log(`[generate] provider=${provider} ok images=${result.images.length} (${Date.now() - started}ms)`);
-    return res.json({ ok: true, images: result.images });
+    console.log(`[generate] provider=${provider} ok images=${result.images.length} (${Date.now() - started}ms)${operation}`);
+    return { status: 200, body: { ok: true, images: result.images } };
   } catch (err) {
     if (err instanceof UpstreamError) {
-      console.warn(`[generate] provider=${provider} ${err.code}: ${err.message} (${Date.now() - started}ms)`);
-      return fail(res, err.status, err.code, err.message);
+      console.warn(`[generate] provider=${provider} ${err.code}: ${err.message} (${Date.now() - started}ms)${operation}`);
+      return { status: err.status, body: { ok: false, code: err.code, message: err.message } };
     }
-    console.error('[generate] unexpected error:', err);
-    return fail(res, 500, 'UNKNOWN', '服务端内部错误');
+    console.error(`[generate] unexpected error:${operation}`, err);
+    return { status: 500, body: { ok: false, code: 'UNKNOWN', message: '服务端内部错误' } };
   }
-});
+}
 
 // ── Inpaint (image + optional mask + prompt) via gpt-image ───────────────────
 app.post('/api/inpaint', upload.fields([

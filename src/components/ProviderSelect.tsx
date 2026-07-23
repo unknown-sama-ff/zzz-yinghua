@@ -165,7 +165,7 @@ export const ProviderSelect = memo(function ProviderSelect() {
             className="glass-input w-full px-3 py-2 font-mono text-sm"
           />
           <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
-            用于零命图片生成后自动检测人脸位置，动态计算切割区域。Key 留空时使用服务端 .env 的 VISION_API_KEY；若均未配置则报错。
+            用于六命阳图片生成后自动检测人脸位置，动态计算 04–06 切割区域。Key 留空时使用服务端 .env 的 VISION_API_KEY；若均未配置则报错。
           </p>
         </div>
       )}

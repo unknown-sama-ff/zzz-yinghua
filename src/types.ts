@@ -23,6 +23,8 @@ export interface GenRequest {
   customEndpoint?: string;
   customHeaders?: Record<string, string>;
   customBodyTemplate?: string;
+  /** Opaque token that coalesces retries of one logical generation. */
+  idempotencyKey?: string;
 }
 
 /** Normalized successful result. `images` are URLs or data URIs. */
