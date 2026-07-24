@@ -16,18 +16,72 @@ interface Props {
   saveInfo: GallerySaveInfo;
 }
 
-function extensionFromMime(mime: string): string {
-  if (mime === 'image/png') return 'png';
-  if (mime === 'image/webp') return 'webp';
-  if (mime === 'image/jpeg') return 'jpg';
-  return 'png';
-}
-
 function base64ToUint8Array(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
+  const objectUrl = URL.createObjectURL(blob);
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('图片解码失败'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function canvasToWebp(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error('WebP 编码失败'));
+      },
+      'image/webp',
+      0.9,
+    );
+  });
+}
+
+async function convertToWebp(source: Blob): Promise<Blob> {
+  let bitmap: ImageBitmap | null = null;
+  let image: HTMLImageElement | null = null;
+
+  try {
+    if (typeof createImageBitmap === 'function') {
+      bitmap = await createImageBitmap(source);
+    } else {
+      image = await loadImageFromBlob(source);
+    }
+  } catch {
+    image = await loadImageFromBlob(source);
+  }
+
+  const width = bitmap?.width ?? image?.naturalWidth;
+  const height = bitmap?.height ?? image?.naturalHeight;
+  if (!width || !height) throw new Error('图片尺寸无效');
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('无法创建图片画布');
+
+  try {
+    context.drawImage(bitmap ?? image!, 0, 0);
+    return await canvasToWebp(canvas);
+  } finally {
+    bitmap?.close();
+  }
 }
 
 export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: Props) {
@@ -39,13 +93,17 @@ export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: P
       const { mime, base64 } = parseDataUrl(saveInfo.imageUrl);
       const bytes = base64ToUint8Array(base64);
       const arrayBuffer = new Uint8Array(bytes).buffer as ArrayBuffer;
-      const blob = new Blob([arrayBuffer], { type: mime || 'image/png' });
-      const ext = extensionFromMime(mime || 'image/png');
-      const path = `gallery/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const source = new Blob([arrayBuffer], { type: mime || 'image/png' });
+      const webp = await convertToWebp(source);
+      const path = `gallery/${Date.now()}-${Math.random().toString(36).slice(2)}.webp`;
 
       const { error: uploadError } = await supabase.storage
         .from('gallery-images')
-        .upload(path, blob, { contentType: mime || 'image/png', upsert: false });
+        .upload(path, webp, {
+          contentType: 'image/webp',
+          cacheControl: 'public, max-age=31536000, immutable',
+          upsert: false,
+        });
       if (uploadError) throw uploadError;
 
       const { data: publicData } = supabase.storage
