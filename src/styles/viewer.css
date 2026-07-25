@@ -86,7 +86,7 @@
 
 @keyframes fx-face-flip {
   0% {
-    opacity: 0;
+    opacity: 1;
     transform: perspective(900px) rotateY(-88deg) scale(0.98);
   }
   65% {

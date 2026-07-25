@@ -29,20 +29,57 @@ const initialParts = (): LayerPart[] =>
     visible: false,
   }));
 
+const pairedCode: Record<string, string> = {
+  '01': '04',
+  '02': '05',
+  '03': '06',
+  '04': '01',
+  '05': '02',
+  '06': '03',
+};
+
+const setPartsWithPairExclusivity = (parts: LayerPart[], visibleCodes: ReadonlySet<string>): LayerPart[] =>
+  parts.map((p) => ({ ...p, visible: visibleCodes.has(p.code) }));
+
 export const useViewerStore = create<ViewerState>((set) => ({
   parts: initialParts(),
   togglePart: (code) =>
-    set((s) => ({
-      parts: s.parts.map((p) =>
-        p.code === code ? { ...p, visible: !p.visible } : p,
-      ),
-    })),
+    set((s) => {
+      const current = s.parts.find((p) => p.code === code);
+      if (!current) return s;
+      const visibleCodes = new Set(s.parts.filter((p) => p.visible).map((p) => p.code));
+      if (current.visible) {
+        visibleCodes.delete(code);
+      } else {
+        visibleCodes.add(code);
+        visibleCodes.delete(pairedCode[code]);
+      }
+      return { parts: setPartsWithPairExclusivity(s.parts, visibleCodes) };
+    }),
   setAllParts: (visible) =>
-    set((s) => ({ parts: s.parts.map((p) => ({ ...p, visible })) })),
+    set((s) => {
+      if (!visible) return { parts: s.parts.map((p) => ({ ...p, visible: false })) };
+      return {
+        parts: setPartsWithPairExclusivity(
+          s.parts,
+          new Set(['04', '05', '06']),
+        ),
+      };
+    }),
   setStageVisible: (stage, visible) =>
-    set((s) => ({
-      parts: s.parts.map((p) => (p.stage === stage ? { ...p, visible } : p)),
-    })),
+    set((s) => {
+      const visibleCodes = new Set(s.parts.filter((p) => p.visible).map((p) => p.code));
+      const stageCodes = s.parts.filter((p) => p.stage === stage).map((p) => p.code);
+      for (const code of stageCodes) {
+        if (visible) {
+          visibleCodes.add(code);
+          visibleCodes.delete(pairedCode[code]);
+        } else {
+          visibleCodes.delete(code);
+        }
+      }
+      return { parts: setPartsWithPairExclusivity(s.parts, visibleCodes) };
+    }),
 
   viewerClipRegions: null,
   setViewerClipRegions: (r) => set({ viewerClipRegions: r }),

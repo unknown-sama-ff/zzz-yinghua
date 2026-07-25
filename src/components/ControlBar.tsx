@@ -17,7 +17,7 @@ export const ControlBar = memo(function ControlBar({ onToggle, fullscreen }: Con
   const setStageVisible = useViewerStore((s) => s.setStageVisible);
   const stage1 = parts.filter((p) => p.stage === 1);
   const stage2 = parts.filter((p) => p.stage === 2);
-  const allOn = parts.every((p) => p.visible);
+  const allOn = stage2.every((p) => p.visible);
   // Only mobile fullscreen shrinks the control bar (narrow landscape screen);
   // desktop fullscreen keeps full-size buttons.
   const isMobile = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;

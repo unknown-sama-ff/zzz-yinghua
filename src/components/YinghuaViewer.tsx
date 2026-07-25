@@ -73,9 +73,7 @@ const StageContent = memo(function StageContent({
           ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
           : {};
         const isSixLayer = p.styleId === 3;
-        const layerKey = isSixLayer && displayedSixImage
-          ? `${p.code}-${displayedSixImage.face}`
-          : p.code;
+        const layerKey = p.code;
         const isNewlyVisible = !previousVisibleParts.current.has(p.code);
         const effectClass = isSixLayer && shouldFlipSix
           ? 'fx-face-flip'

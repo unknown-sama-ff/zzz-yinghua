@@ -75,7 +75,11 @@ const StyleCard = memo(function StyleCard({
     : undefined;
 
   const displayedSlot = style.id === 3
-    ? { ...slot, images: displayedSixImage ? [displayedSixImage.src] : [] }
+    ? {
+        ...slot,
+        status: displayedSixImage ? 'done' : slot.status,
+        images: displayedSixImage ? [displayedSixImage.src] : [],
+      }
     : slot;
   const displayedImage = style.id === 3 ? displayedSixImage?.src : slot.images[0];
   const isActiveGeneration = activeGeneration?.id === style.id;
@@ -159,7 +163,6 @@ const StyleCard = memo(function StyleCard({
             : undefined
         }
         imageClassName={style.id === 3 && displayedSixImage ? 'fx-face-flip' : undefined}
-        imageKey={style.id === 3 && displayedSixImage ? `style3-${displayedSixImage.face}` : undefined}
         onInpaintClick={onInpaintClick}
         inpaintMeta={{ type: 'yinghua', slotId: String(style.id), index: 0 }}
       />
