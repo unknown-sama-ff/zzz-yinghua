@@ -499,7 +499,7 @@ export const CursorEffects = memo(function CursorEffects() {
       {!isWorkspaceOpen && !viewerFullscreen && (
         <div className="fixed left-4 top-4 z-[10001] flex items-center gap-3">
         <a
-          href="https://space.bilibili.com/661830801"
+          href="https://www.bilibili.com/video/BV1r23V6BENS/?vd_source=a22597e544a6473348b3f4a24da47497"
           target="_blank"
           rel="noopener noreferrer"
           className="glass-btn group flex h-10 w-10 items-center justify-center rounded-full p-0 text-zzz-text transition-colors hover:text-zzz-primary"
