@@ -87,9 +87,11 @@ function getCookie(req, name) {
   return null;
 }
 
-function setVisitorCookie(res, token) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
-  res.setHeader('Set-Cookie', `${VISITOR_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure}`);
+function setVisitorCookie(req, res, token) {
+  const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production';
+  const sameSite = isHttps ? 'None' : 'Lax';
+  const secure = isHttps ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${VISITOR_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=31536000${secure}`);
 }
 
 function paymentOrderSummary(order) {
@@ -118,7 +120,7 @@ app.post('/api/payments/orders', async (req, res) => {
       visitorTokenHash: visitorTokenHash(visitorToken),
       idempotencyKey,
     });
-    if (!getCookie(req, VISITOR_COOKIE)) setVisitorCookie(res, visitorToken);
+    if (!getCookie(req, VISITOR_COOKIE)) setVisitorCookie(req, res, visitorToken);
 
     const returnUrl = getConfiguredReturnUrl() || `${req.protocol}://${req.get('host')}/api/payments/alipay/return`;
     const paymentHtml = reused && order.status !== 'pending'
