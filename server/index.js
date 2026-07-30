@@ -187,8 +187,21 @@ app.get('/api/payments/alipay/return', (req, res) => {
   const orderNo = typeof req.query.out_trade_no === 'string' && PAYMENT_ORDER_RE.test(req.query.out_trade_no)
     ? req.query.out_trade_no
     : '';
-  const query = orderNo ? `?payment=return&orderNo=${encodeURIComponent(orderNo)}` : '?payment=return';
-  return res.redirect(303, `/${query}`);
+  const hasOrder = Boolean(orderNo);
+  res.status(200).type('html').send(`<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>支付宝支付</title></head>
+<body style="margin:0;background:#0d0a14;color:#f5f0ff;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;text-align:center">
+  <main>
+    <p>${hasOrder ? '支付宝已返回，可以关闭此页面。' : '支付页面已返回，可以关闭此页面。'}</p>
+    <button type="button" onclick="window.close()" style="padding:.6rem 1rem;cursor:pointer">关闭页面</button>
+  </main>
+  <script>
+    window.setTimeout(() => window.close(), 100);
+    window.setTimeout(() => window.close(), 800);
+  </script>
+</body>
+</html>`);
 });
 
 // Service-side maintenance helpers for an admin job; never exposed as browser routes.

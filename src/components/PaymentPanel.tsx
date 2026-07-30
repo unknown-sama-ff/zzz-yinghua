@@ -29,11 +29,10 @@ export function PaymentPanel() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const orderNo = params.get('orderNo');
-    if (params.get('payment') !== 'return' || !orderNo) return;
+    const orderNo = order?.status === 'pending' ? order.orderNo : null;
+    if (!orderNo) return;
     let cancelled = false;
-    setNotice('支付宝已返回，正在确认支付结果…');
+    setNotice('支付结果仍在确认中…');
     (async () => {
       for (let attempt = 0; attempt < POLL_LIMIT && !cancelled; attempt += 1) {
         try {
@@ -50,10 +49,10 @@ export function PaymentPanel() {
         }
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
-      if (!cancelled) setNotice('支付结果仍在确认中，可稍后点击刷新。');
+      if (!cancelled) setNotice('支付结果仍在确认中，可稍后刷新状态。');
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [order?.orderNo]);
 
   function validateAmount(): string | null {
     const normalized = amount.trim();
