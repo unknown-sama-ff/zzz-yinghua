@@ -71,15 +71,26 @@ export function PaymentPanel() {
       setError(validationError);
       return;
     }
+    const paymentWindow = window.open('', '_blank');
+    if (!paymentWindow) {
+      setError('浏览器拦截了新标签页，请允许本站打开新窗口后重试');
+      return;
+    }
+    paymentWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>正在打开支付宝…</title></head><body></body></html>');
+    paymentWindow.document.close();
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const result = await createSponsorOrder(amount.trim());
       setOrder(result.order);
-      if (result.paymentHtml) submitAlipayForm(result.paymentHtml);
-      else setNotice('该订单已存在或正在处理中，请刷新状态。');
+      if (result.paymentHtml) submitAlipayForm(result.paymentHtml, paymentWindow);
+      else {
+        paymentWindow.close();
+        setNotice('该订单已存在或正在处理中，请刷新状态。');
+      }
     } catch (err) {
+      paymentWindow.close();
       setError(err instanceof Error ? err.message : '无法创建赞助订单');
     } finally {
       setBusy(false);

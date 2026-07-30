@@ -61,15 +61,15 @@ export async function getSponsorOrder(orderNo: string): Promise<SponsorOrder> {
   return data.order;
 }
 
-export function submitAlipayForm(paymentHtml: string): void {
-  const container = document.createElement('div');
+export function submitAlipayForm(paymentHtml: string, targetWindow: Window): void {
+  const targetDocument = targetWindow.document;
+  targetDocument.title = '正在打开支付宝…';
+  const container = targetDocument.createElement('div');
   container.setAttribute('aria-hidden', 'true');
   container.style.position = 'fixed';
   container.style.inset = '0';
-  container.style.zIndex = '9999';
-  container.style.background = 'var(--zzz-bg)';
   container.innerHTML = paymentHtml;
-  document.body.appendChild(container);
+  targetDocument.body.appendChild(container);
   const form = container.querySelector('form');
   if (!form) {
     container.remove();
