@@ -2,6 +2,7 @@ import { useUploadStore } from './store/useUploadStore';
 import { useToast } from './store/useToast';
 import { Uploader } from './components/Uploader';
 import { ProviderSelect } from './components/ProviderSelect';
+import { PaymentPanel } from './components/PaymentPanel';
 import { ThreeViewPanel } from './components/ThreeViewPanel';
 import { YinghuaPanel } from './components/YinghuaPanel';
 import { YinghuaViewer } from './components/YinghuaViewer';
@@ -54,7 +55,10 @@ export default function App() {
           {/* Setup row: upload + provider side by side. */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Uploader />
-            <ProviderSelect />
+            <div className="space-y-6">
+              <ProviderSelect />
+              <PaymentPanel />
+            </div>
           </div>
 
           {/* Generation steps, full width, stacked in order. */}

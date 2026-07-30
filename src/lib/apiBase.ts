@@ -9,5 +9,7 @@
  *        origin (e.g. `https://my-backend.up.railway.app`) and every
  *        fetch hits the real proxy instead of 404-ing on Vercel's CDN.
  */
-export const API_BASE: string =
-  (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '') || '/api';
+export const API_BASE: string = (() => {
+  const configured = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+  return configured ? `${configured}/api` : '/api';
+})();

@@ -45,6 +45,7 @@ export type ApiErrorCode =
   | 'UPSTREAM_ERROR'
   | 'RATE_LIMITED'
   | 'SSRF_BLOCKED'
+  | 'PAYMENT_NOT_CONFIGURED'
   | 'NOT_FOUND'
   | 'UNKNOWN';
 

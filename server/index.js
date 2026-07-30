@@ -6,6 +6,30 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { providers, registerTaskStore } from './providers.js';
 import { UpstreamError, fetchWithTimeout, parseJsonSafe, codeFromStatus } from './http.js';
+import {
+  AlipayConfigError,
+  closeTrade,
+  createPagePayment,
+  getConfiguredNotifyUrl,
+  getConfiguredReturnUrl,
+  isPaidTrade,
+  queryRefund,
+  queryTrade,
+  refundTrade,
+  sellerMatches,
+  verifyNotify,
+} from './payments/alipay.js';
+import {
+  amountBounds,
+  applyTradeQuery,
+  createOrder,
+  createVisitorToken,
+  findOrderForVisitor,
+  isStorageError,
+  parseAmountCents,
+  recordNotifyAndApply,
+  visitorTokenHash,
+} from './payments/orderService.js';
 
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
 loadEnv();
@@ -50,6 +74,123 @@ app.use(express.json({ limit: '50mb' }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } });
 
 const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
+const VISITOR_COOKIE = 'yinghua_payment_visitor';
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,128}$/;
+const PAYMENT_ORDER_RE = /^[A-Za-z0-9_-]{8,80}$/;
+
+function getCookie(req, name) {
+  const cookies = String(req.headers.cookie || '').split(';');
+  for (const cookie of cookies) {
+    const [key, ...value] = cookie.trim().split('=');
+    if (key === name) return decodeURIComponent(value.join('='));
+  }
+  return null;
+}
+
+function setVisitorCookie(res, token) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${VISITOR_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000${secure}`);
+}
+
+function paymentOrderSummary(order) {
+  if (!order) return null;
+  return {
+    orderNo: order.order_no,
+    amount: order.amount_text,
+    status: order.status,
+    createdAt: order.created_at,
+    paidAt: order.paid_at || null,
+  };
+}
+
+app.post('/api/payments/orders', async (req, res) => {
+  const amountCents = parseAmountCents(req.body?.amount);
+  const idempotencyKey = typeof req.body?.idempotencyKey === 'string' && IDEMPOTENCY_KEY_RE.test(req.body.idempotencyKey)
+    ? req.body.idempotencyKey
+    : null;
+  if (!amountCents) return fail(res, 400, 'INVALID_INPUT', `赞助金额需在 ¥${amountBounds().min}–¥${amountBounds().max} 之间，最多两位小数`);
+  if (!idempotencyKey) return fail(res, 400, 'INVALID_INPUT', '无效的支付幂等键');
+
+  const visitorToken = getCookie(req, VISITOR_COOKIE) || createVisitorToken();
+  try {
+    const { order, reused } = await createOrder({
+      amountCents,
+      visitorTokenHash: visitorTokenHash(visitorToken),
+      idempotencyKey,
+    });
+    if (!getCookie(req, VISITOR_COOKIE)) setVisitorCookie(res, visitorToken);
+
+    const returnUrl = getConfiguredReturnUrl() || `${req.protocol}://${req.get('host')}/api/payments/alipay/return`;
+    const paymentHtml = reused && order.status !== 'pending'
+      ? null
+      : createPagePayment({
+        orderNo: order.order_no,
+        amount: order.amount_text,
+        returnUrl,
+        notifyUrl: getConfiguredNotifyUrl(),
+      });
+    return res.json({ ok: true, order: paymentOrderSummary(order), paymentHtml });
+  } catch (error) {
+    if (error instanceof AlipayConfigError || isStorageError(error)) {
+      return fail(res, 503, 'PAYMENT_NOT_CONFIGURED', error.message);
+    }
+    console.error('[payments/create] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '无法创建赞助订单');
+  }
+});
+
+app.get('/api/payments/orders/:orderNo', async (req, res) => {
+  const { orderNo } = req.params;
+  const visitorToken = getCookie(req, VISITOR_COOKIE);
+  if (!PAYMENT_ORDER_RE.test(orderNo) || !visitorToken) return fail(res, 404, 'NOT_FOUND', '订单不存在或无权访问');
+
+  try {
+    let order = await findOrderForVisitor(orderNo, visitorToken);
+    if (!order) return fail(res, 404, 'NOT_FOUND', '订单不存在或无权访问');
+    if (order.status === 'pending') {
+      try {
+        order = await applyTradeQuery(order, await queryTrade(order.order_no));
+      } catch (error) {
+        if (!(error instanceof AlipayConfigError)) console.warn('[payments/query] trade query failed:', error?.message || error);
+      }
+    }
+    return res.json({ ok: true, order: paymentOrderSummary(order) });
+  } catch (error) {
+    if (isStorageError(error)) return fail(res, 503, 'PAYMENT_NOT_CONFIGURED', error.message);
+    console.error('[payments/order] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '无法查询赞助订单');
+  }
+});
+
+app.post('/api/payments/alipay/notify', express.urlencoded({ extended: false, limit: '100kb' }), async (req, res) => {
+  const params = { ...req.body };
+  try {
+    if (!params.app_id || !params.out_trade_no || !params.total_amount || !params.trade_status || !params.sign) {
+      return res.type('text/plain').send('fail');
+    }
+    if (!verifyNotify(params)) return res.type('text/plain').send('fail');
+    const expectedAppId = (process.env.ALIPAY_APP_ID || '').trim();
+    if (!expectedAppId || params.app_id !== expectedAppId || !sellerMatches(params)) {
+      return res.type('text/plain').send('fail');
+    }
+    const result = await recordNotifyAndApply(params);
+    return res.type('text/plain').send(result.ok ? 'success' : 'fail');
+  } catch (error) {
+    console.warn('[payments/notify] rejected:', error?.message || error);
+    return res.type('text/plain').send('fail');
+  }
+});
+
+app.get('/api/payments/alipay/return', (req, res) => {
+  const orderNo = typeof req.query.out_trade_no === 'string' && PAYMENT_ORDER_RE.test(req.query.out_trade_no)
+    ? req.query.out_trade_no
+    : '';
+  const query = orderNo ? `?payment=return&orderNo=${encodeURIComponent(orderNo)}` : '?payment=return';
+  return res.redirect(303, `/${query}`);
+});
+
+// Service-side maintenance helpers for an admin job; never exposed as browser routes.
+export const paymentMaintenance = { queryTrade, refundTrade, queryRefund, closeTrade };
 
 // ── In-memory task registry for async image generation ────────────────────
 // Vercel serverless functions have execution time limits. When running on
@@ -57,7 +198,6 @@ const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 // GET /api/task/:id for completion.
 const taskStore = new Map();
 const generationFlights = new Map();
-const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,128}$/;
 
 function cleanupGenerationFlight(idempotencyKey) {
   const entry = generationFlights.get(idempotencyKey);
