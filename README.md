@@ -90,3 +90,14 @@ npm start              # Node 代理同时托管 dist/ 静态资源
 - 按钮 Tab 聚焦 + Enter 触发，含 ARIA 标签。
 - 图片懒加载，结果区骨架屏占位。
 - 切换特效 `prefers-reduced-motion` 降级为简单淡入淡出。
+
+## 微信小程序（`miniprogram/`）
+
+本项目另有一个**原生微信小程序**版本（上传 → 三视图/影画生成 → 查看保存 → 微信支付赞助），代码在 [miniprogram/](miniprogram/)，与 Web 前端（`src/`）完全隔离、互不影响。
+
+- **后端**：复用本 Express 服务的全部 `/api/*`，并新增微信支付模块（`server/payments/wechat.js`）、小程序专用端点（`/api/generate` multipart+asyncMode、`/api/task/:id/images/:index`、`/api/composite`、`/api/gallery`、`/api/proxy-image`）。
+- **数据库**：`sponsor_orders` 表新增 `channel`/`openid_hash` 列以并存支付宝与微信支付，迁移 SQL 见 [Supabase-Schema.md](Supabase-Schema.md)。
+- **环境变量**：微信支付相关 `WECHAT_*` 见 [.env.example](.env.example)。
+- **开发与发布指南**：见 [miniprogram/README.md](miniprogram/README.md)（开发者工具导入、备案域名反代、微信支付商户资质、真机联调等）。
+
+> 硬性前提：小程序 `wx.request` 的合法域名必须 **HTTPS + ICP 备案**，且需**企业/个体户主体**才能开通微信支付商户号（个人主体不可）。无备案域名只能靠开发者工具「不校验合法域名」自测。

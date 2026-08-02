@@ -1,0 +1,14 @@
+<view class="glass">
+  <view class="glass-title">社区画廊</view>
+  <view class="glass-subtitle">影画工坊玩家社区作品</view>
+
+  <view wx:if="{{loading}}" class="center-hint">加载中…</view>
+
+  <view class="grid" wx:if="{{rows.length}}">
+    <view class="cell" wx:for="{{rows}}" wx:key="id" bindtap="onPreview" data-url="{{item.localPath}}">
+      <image wx:if="{{item.localPath}}" src="{{item.localPath}}" mode="aspectFill" class="cell-img" />
+      <view wx:else class="cell-loading">{{item.loading ? '加载中…' : '加载失败'}}</view>
+      <view class="cell-style">{{item.style}}</view>
+    </view>
+  </view>
+</view>

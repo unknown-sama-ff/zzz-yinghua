@@ -1,0 +1,42 @@
+.center-hint {
+  color: #8a8a9a;
+  font-size: 26rpx;
+  padding: 60rpx 0;
+  text-align: center;
+}
+
+.order-card {
+  border: 1rpx solid rgba(245, 240, 255, 0.1);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  background: rgba(245, 240, 255, 0.03);
+}
+
+.order-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.order-no {
+  font-size: 24rpx;
+  font-family: monospace;
+}
+
+.order-amount {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #ffd166;
+}
+
+.order-time {
+  font-size: 22rpx;
+  margin-top: 8rpx;
+}
+
+.status-paid { color: #7dd87d; }
+.status-closed { color: #8a8a9a; }
+.status-refunded { color: #ff2d9b; }
+.status-pending { color: #ffd166; }

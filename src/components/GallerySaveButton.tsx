@@ -1,6 +1,6 @@
 import { useState, memo } from 'react';
-import { supabase } from '../lib/supabase';
 import { parseDataUrl } from '../lib/validation';
+import { saveToGallery } from '../lib/galleryClient';
 
 export interface GallerySaveInfo {
   imageUrl: string;
@@ -14,6 +14,27 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 interface Props {
   saveInfo: GallerySaveInfo;
+}
+
+// Delete tokens let the uploading browser delete its own work; only the SHA-256
+// hash is stored server-side, so they can't be recovered from the public table.
+const TOKENS_KEY = 'yinghua_gallery_tokens';
+
+function generateDeleteToken(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function rememberToken(id: number, token: string): void {
+  try {
+    const raw = localStorage.getItem(TOKENS_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[id] = token;
+    localStorage.setItem(TOKENS_KEY, JSON.stringify(map));
+  } catch {
+    // localStorage unavailable — the piece is saved but won't be deletable.
+  }
 }
 
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -84,6 +105,19 @@ async function convertToWebp(source: Blob): Promise<Blob> {
   }
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? '');
+      const idx = result.indexOf(',');
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = () => reject(new Error('图片读取失败'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: Props) {
   const [state, setState] = useState<SaveState>('idle');
 
@@ -95,29 +129,19 @@ export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: P
       const arrayBuffer = new Uint8Array(bytes).buffer as ArrayBuffer;
       const source = new Blob([arrayBuffer], { type: mime || 'image/png' });
       const webp = await convertToWebp(source);
-      const path = `gallery/${Date.now()}-${Math.random().toString(36).slice(2)}.webp`;
+      const imageBase64 = await blobToBase64(webp);
 
-      const { error: uploadError } = await supabase.storage
-        .from('gallery-images')
-        .upload(path, webp, {
-          contentType: 'image/webp',
-          cacheControl: 'public, max-age=31536000, immutable',
-          upsert: false,
-        });
-      if (uploadError) throw uploadError;
-
-      const { data: publicData } = supabase.storage
-        .from('gallery-images')
-        .getPublicUrl(path);
-
-      const { error } = await supabase.from('gallery').insert({
-        image_url: publicData.publicUrl,
+      const deleteToken = generateDeleteToken();
+      const row = await saveToGallery({
+        imageBase64,
+        mime: webp.type || 'image/webp',
         style: saveInfo.style,
-        character_name: saveInfo.characterName,
+        characterName: saveInfo.characterName,
         prompt: saveInfo.prompt,
         provider: saveInfo.provider,
+        deleteToken,
       });
-      if (error) throw error;
+      rememberToken(row.id, deleteToken);
       setState('saved');
     } catch {
       setState('error');

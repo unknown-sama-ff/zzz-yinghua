@@ -1,0 +1,17 @@
+{
+  "compileType": "miniprogram",
+  "libVersion": "3.8.10",
+  "appid": "touristappid",
+  "projectname": "yinghua-workshop",
+  "description": "影画工坊 - 绝区零同人影画生成",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "compileHotReLoad": true,
+    "useCompilerPlugins": ["typescript"]
+  },
+  "condition": {}
+}

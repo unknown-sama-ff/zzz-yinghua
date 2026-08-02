@@ -1,0 +1,30 @@
+<view class="glass">
+  <view class="glass-title">支持影画工坊</view>
+  <view class="glass-subtitle">赞助用于维护模型额度与创作工具，不影响现有免费功能。使用微信支付。</view>
+
+  <view class="section-label">赞助金额（人民币）</view>
+  <view class="amount-box">
+    <text class="amount-symbol">¥</text>
+    <input
+      class="input amount-input"
+      type="digit"
+      value="{{amount}}"
+      bindinput="onAmountInput"
+      maxlength="9"
+      placeholder="5.00"
+      placeholder-class="placeholder"
+    />
+  </view>
+  <view class="text-dim small">金额范围 ¥{{minAmount}}–¥{{maxAmount}}</view>
+
+  <view class="btn-row">
+    <button class="btn btn-primary" bindtap="onPay" disabled="{{busy}}">
+      {{busy ? '处理中…' : '微信支付赞助'}}
+    </button>
+  </view>
+
+  <view wx:if="{{orderNo}}" class="order-info">
+    <text class="text-dim">订单 {{orderNo}}</text>
+    <text wx:if="{{statusText}}" class="text-primary">{{statusText}}</text>
+  </view>
+</view>

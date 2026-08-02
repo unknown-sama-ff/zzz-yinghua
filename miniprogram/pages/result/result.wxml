@@ -1,0 +1,18 @@
+<view class="glass">
+  <view class="glass-title">生成结果</view>
+  <view class="glass-subtitle" wx:if="{{styleLabel}}">{{styleLabel}}</view>
+
+  <image wx:if="{{imagePath}}" src="{{imagePath}}" mode="widthFix" class="result-img" />
+  <view wx:else class="empty-hint">还没有生成结果，请先在工作台生成影画</view>
+
+  <view class="btn-row">
+    <button class="btn btn-primary" bindtap="onSaveAlbum" disabled="{{!imagePath}}">保存到相册</button>
+    <button class="btn" bindtap="onSaveGallery" disabled="{{!imagePath}}">保存到画廊</button>
+  </view>
+  <view class="btn-row">
+    <button class="btn" bindtap="onGoSponsor">赞助支持影画工坊</button>
+  </view>
+  <view class="btn-row">
+    <button class="btn" bindtap="onBackToGenerate">返回生成</button>
+  </view>
+</view>

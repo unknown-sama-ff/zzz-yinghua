@@ -27,5 +27,8 @@ export const UPSTREAM_RETRIES = 2;
 /** Max uploaded file size (10 MB). */
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
+/** Max pixels sharp will decompress (64 MP) — bounds memory on hostile images. */
+export const MAX_INPUT_PIXELS = 64_000_000;
+
 /** Task store TTL (5 min). */
 export const TASK_TTL_MS = 5 * 60_000;

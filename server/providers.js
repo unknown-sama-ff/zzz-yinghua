@@ -16,6 +16,7 @@ import {
   RETRY_RESIZE_DIM,
   RETRY_SIZE_KB_THRESHOLD,
   RETRY_JPEG_QUALITY,
+  MAX_INPUT_PIXELS,
 } from './lib/constants.js';
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
@@ -23,19 +24,31 @@ const IS_VERCEL = Boolean(process.env.VERCEL);
 // When running on Vercel serverless, spawn a Worker thread for long-polling
 // so the function can return immediately and the Worker (own event loop) keeps
 // polling upstream until the task completes.
-let storeCallback = null;
+let taskHooks = null;
 
-export function registerTaskStore(cb) {
-  storeCallback = cb;
+export function registerTaskStore(hooks) {
+  taskHooks = hooks;
 }
 
-function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
-  if (!IS_VERCEL || !storeCallback) return pollSeedreamTask(base, key, taskId, maxMs);
+// Push a completed/in-failed poll result into the task store so the frontend's
+// GET /api/task/:id poll can resolve. Used on Railway (inline poll) and as the
+// fallback when worker_threads is unavailable.
+async function pollSeedreamTaskToStore(base, key, taskId, maxMs) {
+  try {
+    const images = await pollSeedreamTask(base, key, taskId, maxMs);
+    taskHooks?.onDone?.(taskId, images);
+  } catch (err) {
+    taskHooks?.onError?.(taskId, err instanceof UpstreamError ? err.message : String(err?.message || err));
+  }
+}
+
+async function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
+  if (!IS_VERCEL || !taskHooks) return pollSeedreamTaskToStore(base, key, taskId, maxMs);
 
   // Vercel: delegate polling to a Worker thread so it outlives the
   // serverless function's execution window.
   try {
-    const { Worker } = require('worker_threads');
+    const { Worker } = await import('node:worker_threads');
     const wrappedScript = `
       'use strict';
       const WORKER_ARGS = ${JSON.stringify({ base, key, taskId })};
@@ -80,23 +93,20 @@ function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
     `;
     const w = new Worker(wrappedScript, { eval: true });
     w.on('message', (msg) => {
-      if (msg.type === 'done' && storeCallback) {
-        storeCallback(taskId, msg.images);
-      } else if (msg.type === 'error') {
-        taskStore.set(taskId, { status: 'error', error: msg.message, timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS) });
-      }
+      if (msg.type === 'done') taskHooks?.onDone?.(taskId, msg.images);
+      else if (msg.type === 'error') taskHooks?.onError?.(taskId, msg.message);
       w.terminate();
     });
     w.on('error', () => {
-      taskStore.set(taskId, { status: 'error', error: 'Worker 启动失败', timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS) });
+      taskHooks?.onError?.(taskId, 'Worker 启动失败');
     });
     return;
   } catch {
-    // worker_threads not available (older Node) — fall through to inline poll
+    // worker_threads not available — fall through to inline poll
   }
 
   // Fallback: inline poll (works on Railway / long-running server)
-  return pollSeedreamTask(base, key, taskId, maxMs);
+  return pollSeedreamTaskToStore(base, key, taskId, maxMs);
 }
 
 /**
@@ -120,6 +130,9 @@ async function seedream(req) {
       ? 'seedream 服务端预设缺少密钥或 Base URL'
       : 'seedream 缺少密钥或 Base URL（请在前端填写）', 401);
   }
+  // Client-supplied base URL is fully attacker-controlled — same SSRF risk as
+  // custom-url. Validate it before any outbound request.
+  if (!useServerPreset) await assertSafeUrl(base);
   const model = useServerPreset
     ? process.env.SEEDREAM_MODEL
     : req.model;
@@ -150,7 +163,7 @@ async function seedream(req) {
   // Long-task: hand off to background poller and return taskId immediately.
   const taskId = json.task_id || json.id;
   if (taskId && pluckImages(json).length === 0) {
-    spawnPollWorker(base, key, taskId);
+    void spawnPollWorker(base, key, taskId);
     return { taskId, images: [] };
   }
   return { images: pluckImages(json), raw: json };
@@ -199,6 +212,8 @@ async function gptImage(req) {
       ? 'gpt-image 服务端预设缺少 Base URL'
       : 'gpt-image 缺少 Base URL（请在前端填写）', 401);
   }
+  // Client-supplied base URL is attacker-controlled — validate before use.
+  if (!useServerPreset) await assertSafeUrl(base);
   const model = useServerPreset
     ? (process.env.GPT_IMAGE_MODEL || 'gpt-image-2')
     : req.model;
@@ -224,6 +239,8 @@ async function gptImage(req) {
     let mime;
     let ext;
     if (req.imageBase64.startsWith('http://') || req.imageBase64.startsWith('https://')) {
+      // Remote URL is fully attacker-controlled — validate (SSRF) before fetching.
+      await assertSafeUrl(req.imageBase64);
       console.log(`[gpt-image] fetching remote image: ${req.imageBase64.slice(0, 120)}`);
       try {
         const res = await fetchWithTimeout(req.imageBase64);
@@ -251,11 +268,11 @@ async function gptImage(req) {
     try {
       const maxDim = MAX_COMPRESS_DIM;
       const jpegQuality = JPEG_QUALITY;
-      const meta = await sharp(buffer, { failOnError: false }).metadata();
+      const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
       const needsResize = meta.width && meta.height && (meta.width > maxDim || meta.height > maxDim);
       const needsFormatChange = mime !== 'image/jpeg';
       if (needsResize || needsFormatChange) {
-        const pipeline = sharp(buffer, { failOnError: false });
+        const pipeline = sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS });
         if (needsResize) {
           pipeline.resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true });
         }
@@ -307,7 +324,7 @@ async function gptImage(req) {
       if (res.status === 400 && processedBuffer.length > RETRY_SIZE_KB_THRESHOLD * 1024) {
         console.log(`[gpt-image] retrying with reduced quality (${RETRY_RESIZE_DIM}px, ${RETRY_JPEG_QUALITY})...`);
         try {
-          const reduced = await sharp(processedBuffer, { failOnError: false })
+          const reduced = await sharp(processedBuffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS })
             .resize(RETRY_RESIZE_DIM, RETRY_RESIZE_DIM, { fit: 'inside', withoutEnlargement: true })
             .jpeg({ quality: RETRY_JPEG_QUALITY })
             .toBuffer();
@@ -371,7 +388,7 @@ async function customUrl(req) {
   if (!req.customEndpoint) {
     throw new UpstreamError('INVALID_INPUT', '缺少自定义端点 URL', 400);
   }
-  const url = assertSafeUrl(req.customEndpoint);
+  const url = await assertSafeUrl(req.customEndpoint);
 
   // Body template: if provided, interpolate {prompt}/{image}; else default shape.
   let body;

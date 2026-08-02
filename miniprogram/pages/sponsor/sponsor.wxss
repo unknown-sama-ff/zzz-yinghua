@@ -1,0 +1,40 @@
+.section-label {
+  font-size: 24rpx;
+  color: #8a8a9a;
+  margin: 28rpx 0 12rpx;
+}
+
+.amount-box {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.amount-symbol {
+  font-size: 40rpx;
+  color: #b026ff;
+  font-weight: 600;
+}
+
+.amount-input {
+  flex: 1;
+}
+
+.small {
+  font-size: 22rpx;
+  margin-top: 8rpx;
+}
+
+.placeholder {
+  color: #5a5a6a;
+}
+
+.order-info {
+  margin-top: 24rpx;
+  border-top: 1rpx solid rgba(245, 240, 255, 0.1);
+  padding-top: 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  font-size: 24rpx;
+}

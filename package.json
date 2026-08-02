@@ -13,17 +13,19 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js",
+    "test": "node --test \"server/payments/*.test.js\"",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
     "alipay-sdk": "^4.14.0",
+    "body-parser": "^1.20.6",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "multer": "^2.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.3",
     "zustand": "^4.5.5"
   },
   "devDependencies": {

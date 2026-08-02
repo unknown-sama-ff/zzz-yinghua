@@ -1,0 +1,56 @@
+<view class="glass">
+  <view class="glass-title">三视图</view>
+  <view class="glass-subtitle">上传正面（必填）+ 侧/背面（可选），AI 补全为一张三视图，用作后两风格的角色参考</view>
+
+  <view class="slot-row">
+    <view class="slot" bindtap="onPickFront">
+      <image wx:if="{{frontPath}}" src="{{frontPath}}" mode="aspectFit" />
+      <text wx:else>正面</text>
+    </view>
+    <view class="slot" bindtap="onPickSide">
+      <image wx:if="{{sidePath}}" src="{{sidePath}}" mode="aspectFit" />
+      <text wx:else>侧面</text>
+    </view>
+    <view class="slot" bindtap="onPickBack">
+      <image wx:if="{{backPath}}" src="{{backPath}}" mode="aspectFit" />
+      <text wx:else>背面</text>
+    </view>
+  </view>
+
+  <view class="btn-row">
+    <button class="btn btn-primary" bindtap="onGenerateThreeView" disabled="{{threeViewStatus === 'running'}}">
+      {{threeViewStatus === 'running' ? '生成中…' : '拼合并生成三视图'}}
+    </button>
+  </view>
+  <view class="result-row" wx:if="{{threeViewPath}}">
+    <image src="{{threeViewPath}}" mode="widthFix" class="result-img" />
+  </view>
+</view>
+
+<view class="glass">
+  <view class="glass-title">影画三风格</view>
+  <view class="glass-subtitle">零命 → 三命 → 六命 依次生成，后一风格基于前一风格</view>
+
+  <view class="style-card" wx:for="{{styles}}" wx:key="id">
+    <view class="style-head">
+      <view class="style-label">{{item.label}}</view>
+      <view class="style-status status-{{item.status}}">
+        {{item.status === 'done' ? '已完成' : item.status === 'running' ? '生成中…' : item.status === 'error' ? '失败' : '待生成'}}
+      </view>
+    </view>
+    <view class="style-desc">{{item.description}}</view>
+    <image wx:if="{{item.imagePath}}" src="{{item.imagePath}}" mode="widthFix" class="style-img" />
+    <button
+      class="btn btn-primary"
+      bindtap="onGenerateStyle"
+      data-id="{{item.id}}"
+      disabled="{{generating || item.status === 'running'}}"
+    >
+      {{item.status === 'done' ? '重新生成' : '生成'}}
+    </button>
+  </view>
+
+  <view class="btn-row">
+    <button class="btn" bindtap="onViewResult" disabled="{{!lastResultPath}}">查看结果 →</button>
+  </view>
+</view>

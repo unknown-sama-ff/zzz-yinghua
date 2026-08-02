@@ -1,11 +1,20 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import multer from 'multer';
 import { providers, registerTaskStore } from './providers.js';
-import { UpstreamError, fetchWithTimeout, parseJsonSafe, codeFromStatus } from './http.js';
+import { compositeEmbed, compositeStitch } from './lib/composite.js';
+import {
+  UpstreamError,
+  fetchWithTimeout,
+  parseJsonSafe,
+  codeFromStatus,
+  assertSafeUrl,
+} from './http.js';
+import { createRateLimiter, requestKey, consumePresetBudget } from './lib/rateLimit.js';
 import {
   AlipayConfigError,
   closeTrade,
@@ -22,14 +31,31 @@ import {
 import {
   amountBounds,
   applyTradeQuery,
+  applyWechatTradeQuery,
   createOrder,
   createVisitorToken,
-  findOrderForVisitor,
+  findOrderForIdentity,
   isStorageError,
+  listOrdersForIdentity,
+  listPaidSponsors,
   parseAmountCents,
   recordNotifyAndApply,
+  recordWechatNotifyAndApply,
+  sha256Hex,
   visitorTokenHash,
 } from './payments/orderService.js';
+import {
+  WechatConfigError,
+  buildPaymentParams,
+  code2Session,
+  createJsapiOrder,
+  queryOrder as wechatQueryOrder,
+  queryRefund as wechatQueryRefund,
+  refundTrade as wechatRefundTrade,
+  verifyAndDecryptNotify,
+} from './payments/wechat.js';
+import { parseSponsorName } from './payments/sponsorName.js';
+import { GalleryStorageError, deleteGalleryItem, listGallery, saveGalleryItem } from './gallery.js';
 
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
 loadEnv();
@@ -49,6 +75,7 @@ const ALLOWED_ORIGINS = new Set([
   'http://localhost:8787',   // direct backend access
   'https://www.zzz-yinghua.asia',  // production frontend (www)
   'https://zzz-yinghua.asia',      // production frontend (apex)
+  'https://servicewechat.com',     // WeChat mini program requests may carry this Origin
   ...(process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim())
     : []),
@@ -65,6 +92,12 @@ app.use(
     credentials: true,
   }),
 );
+// Capture the raw request body for the WeChat Pay notify endpoint — its
+// signature is computed over the exact raw bytes, so a re-serialized JSON body
+// would fail verification. express.raw sets req._body, so the global
+// express.json below skips this path and the stream is never double-consumed.
+app.use('/api/payments/wechat/notify', express.raw({ type: '*/*', limit: '100kb' }));
+
 // Large limit to accommodate base64 image uploads. Three-view stitching tiles
 // several images into one PNG, whose base64 is ~33% larger than the bytes —
 // hence the generous ceiling beyond any single 10MB upload.
@@ -72,6 +105,26 @@ app.use(express.json({ limit: '50mb' }));
 
 // Multer for multipart/form-data (inpaint endpoint).
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } });
+
+// ── Security hardening ───────────────────────────────────────────────────────
+// Baseline response headers. A stricter SPA-level CSP is deliberately NOT added
+// here: the Alipay payment form is injected into a popup that inherits the
+// opener's CSP, and a `script-src 'self'` would block its inline auto-submit
+// script — see src/lib/paymentClient.ts.
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 30);
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000);
+const rateLimit = createRateLimiter({
+  max: RATE_LIMIT_MAX,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  keyFn: requestKey,
+});
 
 const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 const VISITOR_COOKIE = 'yinghua_payment_visitor';
@@ -100,29 +153,51 @@ function paymentOrderSummary(order) {
     orderNo: order.order_no,
     amount: order.amount_text,
     status: order.status,
+    channel: order.channel || 'alipay',
     createdAt: order.created_at,
     paidAt: order.paid_at || null,
   };
 }
 
-app.post('/api/payments/orders', async (req, res) => {
+/**
+ * Resolve the caller's payment identity. The mini program sends its openid in
+ * the `x-openid` header; the web app relies on the visitor HttpOnly cookie.
+ * Returns null when neither is present.
+ */
+function resolveIdentity(req) {
+  const openid = typeof req.headers['x-openid'] === 'string' ? req.headers['x-openid'].trim() : '';
+  if (openid) return { kind: 'openid', hash: sha256Hex(openid) };
+  const visitorToken = getCookie(req, VISITOR_COOKIE);
+  if (visitorToken) return { kind: 'visitor', hash: visitorTokenHash(visitorToken) };
+  return null;
+}
+
+app.post('/api/payments/orders', rateLimit, async (req, res) => {
   const amountCents = parseAmountCents(req.body?.amount);
   const idempotencyKey = typeof req.body?.idempotencyKey === 'string' && IDEMPOTENCY_KEY_RE.test(req.body.idempotencyKey)
     ? req.body.idempotencyKey
     : null;
   if (!amountCents) return fail(res, 400, 'INVALID_INPUT', `赞助金额需在 ¥${amountBounds().min}–¥${amountBounds().max} 之间，最多两位小数`);
   if (!idempotencyKey) return fail(res, 400, 'INVALID_INPUT', '无效的支付幂等键');
+  const sponsorName = parseSponsorName(req.body?.sponsorName);
 
-  const visitorToken = getCookie(req, VISITOR_COOKIE) || createVisitorToken();
+  let identity = resolveIdentity(req);
+  let freshVisitorToken = null;
+  if (!identity) {
+    freshVisitorToken = createVisitorToken();
+    identity = { kind: 'visitor', hash: visitorTokenHash(freshVisitorToken) };
+  }
   try {
+    const returnUrl = resolvePublicReturnUrl(req);
     const { order, reused } = await createOrder({
       amountCents,
-      visitorTokenHash: visitorTokenHash(visitorToken),
+      identity,
       idempotencyKey,
+      sponsorName,
+      channel: 'alipay',
     });
-    if (!getCookie(req, VISITOR_COOKIE)) setVisitorCookie(req, res, visitorToken);
+    if (identity.kind === 'visitor' && !getCookie(req, VISITOR_COOKIE)) setVisitorCookie(req, res, freshVisitorToken);
 
-    const returnUrl = getConfiguredReturnUrl() || `${req.protocol}://${req.get('host')}/api/payments/alipay/return`;
     const paymentHtml = reused && order.status !== 'pending'
       ? null
       : createPagePayment({
@@ -141,19 +216,54 @@ app.post('/api/payments/orders', async (req, res) => {
   }
 });
 
-app.get('/api/payments/orders/:orderNo', async (req, res) => {
+app.get('/api/payments/sponsors', rateLimit, async (_req, res) => {
+  try {
+    const rows = await listPaidSponsors(50);
+    const sponsors = rows.map((row) => ({
+      name: row.sponsor_name || 'Traveler',
+      amount: row.amount_text,
+      paidAt: row.paid_at,
+    }));
+    return res.json({ ok: true, sponsors });
+  } catch (error) {
+    if (isStorageError(error)) return fail(res, 503, 'PAYMENT_NOT_CONFIGURED', error.message);
+    console.error('[payments/sponsors] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '无法获取赞助名单');
+  }
+});
+
+app.get('/api/payments/orders', rateLimit, async (req, res) => {
+  const identity = resolveIdentity(req);
+  if (!identity) return fail(res, 404, 'NOT_FOUND', '订单不存在或无权访问');
+  try {
+    const orders = await listOrdersForIdentity(identity, 20);
+    return res.json({ ok: true, orders: orders.map(paymentOrderSummary) });
+  } catch (error) {
+    if (isStorageError(error)) return fail(res, 503, 'PAYMENT_NOT_CONFIGURED', error.message);
+    console.error('[payments/list] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '无法查询赞助订单列表');
+  }
+});
+
+app.get('/api/payments/orders/:orderNo', rateLimit, async (req, res) => {
   const { orderNo } = req.params;
-  const visitorToken = getCookie(req, VISITOR_COOKIE);
-  if (!PAYMENT_ORDER_RE.test(orderNo) || !visitorToken) return fail(res, 404, 'NOT_FOUND', '订单不存在或无权访问');
+  const identity = resolveIdentity(req);
+  if (!PAYMENT_ORDER_RE.test(orderNo) || !identity) return fail(res, 404, 'NOT_FOUND', '订单不存在或无权访问');
 
   try {
-    let order = await findOrderForVisitor(orderNo, visitorToken);
+    let order = await findOrderForIdentity(orderNo, identity);
     if (!order) return fail(res, 404, 'NOT_FOUND', '订单不存在或无权访问');
     if (order.status === 'pending') {
       try {
-        order = await applyTradeQuery(order, await queryTrade(order.order_no));
+        if (order.channel === 'wechat') {
+          order = await applyWechatTradeQuery(order, await wechatQueryOrder(order.order_no));
+        } else {
+          order = await applyTradeQuery(order, await queryTrade(order.order_no));
+        }
       } catch (error) {
-        if (!(error instanceof AlipayConfigError)) console.warn('[payments/query] trade query failed:', error?.message || error);
+        if (!(error instanceof AlipayConfigError) && !(error instanceof WechatConfigError)) {
+          console.warn('[payments/query] trade query failed:', error?.message || error);
+        }
       }
     }
     return res.json({ ok: true, order: paymentOrderSummary(order) });
@@ -190,7 +300,7 @@ app.get('/api/payments/alipay/return', (req, res) => {
   const hasOrder = Boolean(orderNo);
   res.status(200).type('html').send(`<!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>支付宝支付</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"><title>支付宝支付</title></head>
 <body style="margin:0;background:#0d0a14;color:#f5f0ff;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;text-align:center">
   <main>
     <p>${hasOrder ? '支付宝已返回，可以关闭此页面。' : '支付页面已返回，可以关闭此页面。'}</p>
@@ -204,8 +314,80 @@ app.get('/api/payments/alipay/return', (req, res) => {
 </html>`);
 });
 
+// ── WeChat Pay (mini program sponsorship, JSAPI) ─────────────────────────────
+app.post('/api/auth/wechat-login', rateLimit, async (req, res) => {
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  if (!code || !/^[A-Za-z0-9_.-]{1,128}$/.test(code)) {
+    return fail(res, 400, 'INVALID_INPUT', '无效的登录凭证');
+  }
+  try {
+    const { openid } = await code2Session(code);
+    return res.json({ ok: true, openid });
+  } catch (error) {
+    if (error instanceof WechatConfigError) return fail(res, 503, 'WECHAT_NOT_CONFIGURED', error.message);
+    console.warn('[auth/wechat-login] failed:', error?.message || error);
+    return fail(res, 502, 'WECHAT_LOGIN_FAILED', '微信登录失败，请稍后重试');
+  }
+});
+
+app.post('/api/payments/wechat/orders', rateLimit, async (req, res) => {
+  const amountCents = parseAmountCents(req.body?.amount);
+  const idempotencyKey = typeof req.body?.idempotencyKey === 'string' && IDEMPOTENCY_KEY_RE.test(req.body.idempotencyKey)
+    ? req.body.idempotencyKey
+    : null;
+  const openid = typeof req.body?.openid === 'string' ? req.body.openid.trim() : '';
+  if (!amountCents) return fail(res, 400, 'INVALID_INPUT', `赞助金额需在 ¥${amountBounds().min}–¥${amountBounds().max} 之间，最多两位小数`);
+  if (!idempotencyKey) return fail(res, 400, 'INVALID_INPUT', '无效的支付幂等键');
+  if (!openid || openid.length > 128) return fail(res, 400, 'INVALID_INPUT', '无效的微信身份');
+
+  try {
+    const { order, reused } = await createOrder({
+      amountCents,
+      identity: { kind: 'openid', hash: sha256Hex(openid) },
+      idempotencyKey,
+      channel: 'wechat',
+    });
+    if (reused && order.status !== 'pending') {
+      return res.json({ ok: true, order: paymentOrderSummary(order), payment: null });
+    }
+    const prepayId = await createJsapiOrder({ orderNo: order.order_no, amountCents, openid });
+    const payment = buildPaymentParams({ orderNo: order.order_no, prepayId });
+    return res.json({ ok: true, order: paymentOrderSummary(order), payment });
+  } catch (error) {
+    if (error instanceof WechatConfigError || isStorageError(error)) {
+      return fail(res, 503, 'PAYMENT_NOT_CONFIGURED', error.message);
+    }
+    console.error('[payments/wechat/create] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '无法创建微信赞助订单');
+  }
+});
+
+app.post('/api/payments/wechat/notify', async (req, res) => {
+  try {
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body || '');
+    const event = verifyAndDecryptNotify(req.headers, rawBody);
+    const result = await recordWechatNotifyAndApply({
+      outTradeNo: event.out_trade_no,
+      transactionId: event.transaction_id,
+      amountCents: event.amount?.total,
+      tradeState: event.trade_state,
+    });
+    if (!result.ok) {
+      console.warn('[payments/wechat/notify] rejected:', result.reason);
+      return res.status(400).json({ code: 'FAIL', message: result.reason || '失败' });
+    }
+    return res.json({ code: 'SUCCESS', message: '成功' });
+  } catch (error) {
+    console.warn('[payments/wechat/notify] rejected:', error?.message || error);
+    return res.status(400).json({ code: 'FAIL', message: '验签失败或数据无效' });
+  }
+});
+
 // Service-side maintenance helpers for an admin job; never exposed as browser routes.
-export const paymentMaintenance = { queryTrade, refundTrade, queryRefund, closeTrade };
+export const paymentMaintenance = {
+  queryTrade, refundTrade, queryRefund, closeTrade,
+  wechatQueryOrder, wechatRefundTrade, wechatQueryRefund,
+};
 
 // ── In-memory task registry for async image generation ────────────────────
 // Vercel serverless functions have execution time limits. When running on
@@ -227,19 +409,42 @@ function cleanupTask(id) {
 }
 
 // Let providers register task results (needed for async Vercel worker pattern).
-registerTaskStore((id, images) => {
-  const entry = taskStore.get(id);
-  if (!entry) return;
-  entry.status = 'done';
-  entry.images = images;
-  if (entry.timer) clearTimeout(entry.timer);
-  entry.timer = setTimeout(() => cleanupTask(id), TASK_TTL_MS);
+registerTaskStore({
+  onDone: (id, images) => {
+    const entry = taskStore.get(id);
+    if (!entry) return;
+    entry.status = 'done';
+    entry.images = images;
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => cleanupTask(id), TASK_TTL_MS);
+  },
+  onError: (id, message) => {
+    const entry = taskStore.get(id);
+    if (!entry) return;
+    entry.status = 'error';
+    entry.error = message;
+    if (entry.timer) clearTimeout(entry.timer);
+    entry.timer = setTimeout(() => cleanupTask(id), TASK_TTL_MS);
+  },
 });
 
 app.get('/api/task/:id', (req, res) => {
   const { id } = req.params;
   const task = taskStore.get(id);
   if (!task) return fail(res, 404, 'NOT_FOUND', '任务不存在或已过期');
+  // Metadata-only mode: the mini program first learns count/status, then pulls
+  // each image as binary via /api/task/:id/images/:index. No cleanup here so the
+  // binaries stay available; the TTL timer frees them.
+  const metadataOnly = req.query.metadata === '1' || req.query.metadata === 'true';
+  if (metadataOnly) {
+    return res.json({
+      ok: true,
+      status: task.status,
+      count: Array.isArray(task.images) ? task.images.length : 0,
+      error: task.status === 'error' ? (task.error ?? '生成失败') : undefined,
+      taskId: id,
+    });
+  }
   if (task.status === 'done') {
     cleanupTask(id);
     return res.json({ ok: true, images: task.images ?? [], taskId: id });
@@ -252,8 +457,45 @@ app.get('/api/task/:id', (req, res) => {
   res.status(202).json({ ok: true, taskId: id, status: task.status });
 });
 
-app.post('/api/generate', async (req, res) => {
-  const body = req.body || {};
+// Binary delivery of a generated image by index — the mini program fetches
+// these with responseType: 'arraybuffer' to avoid base64/JSON size limits.
+app.get('/api/task/:id/images/:index', async (req, res) => {
+  const { id, index } = req.params;
+  const task = taskStore.get(id);
+  if (!task || task.status !== 'done') return fail(res, 404, 'NOT_FOUND', '任务不存在或未完成');
+  const i = Number(index);
+  if (!Number.isInteger(i) || i < 0) return fail(res, 400, 'INVALID_INPUT', '无效的图片索引');
+  const images = task.images ?? [];
+  if (i >= images.length) return fail(res, 404, 'NOT_FOUND', '图片索引越界');
+  try {
+    const buffer = await resolveImageBuffer(images[i]);
+    if (!buffer) return fail(res, 502, 'UPSTREAM_ERROR', '图片获取失败');
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'private, max-age=60');
+    res.send(buffer);
+  } catch (error) {
+    console.warn(`[task/images] fetch failed id=${id} idx=${i}:`, error?.message || error);
+    return fail(res, 502, 'UPSTREAM_ERROR', '图片获取失败');
+  }
+});
+
+app.post('/api/generate', rateLimit, upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'refImages', maxCount: 6 },
+]), async (req, res) => {
+  const body = { ...(req.body || {}) };
+
+  // Normalize multipart uploads to the same shape the JSON path expects.
+  if (Array.isArray(req.files?.image) && req.files.image.length > 0) {
+    const file = req.files.image[0];
+    body.imageBase64 = file.buffer.toString('base64');
+    body.imageMime = file.mimetype;
+  }
+  if (Array.isArray(req.files?.refImages) && req.files.refImages.length > 0) {
+    body.refImages = req.files.refImages.map((f) => ({ base64: f.buffer.toString('base64'), mime: f.mimetype }));
+  }
+  if (body.useServerPreset === 'true') body.useServerPreset = true;
+
   const idempotencyKey = typeof body.idempotencyKey === 'string' && IDEMPOTENCY_KEY_RE.test(body.idempotencyKey)
     ? body.idempotencyKey
     : null;
@@ -270,6 +512,24 @@ app.post('/api/generate', async (req, res) => {
     }
   }
 
+  const isAsync = body.asyncMode === true || body.asyncMode === 'true';
+  if (isAsync) {
+    // Long-running generation can exceed wx.request's timeout, so run it in the
+    // background and return a taskId immediately for the mini program to poll.
+    const taskId = createTaskId();
+    const outcome = (async () => {
+      const result = await executeGeneration(body, idempotencyKey);
+      finalizeAsyncTask(taskId, result);
+      return { status: 200, body: { ok: true, taskId } };
+    })();
+    if (idempotencyKey) {
+      const timer = setTimeout(() => cleanupGenerationFlight(idempotencyKey), TASK_TTL_MS);
+      generationFlights.set(idempotencyKey, { outcome, timer });
+    }
+    taskStore.set(taskId, { status: 'running', timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS) });
+    return res.json({ ok: true, taskId });
+  }
+
   const outcome = executeGeneration(body, idempotencyKey);
   if (idempotencyKey) {
     const timer = setTimeout(() => cleanupGenerationFlight(idempotencyKey), TASK_TTL_MS);
@@ -279,6 +539,59 @@ app.post('/api/generate', async (req, res) => {
   const result = await outcome;
   return res.status(result.status).json(result.body);
 });
+
+function createTaskId() {
+  return `T${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+}
+
+/** Copy an executeGeneration outcome into a taskStore entry for polling. */
+function finalizeAsyncTask(taskId, result) {
+  const entry = taskStore.get(taskId);
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  const out = result.body || {};
+  if (result.status === 200 && out.ok && Array.isArray(out.images) && out.images.length > 0) {
+    entry.status = 'done';
+    entry.images = out.images;
+  } else if (result.status === 200 && out.ok && out.taskId) {
+    // Provider returned its own long task — bridge to it and copy status/images.
+    const innerId = out.taskId;
+    entry.status = 'pending';
+    const poll = () => {
+      const inner = taskStore.get(innerId);
+      if (!inner) { entry.status = 'error'; entry.error = '上游任务已过期'; return; }
+      if (inner.status === 'done') { entry.status = 'done'; entry.images = inner.images; return; }
+      if (inner.status === 'error') { entry.status = 'error'; entry.error = inner.error || '生成失败'; return; }
+      setTimeout(poll, 1000);
+    };
+    poll();
+  } else {
+    entry.status = 'error';
+    entry.error = out.message || '生成失败';
+  }
+  entry.timer = setTimeout(() => cleanupTask(taskId), TASK_TTL_MS);
+}
+
+/** Decode a task image (data URL, raw base64, or remote http(s) URL) to bytes. */
+async function resolveImageBuffer(image) {
+  if (typeof image !== 'string' || !image) return null;
+  if (image.startsWith('data:')) {
+    const comma = image.indexOf(',');
+    if (comma < 0) return null;
+    return Buffer.from(image.slice(comma + 1), 'base64');
+  }
+  if (/^https?:\/\//i.test(image)) {
+    const url = await assertSafeUrl(image);
+    const response = await fetchWithTimeout(url.toString(), {}, 60000);
+    if (!response.ok) return null;
+    return Buffer.from(await response.arrayBuffer());
+  }
+  try {
+    return Buffer.from(image, 'base64');
+  } catch {
+    return null;
+  }
+}
 
 async function executeGeneration(body, idempotencyKey) {
   const { provider, prompt } = body;
@@ -293,6 +606,13 @@ async function executeGeneration(body, idempotencyKey) {
   const started = Date.now();
   const hasImage = Boolean(body.imageBase64 || body.imageUrl);
   const operation = idempotencyKey ? ` operation=${idempotencyKey}` : '';
+
+  // Server-preset (freeload) calls spend the operator's paid keys — cap daily
+  // usage so anonymous callers can't burn through the quota.
+  if (body.useServerPreset === true && !consumePresetBudget()) {
+    return { status: 429, body: { ok: false, code: 'RATE_LIMITED', message: '服务端免费额度今日已用尽，请明日再来或自行填写 API Key' } };
+  }
+
   console.log(
     `[generate] provider=${provider} hasImage=${hasImage} size=${body.size || 'default'} endpoint=${body.customEndpoint || body.baseUrl || '(env/default)'}${operation}`,
   );
@@ -328,7 +648,7 @@ async function executeGeneration(body, idempotencyKey) {
 }
 
 // ── Inpaint (image + optional mask + prompt) via gpt-image ───────────────────
-app.post('/api/inpaint', upload.fields([
+app.post('/api/inpaint', rateLimit, upload.fields([
   { name: 'image', maxCount: 1 },
   { name: 'mask', maxCount: 1 },
 ]), async (req, res) => {
@@ -369,6 +689,9 @@ app.post('/api/inpaint', upload.fields([
 
   const started = Date.now();
   try {
+    if (useServerPreset === true && !consumePresetBudget()) {
+      return fail(res, 429, 'RATE_LIMITED', '服务端免费额度今日已用尽，请明日再来或自行填写 API Key');
+    }
     const result = await providers[targetProvider](body);
     const taskId = result.taskId;
     if (taskId && (!result.images || result.images.length === 0)) {
@@ -393,7 +716,7 @@ app.post('/api/inpaint', upload.fields([
   }
 });
 
-app.post('/api/detect-face', async (req, res) => {
+app.post('/api/detect-face', rateLimit, async (req, res) => {
   const { imageBase64, imageMime, apiKey, baseUrl, model, useServerPreset } = req.body || {};
   if (!imageBase64) return fail(res, 400, 'INVALID_INPUT', '缺少图片');
 
@@ -403,11 +726,24 @@ app.post('/api/detect-face', async (req, res) => {
     console.warn(`[detect-face] missing key useServerPreset=${Boolean(useServerPreset)} usingPreset=${usingPreset} frontHasKey=${Boolean(apiKey)} envHasKey=${Boolean(process.env.VISION_API_KEY)}`);
     return fail(res, 401, 'UNAUTHORIZED', usingPreset ? '视觉模型服务端预设缺少 API Key' : '视觉模型缺少 API Key，请在前端填写');
   }
+  if (usingPreset && !consumePresetBudget()) {
+    return fail(res, 429, 'RATE_LIMITED', '服务端免费额度今日已用尽，请明日再来或自行填写 API Key');
+  }
   const root = (usingPreset
     ? (process.env.VISION_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1')
     : baseUrl).replace(/\/$/, '');
   if (!root) {
     return fail(res, 401, 'UNAUTHORIZED', usingPreset ? '视觉模型服务端预设缺少 Base URL' : '视觉模型缺少 Base URL，请在前端填写');
+  }
+  // Client-supplied base URL is attacker-controlled — validate (SSRF) before
+  // use. Wrapped: Express 4 does not catch rejections from async handlers.
+  if (!usingPreset && baseUrl) {
+    try {
+      await assertSafeUrl(baseUrl);
+    } catch (error) {
+      if (error instanceof UpstreamError) return fail(res, error.status || 400, error.code, error.message);
+      throw error;
+    }
   }
   const mime = imageMime || 'image/png';
 
@@ -466,7 +802,113 @@ app.post('/api/detect-face', async (req, res) => {
   }
 });
 
+// ── Image composition (mini program calls this instead of client canvas) ────
+app.post('/api/composite', rateLimit, async (req, res) => {
+  const { op, images, base, thumbs } = req.body || {};
+  try {
+    if (op === 'stitch') {
+      const image = await compositeStitch(images || []);
+      return res.json({ ok: true, image: `data:image/png;base64,${image}` });
+    }
+    if (op === 'embed') {
+      const image = await compositeEmbed(base, thumbs || []);
+      return res.json({ ok: true, image: `data:image/png;base64,${image}` });
+    }
+    return fail(res, 400, 'INVALID_INPUT', '无效的合成操作');
+  } catch (error) {
+    console.warn('[composite] failed:', error?.message || error);
+    return fail(res, 400, 'INVALID_INPUT', '图片合成失败');
+  }
+});
+
+// SSRF-guarded image proxy so the mini program can render remote images whose
+// hosts (supabase.co, provider CDNs) can never be whitelisted as mini program
+// request domains. Callers pass ?url=<https URL>.
+app.get('/api/proxy-image', rateLimit, async (req, res) => {
+  const url = typeof req.query.url === 'string' ? req.query.url : '';
+  if (!url) return fail(res, 400, 'INVALID_INPUT', '缺少 url 参数');
+  try {
+    const safeUrl = await assertSafeUrl(url);
+    const response = await fetchWithTimeout(safeUrl.toString(), {}, 60000);
+    if (!response.ok) {
+      throw new UpstreamError(codeFromStatus(response.status), `proxy-image 返回 ${response.status}`, response.status);
+    }
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    // Only ever serve images: reflecting an upstream text/html (or script)
+    // Content-Type would let anyone host arbitrary HTML/JS at this origin.
+    if (!/^image\//i.test(contentType)) {
+      return fail(res, 400, 'INVALID_INPUT', '仅允许代理图片资源');
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.send(buffer);
+  } catch (error) {
+    if (error instanceof UpstreamError) return fail(res, error.status || 502, error.code, error.message);
+    console.warn('[proxy-image] failed:', error?.message || error);
+    return fail(res, 502, 'UPSTREAM_ERROR', '图片获取失败');
+  }
+});
+
 app.get('/api/health', (_req, res) => res.json({ ok: true, port: PORT }));
+
+// ── Gallery write API (server-mediated; the anon key stays read-only) ────────
+// Saves/deletes go through the service-role key with per-row delete tokens so
+// anonymous visitors can't wipe the gallery or spam rows.
+app.post('/api/gallery', rateLimit, async (req, res) => {
+  const body = req.body || {};
+  try {
+    const row = await saveGalleryItem({
+      imageBase64: body.imageBase64,
+      mime: body.mime,
+      style: body.style,
+      characterName: body.characterName,
+      prompt: body.prompt,
+      provider: body.provider,
+      deleteToken: body.deleteToken,
+    });
+    return res.json({ ok: true, row });
+  } catch (error) {
+    if (error instanceof GalleryStorageError) return fail(res, 400, 'INVALID_INPUT', error.message);
+    console.error('[gallery/save] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '保存到画廊失败');
+  }
+});
+
+app.delete('/api/gallery/:id', rateLimit, async (req, res) => {
+  const id = Number(req.params.id);
+  const deleteToken = typeof req.body?.deleteToken === 'string'
+    ? req.body.deleteToken
+    : typeof req.query.deleteToken === 'string'
+      ? req.query.deleteToken
+      : (typeof req.headers['x-delete-token'] === 'string' ? req.headers['x-delete-token'] : '');
+  try {
+    const result = await deleteGalleryItem({ id, deleteToken });
+    if (!result.ok) {
+      if (result.reason === 'forbidden') return fail(res, 403, 'FORBIDDEN', '无权删除该作品');
+      return fail(res, 404, 'NOT_FOUND', '作品不存在或已删除');
+    }
+    return res.json({ ok: true });
+  } catch (error) {
+    if (error instanceof GalleryStorageError) return fail(res, 400, 'INVALID_INPUT', error.message);
+    console.error('[gallery/delete] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '删除失败');
+  }
+});
+
+// Read the gallery through the service-role proxy (mini program request
+// domains can't include *.supabase.co, so it must read here instead).
+app.get('/api/gallery', rateLimit, async (req, res) => {
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+  try {
+    const rows = await listGallery(limit);
+    return res.json({ ok: true, rows });
+  } catch (error) {
+    if (error instanceof GalleryStorageError) return fail(res, 503, 'PAYMENT_NOT_CONFIGURED', error.message);
+    console.error('[gallery/list] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '无法获取画廊');
+  }
+});
 
 // In production, serve the built frontend from dist/.
 const distDir = path.resolve(__dirname, '..', 'dist');
@@ -509,6 +951,23 @@ function fail(res, status, code, message) {
   return res.status(status).json({ ok: false, code, message });
 }
 
+/**
+ * Alipay page-payment return URL. Never derived from the Host header — that
+ * would let a spoofed Host redirect the payer to a phishing domain after
+ * payment (host-header injection). Prefer ALIPAY_RETURN_URL, then
+ * PUBLIC_BASE_URL; in production a missing value is a hard config error.
+ */
+function resolvePublicReturnUrl(req) {
+  const configured = getConfiguredReturnUrl();
+  if (configured) return configured;
+  const publicBase = (process.env.PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
+  if (publicBase) return `${publicBase}/api/payments/alipay/return`;
+  if (process.env.NODE_ENV === 'production') {
+    throw new AlipayConfigError('支付宝支付回跳地址未配置（请设置 PUBLIC_BASE_URL）');
+  }
+  return `${req.protocol}://${req.get('host')}/api/payments/alipay/return`;
+}
+
 function loadEnv() {
   const envPath = path.resolve(process.cwd(), '.env');
   if (!fs.existsSync(envPath)) return;
@@ -529,6 +988,12 @@ function loadEnv() {
 // Vercel serverless: export the app so the runtime uses it as a handler.
 // Local / Railway: also start the HTTP server below.
 export default app;
+
+// Express 4 does not catch rejections from async route handlers. Log instead
+// of letting one malformed request crash the whole (payment-adjacent) process.
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandled rejection:', reason instanceof Error ? reason.stack || reason.message : reason);
+});
 
 if (!IS_VERCEL) {
   const server = app.listen(PORT, '0.0.0.0', () => {

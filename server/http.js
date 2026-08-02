@@ -3,6 +3,8 @@
 // Image-to-image editing (gpt-image-2 etc.) can genuinely take several minutes,
 // so the per-request ceiling is large by default. Override with
 // UPSTREAM_TIMEOUT_MS in .env if your endpoint is faster/slower.
+import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 import { DEFAULT_TIMEOUT_MS, UPSTREAM_RETRIES } from './lib/constants.js';
 
 /** Normalized upstream error carrying a stable code for the client. */
@@ -64,10 +66,81 @@ export function sleep(ms) {
 }
 
 /**
- * Basic SSRF guard for the custom-url provider. Blocks loopback, link-local,
- * and private network ranges. Not exhaustive, but covers the obvious cases.
+ * True for IPs we never want the proxy to reach: loopback, private ranges,
+ * link-local, CGNAT, and reserved/documentation blocks. Handles dotted-quad
+ * IPv4, IPv6 (including IPv4-mapped), unique-local and link-local v6.
  */
-export function assertSafeUrl(rawUrl) {
+function isPrivateIpAddress(ip) {
+  const family = isIP(ip);
+  if (family === 4) {
+    const [a, b] = ip.split('.').map(Number);
+    return (
+      a === 0 ||                          // 0.0.0.0/8
+      a === 10 ||                         // 10.0.0.0/8
+      a === 127 ||                        // 127.0.0.0/8 loopback
+      (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 CGNAT
+      (a === 169 && b === 254) ||         // 169.254.0.0/16 link-local
+      (a === 172 && b >= 16 && b <= 31) ||// 172.16.0.0/12
+      (a === 192 && b === 168) ||         // 192.168.0.0/16
+      (a === 192 && b === 0) ||           // 192.0.0.0/24
+      (a === 198 && (b === 18 || b === 19)) || // 198.18.0.0/15 benchmark
+      (a === 198 && b === 51) ||          // 198.51.100.0/24 TEST-NET-2
+      (a === 203 && b === 0) ||           // 203.0.113.0/24 TEST-NET-3
+      a >= 224                            // multicast + reserved
+    );
+  }
+  if (family === 6) {
+    const lower = ip.toLowerCase();
+    // IPv4-mapped IPv6 (::ffff:a.b.c.d or the hextet form ::ffff:7f00:1 that
+    // Node's URL normalizer produces). Check the embedded IPv4.
+    if (lower.startsWith('::ffff:')) {
+      const tail = lower.slice(7); // after '::ffff:'
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(tail)) return isPrivateIpAddress(tail);
+      const hextets = tail.split(':').filter(Boolean);
+      if (hextets.length >= 2) {
+        const hi = parseInt(hextets[hextets.length - 2], 16);
+        const lo = parseInt(hextets[hextets.length - 1], 16);
+        if (Number.isFinite(hi) && Number.isFinite(lo)) {
+          const embedded = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+          return isPrivateIpAddress(embedded);
+        }
+      }
+      return true; // unrecognized mapped form — block defensively
+    }
+    if (lower === '::' || lower === '::1') return true;
+    // fc00::/7 unique-local, fe80::/10 link-local
+    if (/^f[cd]/.test(lower) || /^fe[89ab]/.test(lower)) return true;
+    // Reserved/documentation + Teredo (2001::/32 can embed IPv4).
+    if (lower.startsWith('2001:db8') || lower.startsWith('2001:0')) return true;
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Hostnames that look like IPv4 written in an alternate notation (bare decimal
+ * integer, hex, octal, or shorthand dotted forms such as 127.1 / 0177.0.0.1).
+ * Node may normalize these at connect time, so treat them as IP literals.
+ */
+function looksLikeNumericIp(host) {
+  return (
+    /^0x[0-9a-f]+$/i.test(host) ||  // hex
+    /^0[0-7]+$/.test(host) ||       // octal
+    /^\d+$/.test(host) ||           // bare decimal integer
+    /^\d+(?:\.\d+){1,3}$/.test(host) // dotted numeric (incl. shorthand)
+  );
+}
+
+/**
+ * Hardened SSRF guard (async). Blocks non-http(s) schemes, IP literals in any
+ * notation that fall on private/loopback/link-local ranges, reserved TLDs, and
+ * hostnames whose DNS resolution returns any non-public address. This closes
+ * the obvious bypasses (IPv4-mapped IPv6, decimal/hex/octal IPs, DNS rebinding
+ * to an internal address). Note: a rebinding *proof* guard would additionally
+ * pin the connection to the validated address; this mitigates it by resolving
+ * and re-checking at request time.
+ */
+export async function assertSafeUrl(rawUrl) {
   let url;
   try {
     url = new URL(rawUrl);
@@ -77,23 +150,33 @@ export function assertSafeUrl(rawUrl) {
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new UpstreamError('SSRF_BLOCKED', '仅允许 http/https 协议', 400);
   }
-  const host = url.hostname.toLowerCase();
-  const blocked =
-    host === 'localhost' ||
-    host === '0.0.0.0' ||
-    host === '::1' ||
-    host.endsWith('.local') ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^169\.254\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host);
-  if (blocked) {
-    throw new UpstreamError(
-      'SSRF_BLOCKED',
-      `已拦截指向内网/本地地址的请求: ${host}`,
-      400,
-    );
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!host) {
+    throw new UpstreamError('SSRF_BLOCKED', 'URL 缺少主机名', 400);
+  }
+  if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.localhost')) {
+    throw new UpstreamError('SSRF_BLOCKED', `已拦截指向内网/本地地址的请求: ${host}`, 400);
+  }
+  if (isIP(host) !== 0) {
+    if (isPrivateIpAddress(host)) {
+      throw new UpstreamError('SSRF_BLOCKED', `已拦截指向内网/本地地址的请求: ${host}`, 400);
+    }
+    return url;
+  }
+  if (looksLikeNumericIp(host)) {
+    throw new UpstreamError('SSRF_BLOCKED', `已拦截非法 IP 字面量: ${host}`, 400);
+  }
+  let addresses = [];
+  try {
+    const result = await lookup(host, { all: true, verbatim: true });
+    addresses = Array.isArray(result) ? result.map((a) => a.address) : [result.address];
+  } catch {
+    throw new UpstreamError('SSRF_BLOCKED', `无法解析主机名: ${host}`, 400);
+  }
+  for (const addr of addresses) {
+    if (isPrivateIpAddress(addr)) {
+      throw new UpstreamError('SSRF_BLOCKED', `已拦截指向内网/本地地址的请求: ${host}`, 400);
+    }
   }
   return url;
 }
@@ -110,16 +193,20 @@ export function codeFromStatus(status) {
  * Parse a Response as JSON, but fail cleanly when the upstream returns HTML or
  * other non-JSON (wrong Base URL, login/404 page, gateway error page). Without
  * this, res.json() throws a raw SyntaxError that surfaces as an opaque UNKNOWN.
+ *
+ * The response body is only logged server-side — never echoed into the
+ * client-visible message, which would otherwise act as a read channel for any
+ * endpoint the proxy can reach (see SSRF guard).
  */
 export async function parseJsonSafe(res) {
   const text = await res.text();
   try {
     return JSON.parse(text);
   } catch {
-    const snippet = text.trim().slice(0, 120).replace(/\s+/g, ' ');
+    console.warn(`[upstream] 上游返回非 JSON 响应，前 120 字符: ${text.trim().slice(0, 120).replace(/\s+/g, ' ')}`);
     throw new UpstreamError(
       'UPSTREAM_ERROR',
-      `上游返回了非 JSON 响应（检查 Base URL / 端点是否正确）：${snippet || '空响应'}`,
+      '上游返回了非 JSON 响应（检查 Base URL / 端点是否正确）',
     );
   }
 }

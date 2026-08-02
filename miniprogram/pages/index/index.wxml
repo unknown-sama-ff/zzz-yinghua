@@ -1,0 +1,38 @@
+<view class="glass">
+  <view class="glass-title">影画工作台</view>
+  <view class="glass-subtitle">上传角色立绘，生成绝区零同人影画三风格</view>
+
+  <view class="section-label">角色立绘（必填）</view>
+  <view class="upload-box" bindtap="onChooseImage">
+    <image wx:if="{{baseImagePath}}" src="{{baseImagePath}}" mode="aspectFit" class="upload-preview" />
+    <view wx:else class="upload-hint">
+      <text class="upload-plus">＋</text>
+      <text>选择图片</text>
+    </view>
+  </view>
+
+  <view class="section-label">角色英文名（用于影画文字）</view>
+  <input
+    class="input"
+    value="{{characterName}}"
+    bindinput="onNameInput"
+    placeholder="如 XING YUN"
+    placeholder-class="placeholder"
+    maxlength="40"
+  />
+
+  <view class="section-label">生图模型</view>
+  <radio-group bindchange="onProviderChange" class="provider-group">
+    <label class="provider-item" wx:for="{{providers}}" wx:key="id">
+      <radio value="{{item.id}}" checked="{{provider === item.id}}" color="#b026ff" />
+      <text>{{item.label}}</text>
+    </label>
+  </radio-group>
+
+  <view class="btn-row">
+    <button class="btn btn-primary" bindtap="onGoGenerate">开始生成 →</button>
+  </view>
+  <view class="btn-row">
+    <button class="btn" bindtap="onGoSponsor">赞助支持影画工坊</button>
+  </view>
+</view>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createSponsorOrder, getSponsorOrder, submitAlipayForm, type SponsorOrder } from '../lib/paymentClient';
 import { useUploadStore } from '../store/useUploadStore';
 import { SectionHeader } from './SectionHeader';
+import { SponsorList } from './SponsorList';
 
 const MIN_AMOUNT = 0.01;
 const MAX_AMOUNT = 100000;
@@ -17,10 +18,12 @@ function formatStatus(status: SponsorOrder['status']): string {
 export function PaymentPanel() {
   const palette = useUploadStore((s) => s.palette);
   const [amount, setAmount] = useState('5.00');
+  const [name, setName] = useState('Traveler');
   const [order, setOrder] = useState<SponsorOrder | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sponsorListOpen, setSponsorListOpen] = useState(false);
 
   const refreshOrder = useCallback(async (orderNo: string) => {
     const next = await getSponsorOrder(orderNo);
@@ -81,7 +84,7 @@ export function PaymentPanel() {
     setError(null);
     setNotice(null);
     try {
-      const result = await createSponsorOrder(amount.trim());
+      const result = await createSponsorOrder(amount.trim(), name.trim() || 'Traveler');
       setOrder(result.order);
       if (result.paymentHtml) submitAlipayForm(result.paymentHtml, paymentWindow);
       else {
@@ -112,12 +115,37 @@ export function PaymentPanel() {
 
   return (
     <section className="glass p-6" style={{ borderColor: 'color-mix(in srgb, var(--zzz-primary) 32%, transparent)' }}>
-      <SectionHeader title="支持影画工坊" />
+      <SectionHeader
+        title="支持影画工坊"
+        action={
+          <button
+            type="button"
+            onClick={() => setSponsorListOpen(true)}
+            className="glass-btn px-3 py-1.5 font-mono text-xs text-zzz-text"
+          >
+            赞助名单
+          </button>
+        }
+      />
       <p className="mb-4 font-mono text-xs leading-relaxed text-zzz-text/55">
         赞助用于维护模型额度与创作工具。PC 网页与手机浏览器均使用支付宝网页支付，不影响现有免费功能。
       </p>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <label className="block font-mono text-xs text-zzz-text/60">
+        赞助人昵称（留空默认 Traveler）
+        <div className="mt-1 flex items-center glass-input overflow-hidden px-3 py-2">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={20}
+            aria-label="赞助人"
+            className="w-full bg-transparent font-mono text-sm text-zzz-text outline-none"
+            placeholder="Traveler"
+          />
+        </div>
+      </label>
+
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
         <label className="flex-1 font-mono text-xs text-zzz-text/60">
           赞助金额（人民币）
           <div className="mt-1 flex items-center glass-input overflow-hidden px-3 py-2">
@@ -163,6 +191,7 @@ export function PaymentPanel() {
         </div>
       )}
       {palette && <span className="sr-only">赞助卡片已跟随当前立绘主题色</span>}
+      <SponsorList open={sponsorListOpen} onClose={() => setSponsorListOpen(false)} />
     </section>
   );
 }

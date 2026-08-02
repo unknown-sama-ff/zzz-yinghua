@@ -1,0 +1,11 @@
+.result-img {
+  width: 100%;
+  border-radius: 16rpx;
+}
+
+.empty-hint {
+  color: #8a8a9a;
+  font-size: 26rpx;
+  padding: 80rpx 0;
+  text-align: center;
+}

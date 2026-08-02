@@ -1,6 +1,19 @@
 import { useEffect, useState, memo } from 'react';
 import { supabase } from '../lib/supabase';
+import { deleteFromGallery } from '../lib/galleryClient';
+import { formatTime } from '../lib/formatTime';
 import { SectionHeader } from './SectionHeader';
+
+const TOKENS_KEY = 'yinghua_gallery_tokens';
+
+function readTokens(): Record<number, string> {
+  try {
+    const raw = localStorage.getItem(TOKENS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
 
 interface GalleryRow {
   id: number;
@@ -22,14 +35,9 @@ async function fetchGallery(): Promise<GalleryRow[]> {
   return (data as GalleryRow[]) ?? [];
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 export const GalleryPanel = memo(function GalleryPanel() {
   const [rows, setRows] = useState<GalleryRow[]>([]);
+  const [tokens, setTokens] = useState<Record<number, string>>(readTokens);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,11 +60,19 @@ export const GalleryPanel = memo(function GalleryPanel() {
   };
 
   const deleteRow = async (id: number) => {
+    const token = tokens[id];
+    if (!token) {
+      setError('只有保存该作品的浏览器可以删除它');
+      return;
+    }
     setDeletingId(id);
     setError(null);
     try {
-      const { error } = await supabase.from('gallery').delete().eq('id', id);
-      if (error) throw error;
+      await deleteFromGallery(id, token);
+      const next = { ...tokens };
+      delete next[id];
+      setTokens(next);
+      try { localStorage.setItem(TOKENS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
       await loadGallery('refresh');
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除失败');
@@ -114,14 +130,16 @@ export const GalleryPanel = memo(function GalleryPanel() {
                 <div className="text-zzz-primary/80 truncate">{row.style}</div>
                 {row.character_name && <div>角色：{row.character_name}</div>}
                 {row.provider && <div className="text-zzz-text/35">提供方：{row.provider}</div>}
-                <div className="text-zzz-text/35">{formatTime(row.created_at)}</div>
-                <button
-                  onClick={() => void deleteRow(row.id)}
-                  disabled={deletingId === row.id}
-                  className="glass-btn mt-2 px-2 py-1 text-[10px] text-zzz-magenta disabled:opacity-40"
-                >
-                  {deletingId === row.id ? '删除中…' : '删除'}
-                </button>
+                <div className="text-zzz-text/35">{formatTime(row.created_at, 'Asia/Shanghai')}</div>
+                {tokens[row.id] && (
+                  <button
+                    onClick={() => void deleteRow(row.id)}
+                    disabled={deletingId === row.id}
+                    className="glass-btn mt-2 px-2 py-1 text-[10px] text-zzz-magenta disabled:opacity-40"
+                  >
+                    {deletingId === row.id ? '删除中…' : '删除'}
+                  </button>
+                )}
               </div>
             </div>
           ))}

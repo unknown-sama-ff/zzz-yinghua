@@ -33,7 +33,7 @@ function createIdempotencyKey(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function createSponsorOrder(amount: string): Promise<{
+export async function createSponsorOrder(amount: string, sponsorName: string): Promise<{
   order: SponsorOrder;
   paymentHtml: string | null;
 }> {
@@ -41,7 +41,7 @@ export async function createSponsorOrder(amount: string): Promise<{
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount, idempotencyKey: createIdempotencyKey() }),
+    body: JSON.stringify({ amount, idempotencyKey: createIdempotencyKey(), sponsorName }),
   });
   const data = await response.json() as CreateOrderResponse;
   if (!response.ok || !data.ok || !data.order) {
@@ -76,4 +76,25 @@ export function submitAlipayForm(paymentHtml: string, targetWindow: Window): voi
     throw new Error('支付宝支付表单无效');
   }
   form.submit();
+}
+
+export interface SponsorEntry {
+  name: string;
+  amount: string;
+  paidAt: string;
+}
+
+interface SponsorsResponse {
+  ok: boolean;
+  sponsors?: SponsorEntry[];
+  message?: string;
+}
+
+export async function getSponsors(): Promise<SponsorEntry[]> {
+  const response = await fetch(`${API_BASE}/payments/sponsors`, { credentials: 'include' });
+  const data = await response.json() as SponsorsResponse;
+  if (!response.ok || !data.ok || !data.sponsors) {
+    throw errorMessage(data.message, '无法获取赞助名单');
+  }
+  return data.sponsors;
 }

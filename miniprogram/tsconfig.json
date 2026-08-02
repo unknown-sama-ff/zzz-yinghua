@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "strict": false,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["ES2021"]
+  },
+  "include": ["./**/*.ts"]
+}

@@ -1,0 +1,38 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/generate/generate",
+    "pages/result/result",
+    "pages/sponsor/sponsor",
+    "pages/orders/orders",
+    "pages/gallery/gallery"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#0d0a14",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "影画工坊",
+    "backgroundColor": "#0d0a14",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "color": "#8a8a9a",
+    "selectedColor": "#b026ff",
+    "backgroundColor": "#12101c",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "工作台" },
+      { "pagePath": "pages/gallery/gallery", "text": "画廊" },
+      { "pagePath": "pages/orders/orders", "text": "我的订单" }
+    ]
+  },
+  "permission": {
+    "scope.writePhotosAlbum": {
+      "desc": "用于保存生成的角色影画到相册"
+    }
+  },
+  "networkTimeout": {
+    "request": 60000,
+    "uploadFile": 120000,
+    "downloadFile": 60000
+  }
+}

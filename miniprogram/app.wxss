@@ -1,0 +1,109 @@
+/* 全局暗色主题，迁移 Web 端 --zzz-* 视觉 */
+page {
+  --zzz-primary: #b026ff;
+  --zzz-accent: #ffd166;
+  --zzz-magenta: #ff2d9b;
+  --zzz-text: #f5f0ff;
+  --zzz-text-dim: #8a8a9a;
+  --zzz-bg: #0d0a14;
+  --zzz-panel: #16121f;
+  --zzz-border: rgba(245, 240, 255, 0.12);
+
+  background-color: var(--zzz-bg);
+  color: var(--zzz-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif;
+  font-size: 28rpx;
+  line-height: 1.6;
+}
+
+/* 玻璃拟态面板 */
+.glass {
+  background: var(--zzz-panel);
+  border: 1rpx solid var(--zzz-border);
+  border-radius: 24rpx;
+  padding: 32rpx;
+  margin: 24rpx;
+}
+
+.glass-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: var(--zzz-text);
+  margin-bottom: 12rpx;
+}
+
+.glass-subtitle {
+  font-size: 24rpx;
+  color: var(--zzz-text-dim);
+  margin-bottom: 24rpx;
+}
+
+/* 按钮 */
+.btn {
+  background: var(--zzz-panel);
+  border: 1rpx solid var(--zzz-border);
+  border-radius: 16rpx;
+  color: var(--zzz-text);
+  font-size: 28rpx;
+  padding: 20rpx 32rpx;
+  text-align: center;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #7b2ff7, #b026ff);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn[disabled] {
+  opacity: 0.5;
+}
+
+.btn-row {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 24rpx;
+}
+
+.btn-row .btn {
+  flex: 1;
+}
+
+/* 输入框 */
+.input {
+  background: var(--zzz-panel);
+  border: 1rpx solid var(--zzz-border);
+  border-radius: 16rpx;
+  color: var(--zzz-text);
+  font-size: 28rpx;
+  padding: 20rpx 24rpx;
+}
+
+/* 状态文字 */
+.text-dim { color: var(--zzz-text-dim); }
+.text-primary { color: var(--zzz-primary); }
+.text-accent { color: var(--zzz-accent); }
+.text-danger { color: var(--zzz-magenta); }
+
+/* 缩略图容器 */
+.thumb {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 16rpx;
+  border: 1rpx solid var(--zzz-border);
+  background: var(--zzz-panel);
+  overflow: hidden;
+}
+
+.thumb image {
+  width: 100%;
+  height: 100%;
+}
+
+/* 分隔线 */
+.divider {
+  height: 1rpx;
+  background: var(--zzz-border);
+  margin: 24rpx 0;
+}

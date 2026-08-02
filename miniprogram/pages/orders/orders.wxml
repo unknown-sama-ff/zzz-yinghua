@@ -1,0 +1,21 @@
+<view class="glass">
+  <view class="glass-title">我的订单</view>
+  <view class="glass-subtitle">当前微信账号的赞助订单</view>
+
+  <view wx:if="{{loading}}" class="center-hint">加载中…</view>
+  <view wx:elif="{{orders.length === 0}}" class="center-hint">暂无订单</view>
+
+  <view class="order-card" wx:for="{{orders}}" wx:key="orderNo">
+    <view class="order-row">
+      <text class="order-no">{{item.orderNo}}</text>
+      <text class="order-amount">¥{{item.amount}}</text>
+    </view>
+    <view class="order-row">
+      <text class="text-dim">{{item.channel === 'wechat' ? '微信支付' : '支付宝'}}</text>
+      <text class="status-{{item.status}}">
+        {{item.status === 'paid' ? '已支付' : item.status === 'closed' ? '已关闭' : item.status === 'refunded' ? '已退款' : '待支付'}}
+      </text>
+    </view>
+    <view class="text-dim order-time">{{item.createdAt}}</view>
+  </view>
+</view>
