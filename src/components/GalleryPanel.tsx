@@ -6,7 +6,7 @@ import { SectionHeader } from './SectionHeader';
 
 const TOKENS_KEY = 'yinghua_gallery_tokens';
 
-function readTokens(): Record<number, string> {
+function readTokens(): Record<string, string> {
   try {
     const raw = localStorage.getItem(TOKENS_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -16,7 +16,7 @@ function readTokens(): Record<number, string> {
 }
 
 interface GalleryRow {
-  id: number;
+  id: number | string;
   created_at: string;
   image_url: string;
   style: string;
@@ -37,12 +37,14 @@ async function fetchGallery(): Promise<GalleryRow[]> {
 
 export const GalleryPanel = memo(function GalleryPanel() {
   const [rows, setRows] = useState<GalleryRow[]>([]);
-  const [tokens, setTokens] = useState<Record<number, string>>(readTokens);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | string | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  // Tokens are read fresh from localStorage on every render, so a work saved
+  // after this panel already mounted is still deletable without a reload.
+  const tokens = readTokens();
 
   const loadGallery = async (mode: 'initial' | 'refresh' = 'initial') => {
     if (mode === 'initial') setLoading(true);
@@ -59,8 +61,8 @@ export const GalleryPanel = memo(function GalleryPanel() {
     }
   };
 
-  const deleteRow = async (id: number) => {
-    const token = tokens[id];
+  const deleteRow = async (id: number | string) => {
+    const token = readTokens()[String(id)];
     if (!token) {
       setError('只有保存该作品的浏览器可以删除它');
       return;
@@ -69,9 +71,8 @@ export const GalleryPanel = memo(function GalleryPanel() {
     setError(null);
     try {
       await deleteFromGallery(id, token);
-      const next = { ...tokens };
+      const next = { ...readTokens() };
       delete next[id];
-      setTokens(next);
       try { localStorage.setItem(TOKENS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
       await loadGallery('refresh');
     } catch (err) {
@@ -131,7 +132,7 @@ export const GalleryPanel = memo(function GalleryPanel() {
                 {row.character_name && <div>角色：{row.character_name}</div>}
                 {row.provider && <div className="text-zzz-text/35">提供方：{row.provider}</div>}
                 <div className="text-zzz-text/35">{formatTime(row.created_at, 'Asia/Shanghai')}</div>
-                {tokens[row.id] && (
+                {tokens[String(row.id)] && (
                   <button
                     onClick={() => void deleteRow(row.id)}
                     disabled={deletingId === row.id}

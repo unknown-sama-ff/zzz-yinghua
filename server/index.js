@@ -876,7 +876,9 @@ app.post('/api/gallery', rateLimit, async (req, res) => {
 });
 
 app.delete('/api/gallery/:id', rateLimit, async (req, res) => {
-  const id = Number(req.params.id);
+  // Keep the raw id — the gallery table may use integer or UUID ids, and
+  // Number() would turn a UUID into NaN.
+  const id = req.params.id;
   const deleteToken = typeof req.body?.deleteToken === 'string'
     ? req.body.deleteToken
     : typeof req.query.deleteToken === 'string'

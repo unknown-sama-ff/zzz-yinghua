@@ -120,9 +120,14 @@ export async function listGallery(limit = 20) {
 }
 
 export async function deleteGalleryItem({ id, deleteToken }) {
-  if (!Number.isInteger(id) || id <= 0) {
+  // Accept both integer and UUID ids (the table may use either).
+  const validId = Number.isInteger(id)
+    ? id > 0
+    : typeof id === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(id.trim());
+  if (!validId) {
     throw new GalleryStorageError('无效的画廊记录');
   }
+  const idValue = Number.isInteger(id) ? id : id.trim();
   if (!DELETE_TOKEN_RE.test(deleteToken || '')) {
     throw new GalleryStorageError('删除凭证无效');
   }
@@ -130,7 +135,7 @@ export async function deleteGalleryItem({ id, deleteToken }) {
   const rowResult = await supabase
     .from('gallery')
     .select('id, image_url, delete_token_hash')
-    .eq('id', id)
+    .eq('id', idValue)
     .maybeSingle();
   const row = ensureOk(rowResult, '查询画廊记录失败');
   if (!row) return { ok: false, reason: 'not_found' };

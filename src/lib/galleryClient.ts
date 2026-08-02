@@ -11,7 +11,7 @@ export interface GallerySaveInput {
 }
 
 export interface GallerySaveResult {
-  id: number;
+  id: number | string;
   image_url: string;
   style: string;
   character_name: string;
@@ -35,10 +35,15 @@ export async function saveToGallery(input: GallerySaveInput): Promise<GallerySav
 }
 
 /** Delete a gallery piece the current browser saved (delete-token owned). */
-export async function deleteFromGallery(id: number, deleteToken: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/gallery/${id}`, {
+export async function deleteFromGallery(id: number | string, deleteToken: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/gallery/${encodeURIComponent(String(id))}`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // Some reverse proxies strip DELETE request bodies — the server reads the
+      // token from the header as a fallback.
+      'X-Delete-Token': deleteToken,
+    },
     body: JSON.stringify({ deleteToken }),
   });
   const data = await response.json().catch(() => ({})) as { ok?: boolean; message?: string };

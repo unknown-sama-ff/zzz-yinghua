@@ -4,7 +4,7 @@ Run this SQL in the Supabase Dashboard → SQL Editor to create the gallery tabl
 
 ```sql
 CREATE TABLE gallery (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
   image_url TEXT NOT NULL,
   style TEXT NOT NULL,
@@ -13,6 +13,10 @@ CREATE TABLE gallery (
   provider TEXT DEFAULT '',
   delete_token_hash TEXT DEFAULT ''      -- SHA-256 of the uploader's delete token
 );
+```
+
+> `id` may be `UUID` (above) or `BIGINT IDENTITY` — the server's delete endpoint
+> accepts both id shapes.
 
 ALTER TABLE gallery ENABLE ROW LEVEL SECURITY;
 

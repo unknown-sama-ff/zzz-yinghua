@@ -26,11 +26,11 @@ function generateDeleteToken(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function rememberToken(id: number, token: string): void {
+function rememberToken(id: number | string, token: string): void {
   try {
     const raw = localStorage.getItem(TOKENS_KEY);
     const map = raw ? JSON.parse(raw) : {};
-    map[id] = token;
+    map[String(id)] = token;
     localStorage.setItem(TOKENS_KEY, JSON.stringify(map));
   } catch {
     // localStorage unavailable — the piece is saved but won't be deletable.
