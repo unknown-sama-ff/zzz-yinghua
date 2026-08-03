@@ -18,6 +18,7 @@ export const GALLERY_LIMIT = 20;
 
 // 本地存储 key
 export const STORAGE_OPENID = 'yinghua_openid';
+export const STORAGE_SESSION_TOKEN = 'yinghua_session_token';
 export const STORAGE_GALLERY_DELETE_TOKEN = 'yinghua_gallery_delete_token';
 
 // 服务端预设免费额度模式：小程序不暴露 API Key 输入，统一走 useServerPreset。

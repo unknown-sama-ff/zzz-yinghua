@@ -10,6 +10,7 @@ import { compositeEmbed, compositeStitch } from './lib/composite.js';
 import {
   UpstreamError,
   fetchWithTimeout,
+  fetchBufferLimited,
   parseJsonSafe,
   codeFromStatus,
   assertSafeUrl,
@@ -60,10 +61,16 @@ import { GalleryStorageError, deleteGalleryItem, listGallery, saveGalleryItem } 
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
 loadEnv();
 
-import { TASK_TTL_MS, MAX_UPLOAD_BYTES } from './lib/constants.js';
+import { TASK_TTL_MS, MAX_UPLOAD_BYTES, MAX_FETCH_BYTES } from './lib/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// Behind Railway's edge (and the optional Nginx in the mini-program topology)
+// the socket peer is a trusted proxy, so trust one hop to make req.ip reflect
+// the real client. This makes the IP rate-limit bucket per-client instead of a
+// single global bucket keyed on the proxy address. Override with TRUST_PROXY
+// (hops count, or 'false' to disable) if the topology differs.
+app.set('trust proxy', process.env.TRUST_PROXY === 'false' ? false : Number(process.env.TRUST_PROXY) || 1);
 const IS_VERCEL = Boolean(process.env.VERCEL);
 // Railway (and most PaaS) inject PORT and route the public domain to it.
 // Fall back to 8080 — Railway's default target port — so a missing PORT var
@@ -115,6 +122,8 @@ app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Strict-Transport-Security', 'max-age=63072000');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
 
@@ -123,13 +132,75 @@ const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000);
 const rateLimit = createRateLimiter({
   max: RATE_LIMIT_MAX,
   windowMs: RATE_LIMIT_WINDOW_MS,
-  keyFn: requestKey,
+  // Prefer a verified identity for the bucket: a mini-program user's session
+  // openid, else the visitor cookie, else the real client IP. The visitor
+  // cookie is only issued after the first payment order, so the openid branch
+  // matters for mini-program traffic that never touches payments.
+  keyFn: (req) => {
+    const identity = resolveIdentity(req);
+    if (identity?.kind === 'openid') return `openid:${identity.hash}`;
+    return requestKey(req);
+  },
+});
+
+// Webhook endpoints do RSA/AES verification — a separate, looser limiter so an
+// anonymous spammer can't drive CPU-bound signature checks, while legitimate
+// payment-provider retries (bursty) aren't throttled.
+const notifyRateLimit = createRateLimiter({
+  max: Number(process.env.NOTIFY_RATE_LIMIT_MAX || 120),
+  windowMs: 60_000,
+  keyFn: (req) => requestKey(req) || 'unknown',
+});
+
+// Task polling can run 20+ requests in a couple of minutes, so it gets a looser
+// window than the default generate limiter.
+const taskRateLimit = createRateLimiter({
+  max: Number(process.env.TASK_RATE_LIMIT_MAX || 90),
+  windowMs: 60_000,
+  keyFn: (req) => requestKey(req) || 'unknown',
 });
 
 const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 const VISITOR_COOKIE = 'yinghua_payment_visitor';
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,128}$/;
 const PAYMENT_ORDER_RE = /^[A-Za-z0-9_-]{8,80}$/;
+
+// ── WeChat mini-program session tokens ───────────────────────────────────────
+// A wx.login() code is exchanged for an openid once; that openid is then bound
+// to a server-issued random session token. Identity-gated endpoints accept ONLY
+// this token (x-session-token) as proof of a WeChat identity — a bare,
+// client-assertable x-openid header is never trusted, so knowing someone's
+// openid no longer grants access to their orders or lets you create orders in
+// their name. Tokens live in process memory (Railway = one long-running node);
+// sliding 7-day TTL.
+const WECHAT_SESSION_TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/;
+const WECHAT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const wechatSessions = new Map(); // sessionToken -> { openid, expiresAt }
+
+function issueWechatSession(openid) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  wechatSessions.set(token, { openid, expiresAt: Date.now() + WECHAT_SESSION_TTL_MS });
+  return token;
+}
+
+function getWechatSession(token) {
+  if (typeof token !== 'string' || !WECHAT_SESSION_TOKEN_RE.test(token)) return null;
+  const session = wechatSessions.get(token);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    wechatSessions.delete(token);
+    return null;
+  }
+  session.expiresAt = Date.now() + WECHAT_SESSION_TTL_MS; // sliding renewal
+  return session;
+}
+
+/** Identity key for the server-preset daily budget (per-openid/per-cookie/per-IP). */
+function budgetKey(req) {
+  const identity = resolveIdentity(req);
+  if (identity?.kind === 'openid') return `openid:${identity.hash}`;
+  return requestKey(req) || '';
+}
 
 function getCookie(req, name) {
   const cookies = String(req.headers.cookie || '').split(';');
@@ -160,13 +231,17 @@ function paymentOrderSummary(order) {
 }
 
 /**
- * Resolve the caller's payment identity. The mini program sends its openid in
- * the `x-openid` header; the web app relies on the visitor HttpOnly cookie.
- * Returns null when neither is present.
+ * Resolve the caller's payment identity. The mini program proves its WeChat
+ * identity with a server-issued session token (x-session-token); the web app
+ * relies on the HttpOnly visitor cookie. A bare client-asserted x-openid header
+ * is never accepted as identity. Returns null when neither is present.
  */
 function resolveIdentity(req) {
-  const openid = typeof req.headers['x-openid'] === 'string' ? req.headers['x-openid'].trim() : '';
-  if (openid) return { kind: 'openid', hash: sha256Hex(openid) };
+  const sessionToken = typeof req.headers['x-session-token'] === 'string' ? req.headers['x-session-token'].trim() : '';
+  if (sessionToken) {
+    const session = getWechatSession(sessionToken);
+    if (session) return { kind: 'openid', hash: sha256Hex(session.openid), openid: session.openid };
+  }
   const visitorToken = getCookie(req, VISITOR_COOKIE);
   if (visitorToken) return { kind: 'visitor', hash: visitorTokenHash(visitorToken) };
   return null;
@@ -274,7 +349,7 @@ app.get('/api/payments/orders/:orderNo', rateLimit, async (req, res) => {
   }
 });
 
-app.post('/api/payments/alipay/notify', express.urlencoded({ extended: false, limit: '100kb' }), async (req, res) => {
+app.post('/api/payments/alipay/notify', notifyRateLimit, express.urlencoded({ extended: false, limit: '100kb' }), async (req, res) => {
   const params = { ...req.body };
   try {
     if (!params.app_id || !params.out_trade_no || !params.total_amount || !params.trade_status || !params.sign) {
@@ -322,7 +397,8 @@ app.post('/api/auth/wechat-login', rateLimit, async (req, res) => {
   }
   try {
     const { openid } = await code2Session(code);
-    return res.json({ ok: true, openid });
+    const sessionToken = issueWechatSession(openid);
+    return res.json({ ok: true, openid, sessionToken });
   } catch (error) {
     if (error instanceof WechatConfigError) return fail(res, 503, 'WECHAT_NOT_CONFIGURED', error.message);
     console.warn('[auth/wechat-login] failed:', error?.message || error);
@@ -335,15 +411,21 @@ app.post('/api/payments/wechat/orders', rateLimit, async (req, res) => {
   const idempotencyKey = typeof req.body?.idempotencyKey === 'string' && IDEMPOTENCY_KEY_RE.test(req.body.idempotencyKey)
     ? req.body.idempotencyKey
     : null;
-  const openid = typeof req.body?.openid === 'string' ? req.body.openid.trim() : '';
   if (!amountCents) return fail(res, 400, 'INVALID_INPUT', `赞助金额需在 ¥${amountBounds().min}–¥${amountBounds().max} 之间，最多两位小数`);
   if (!idempotencyKey) return fail(res, 400, 'INVALID_INPUT', '无效的支付幂等键');
-  if (!openid || openid.length > 128) return fail(res, 400, 'INVALID_INPUT', '无效的微信身份');
+
+  // Identity comes from the verified session token (x-session-token), never
+  // from a client-assertable body field.
+  const identity = resolveIdentity(req);
+  if (!identity || identity.kind !== 'openid' || !identity.openid) {
+    return fail(res, 401, 'UNAUTHORIZED', '需要微信登录后下单');
+  }
+  const openid = identity.openid;
 
   try {
     const { order, reused } = await createOrder({
       amountCents,
-      identity: { kind: 'openid', hash: sha256Hex(openid) },
+      identity,
       idempotencyKey,
       channel: 'wechat',
     });
@@ -362,7 +444,7 @@ app.post('/api/payments/wechat/orders', rateLimit, async (req, res) => {
   }
 });
 
-app.post('/api/payments/wechat/notify', async (req, res) => {
+app.post('/api/payments/wechat/notify', notifyRateLimit, async (req, res) => {
   try {
     const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body || '');
     const event = verifyAndDecryptNotify(req.headers, rawBody);
@@ -428,7 +510,7 @@ registerTaskStore({
   },
 });
 
-app.get('/api/task/:id', (req, res) => {
+app.get('/api/task/:id', taskRateLimit, (req, res) => {
   const { id } = req.params;
   const task = taskStore.get(id);
   if (!task) return fail(res, 404, 'NOT_FOUND', '任务不存在或已过期');
@@ -459,7 +541,7 @@ app.get('/api/task/:id', (req, res) => {
 
 // Binary delivery of a generated image by index — the mini program fetches
 // these with responseType: 'arraybuffer' to avoid base64/JSON size limits.
-app.get('/api/task/:id/images/:index', async (req, res) => {
+app.get('/api/task/:id/images/:index', taskRateLimit, async (req, res) => {
   const { id, index } = req.params;
   const task = taskStore.get(id);
   if (!task || task.status !== 'done') return fail(res, 404, 'NOT_FOUND', '任务不存在或未完成');
@@ -582,9 +664,8 @@ async function resolveImageBuffer(image) {
   }
   if (/^https?:\/\//i.test(image)) {
     const url = await assertSafeUrl(image);
-    const response = await fetchWithTimeout(url.toString(), {}, 60000);
-    if (!response.ok) return null;
-    return Buffer.from(await response.arrayBuffer());
+    const { ok, buffer } = await fetchBufferLimited(url.toString(), {}, 60000, MAX_FETCH_BYTES);
+    return ok ? buffer : null;
   }
   try {
     return Buffer.from(image, 'base64');
@@ -609,7 +690,7 @@ async function executeGeneration(body, idempotencyKey) {
 
   // Server-preset (freeload) calls spend the operator's paid keys — cap daily
   // usage so anonymous callers can't burn through the quota.
-  if (body.useServerPreset === true && !consumePresetBudget()) {
+  if (body.useServerPreset === true && !consumePresetBudget(budgetKey(req))) {
     return { status: 429, body: { ok: false, code: 'RATE_LIMITED', message: '服务端免费额度今日已用尽，请明日再来或自行填写 API Key' } };
   }
 
@@ -689,7 +770,7 @@ app.post('/api/inpaint', rateLimit, upload.fields([
 
   const started = Date.now();
   try {
-    if (useServerPreset === true && !consumePresetBudget()) {
+    if (useServerPreset === true && !consumePresetBudget(budgetKey(req))) {
       return fail(res, 429, 'RATE_LIMITED', '服务端免费额度今日已用尽，请明日再来或自行填写 API Key');
     }
     const result = await providers[targetProvider](body);
@@ -726,7 +807,7 @@ app.post('/api/detect-face', rateLimit, async (req, res) => {
     console.warn(`[detect-face] missing key useServerPreset=${Boolean(useServerPreset)} usingPreset=${usingPreset} frontHasKey=${Boolean(apiKey)} envHasKey=${Boolean(process.env.VISION_API_KEY)}`);
     return fail(res, 401, 'UNAUTHORIZED', usingPreset ? '视觉模型服务端预设缺少 API Key' : '视觉模型缺少 API Key，请在前端填写');
   }
-  if (usingPreset && !consumePresetBudget()) {
+  if (usingPreset && !consumePresetBudget(budgetKey(req))) {
     return fail(res, 429, 'RATE_LIMITED', '服务端免费额度今日已用尽，请明日再来或自行填写 API Key');
   }
   const root = (usingPreset
@@ -829,17 +910,15 @@ app.get('/api/proxy-image', rateLimit, async (req, res) => {
   if (!url) return fail(res, 400, 'INVALID_INPUT', '缺少 url 参数');
   try {
     const safeUrl = await assertSafeUrl(url);
-    const response = await fetchWithTimeout(safeUrl.toString(), {}, 60000);
-    if (!response.ok) {
-      throw new UpstreamError(codeFromStatus(response.status), `proxy-image 返回 ${response.status}`, response.status);
+    const { ok, status, buffer, contentType } = await fetchBufferLimited(safeUrl.toString(), {}, 60000, MAX_FETCH_BYTES);
+    if (!ok) {
+      throw new UpstreamError(codeFromStatus(status), `proxy-image 返回 ${status}`, status);
     }
-    const contentType = response.headers.get('content-type') || 'application/octet-stream';
     // Only ever serve images: reflecting an upstream text/html (or script)
     // Content-Type would let anyone host arbitrary HTML/JS at this origin.
     if (!/^image\//i.test(contentType)) {
       return fail(res, 400, 'INVALID_INPUT', '仅允许代理图片资源');
     }
-    const buffer = Buffer.from(await response.arrayBuffer());
     res.set('Content-Type', contentType);
     res.set('Cache-Control', 'public, max-age=3600');
     res.send(buffer);

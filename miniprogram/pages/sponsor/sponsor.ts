@@ -1,6 +1,6 @@
-import { wechatLogin, createWechatOrder, getOrder, PaymentParams } from '../../utils/api';
+import { login, createWechatOrder, getOrder, PaymentParams } from '../../utils/api';
 import { createIdempotencyKey } from '../../utils/idempotency';
-import { STORAGE_OPENID, MIN_AMOUNT, MAX_AMOUNT } from '../../utils/constants';
+import { MIN_AMOUNT, MAX_AMOUNT } from '../../utils/constants';
 
 Page({
   data: {
@@ -32,8 +32,8 @@ Page({
   },
 
   async runPay(): Promise<void> {
-    const openid = await this.ensureOpenid();
-    const res = await createWechatOrder(this.data.amount.trim(), createIdempotencyKey(), openid);
+    await login(); // ensure a session token exists (sent as x-session-token)
+    const res = await createWechatOrder(this.data.amount.trim(), createIdempotencyKey());
     if (!res.payment) {
       wx.showToast({ title: '订单已存在，请稍后刷新状态', icon: 'none' });
       this.setData({ orderNo: res.order.orderNo, statusText: '' });
@@ -58,18 +58,6 @@ Page({
     return null;
   },
 
-  async ensureOpenid(): Promise<string> {
-    let openid = '';
-    try {
-      openid = (wx.getStorageSync(STORAGE_OPENID) as string) || '';
-    } catch { /* ignore */ }
-    if (openid) return openid;
-    const code = await wxLoginPromise();
-    const res = await wechatLogin(code);
-    wx.setStorageSync(STORAGE_OPENID, res.openid);
-    return res.openid;
-  },
-
   async pollPaid(orderNo: string): Promise<void> {
     for (let i = 0; i < 10; i++) {
       await sleep(2000);
@@ -84,15 +72,6 @@ Page({
     this.setData({ statusText: '支付结果仍在确认中，可稍后到订单页刷新' });
   },
 });
-
-function wxLoginPromise(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    wx.login({
-      success: (r: any) => (r.code ? resolve(r.code) : reject(new Error('微信登录失败'))),
-      fail: () => reject(new Error('微信登录失败')),
-    });
-  });
-}
 
 function requestPayment(p: PaymentParams): Promise<void> {
   return new Promise((resolve, reject) => {

@@ -5,7 +5,7 @@
 // UPSTREAM_TIMEOUT_MS in .env if your endpoint is faster/slower.
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
-import { DEFAULT_TIMEOUT_MS, UPSTREAM_RETRIES } from './lib/constants.js';
+import { DEFAULT_TIMEOUT_MS, UPSTREAM_RETRIES, MAX_FETCH_BYTES } from './lib/constants.js';
 
 /** Normalized upstream error carrying a stable code for the client. */
 export class UpstreamError extends Error {
@@ -16,23 +16,117 @@ export class UpstreamError extends Error {
   }
 }
 
-/** fetch() with an AbortController timeout. */
+const MAX_REDIRECTS = 5;
+
+function isRedirectStatus(status) {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+/** Drop body-related headers for the 301/302/303 → GET method transformation. */
+function toGetOptions(options) {
+  const headers = { ...(options.headers || {}) };
+  for (const key of ['content-type', 'content-length', 'transfer-encoding']) {
+    delete headers[key];
+    delete headers[key.toLowerCase()];
+  }
+  return { ...options, method: 'GET', body: undefined, headers };
+}
+
+/**
+ * fetch() with an AbortController timeout and SSRF-safe redirect handling.
+ *
+ * Redirects are followed manually, never implicitly: callers validate the
+ * initial URL with assertSafeUrl (every outbound sink does), and EVERY redirect
+ * target is re-validated by assertSafeUrl before being fetched. Without this, a
+ * public endpoint could 302/307 the proxy into an internal network — the
+ * classic redirect-based SSRF bypass of a first-hop-only guard.
+ *
+ * Methods/bodies are transformed per the HTTP spec: 303 → GET; 301/302 on a
+ * POST → GET; 307/308 preserve the method and body.
+ */
 export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   const started = Date.now();
+  let currentUrl = url;
+  let currentOptions = options;
+  let redirects = 0;
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (err) {
-    if (err.name === 'AbortError') {
-      console.warn(`[upstream] TIMEOUT after ${Date.now() - started}ms → ${url}`);
-      throw new UpstreamError('UPSTREAM_TIMEOUT', `上游请求超时 (${timeout}ms)`, 504);
+    for (;;) {
+      let res;
+      try {
+        res = await fetch(currentUrl, { ...currentOptions, redirect: 'manual', signal: controller.signal });
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          console.warn(`[upstream] TIMEOUT after ${Date.now() - started}ms → ${currentUrl}`);
+          throw new UpstreamError('UPSTREAM_TIMEOUT', `上游请求超时 (${timeout}ms)`, 504);
+        }
+        console.warn('[upstream] FAILED to reach upstream endpoint');
+        throw new UpstreamError('UPSTREAM_ERROR', '上游连接失败，请检查 Base URL / 端点是否正确');
+      }
+      if (!isRedirectStatus(res.status)) return res;
+
+      const location = res.headers.get('location');
+      if (!location) return res; // 3xx without a Location — surface it as-is
+      if (++redirects > MAX_REDIRECTS) {
+        await res.body?.cancel?.().catch(() => {});
+        throw new UpstreamError('UPSTREAM_ERROR', `上游重定向次数过多 (${MAX_REDIRECTS})`, 502);
+      }
+      const next = new URL(location, currentUrl);
+      await assertSafeUrl(next.href); // the SSRF check the implicit follow skipped
+      const method = String(currentOptions.method || 'GET').toUpperCase();
+      if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === 'POST')) {
+        currentOptions = toGetOptions(currentOptions);
+      }
+      await res.body?.cancel?.().catch(() => {});
+      currentUrl = next.href;
     }
-    console.warn('[upstream] FAILED to reach upstream endpoint');
-    throw new UpstreamError('UPSTREAM_ERROR', '上游连接失败，请检查 Base URL / 端点是否正确');
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Fetch a URL (with the same SSRF-safe redirect handling as fetchWithTimeout)
+ * and return its body as a Buffer, capped at maxBytes. A response advertising a
+ * content-length above the cap is rejected up front; otherwise the size limit
+ * is enforced while streaming so a lying/missing content-length can't slip a
+ * huge body through (memory-DoS guard for the image-proxy paths).
+ */
+export async function fetchBufferLimited(
+  url,
+  options = {},
+  timeout = DEFAULT_TIMEOUT_MS,
+  maxBytes = MAX_FETCH_BYTES,
+) {
+  const res = await fetchWithTimeout(url, options, timeout);
+  const contentType = res.headers.get('content-type') || '';
+  const advertised = Number(res.headers.get('content-length'));
+  if (Number.isFinite(advertised) && advertised > maxBytes) {
+    await res.body?.cancel?.().catch(() => {});
+    return { ok: false, status: 413, buffer: null, contentType };
+  }
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const arrayBuffer = await res.arrayBuffer();
+    if (arrayBuffer.byteLength > maxBytes) {
+      return { ok: false, status: 413, buffer: null, contentType };
+    }
+    return { ok: res.ok, status: res.status, buffer: Buffer.from(arrayBuffer), contentType };
+  }
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return { ok: false, status: 413, buffer: null, contentType };
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return { ok: res.ok, status: res.status, buffer: Buffer.concat(chunks), contentType };
 }
 
 /** Run an async fn with up to `retries` exponential-backoff retries. */

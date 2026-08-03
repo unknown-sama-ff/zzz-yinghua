@@ -1,5 +1,6 @@
 import {
   fetchWithTimeout,
+  fetchBufferLimited,
   withRetry,
   UpstreamError,
   codeFromStatus,
@@ -11,15 +12,28 @@ import { pluckImages } from './lib/pluckImages.js';
 import sharp from 'sharp';
 import {
   POLL_DEADLINE_MS,
+  DEFAULT_TIMEOUT_MS,
   MAX_COMPRESS_DIM,
   JPEG_QUALITY,
   RETRY_RESIZE_DIM,
   RETRY_SIZE_KB_THRESHOLD,
   RETRY_JPEG_QUALITY,
   MAX_INPUT_PIXELS,
+  MAX_FETCH_BYTES,
+  MAX_GENERATE_N,
 } from './lib/constants.js';
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
+
+/**
+ * Clamp the per-request image count the client may ask the upstream for. The
+ * server-preset budget is consumed per REQUEST, not per image, so an unbounded
+ * `n` would let one request burn the operator's quota N× — cap it server-side.
+ */
+function capN(req) {
+  const n = Number(req.n);
+  return Number.isInteger(n) && n > 1 ? Math.min(n, MAX_GENERATE_N) : 1;
+}
 
 // When running on Vercel serverless, spawn a Worker thread for long-polling
 // so the function can return immediately and the Worker (own event loop) keeps
@@ -57,7 +71,7 @@ async function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
       async function fetchWithTimeout(url, opts = {}) {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 180000);
-        try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+        try { return await fetch(url, { ...opts, redirect: 'error', signal: ctrl.signal }); }
         finally { clearTimeout(t); }
       }
       async function parseJsonSafe(res) {
@@ -139,7 +153,7 @@ async function seedream(req) {
   const body = {
     prompt: req.prompt,
     image: req.imageBase64,
-    n: req.n || 1,
+    n: req.useServerPreset === true ? 1 : capN(req),
     ...(model ? { model } : {}),
   };
   // Prefer aspectRatio when provided, fall back to size or default
@@ -224,7 +238,7 @@ async function gptImage(req) {
   }
   // Prefer aspectRatio when provided, otherwise use size
   const size = req.aspectRatio ? undefined : (req.size || '1024x1024');
-  const n = req.n || 1;
+  const n = req.useServerPreset === true ? 1 : capN(req);
   const root = base.replace(/\/$/, '');
 
   // With an input image → /images/edits as multipart/form-data so the upload
@@ -243,12 +257,10 @@ async function gptImage(req) {
       await assertSafeUrl(req.imageBase64);
       console.log(`[gpt-image] fetching remote image: ${req.imageBase64.slice(0, 120)}`);
       try {
-        const res = await fetchWithTimeout(req.imageBase64);
-        if (!res.ok) throw new UpstreamError('UPSTREAM_ERROR', `远程图片获取失败: ${res.status}`, res.status);
-        const blob = await res.blob();
-        const arrayBuf = await blob.arrayBuffer();
-        buffer = Buffer.from(arrayBuf);
-        mime = blob.type || 'image/png';
+        const { ok, status, buffer: fetched, contentType } = await fetchBufferLimited(req.imageBase64, {}, DEFAULT_TIMEOUT_MS, MAX_FETCH_BYTES);
+        if (!ok) throw new UpstreamError('UPSTREAM_ERROR', `远程图片获取失败: ${status}`, status);
+        buffer = fetched;
+        mime = (contentType.split(';')[0] || 'image/png').trim();
         ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
         console.log(`[gpt-image] remote image fetched: ${buffer.length} bytes (${(buffer.length/1024).toFixed(1)} KB) mime=${mime}`);
       } catch (e) {
@@ -402,7 +414,7 @@ async function customUrl(req) {
     body = JSON.stringify({
       prompt: req.prompt,
       image: req.imageBase64,
-      n: req.n || 1,
+      n: req.useServerPreset === true ? 1 : capN(req),
       ...(req.model ? { model: req.model } : {}),
     });
   }

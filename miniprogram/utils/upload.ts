@@ -1,4 +1,4 @@
-import { API_BASE, STORAGE_OPENID } from './constants';
+import { API_BASE, STORAGE_SESSION_TOKEN } from './constants';
 
 interface UploadResult {
   ok: boolean;
@@ -9,8 +9,8 @@ interface UploadResult {
 }
 
 /**
- * Upload a local file via wx.uploadFile (multipart/form-data), injecting
- * x-openid when available. `formData` values must be strings.
+ * Upload a local file via wx.uploadFile (multipart/form-data), injecting the
+ * session token when available. `formData` values must be strings.
  */
 export function uploadFile(
   urlPath: string,
@@ -18,9 +18,9 @@ export function uploadFile(
   name: string,
   formData: Record<string, string>,
 ): Promise<UploadResult> {
-  let openid = '';
+  let sessionToken = '';
   try {
-    openid = (wx.getStorageSync(STORAGE_OPENID) as string) || '';
+    sessionToken = (wx.getStorageSync(STORAGE_SESSION_TOKEN) as string) || '';
   } catch { /* ignore */ }
 
   return new Promise<UploadResult>((resolve, reject) => {
@@ -30,7 +30,7 @@ export function uploadFile(
       name,
       formData,
       timeout: 120000,
-      header: openid ? { 'x-openid': openid } : {},
+      header: sessionToken ? { 'x-session-token': sessionToken } : {},
       success: (res: any) => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           try {

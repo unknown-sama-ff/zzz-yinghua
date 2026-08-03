@@ -31,9 +31,12 @@ export function createRateLimiter({ max, windowMs, keyFn }) {
   };
 }
 
-/** Identity for rate limiting: the anonymous visitor cookie (strong — HttpOnly,
- *  unguessable), else the first X-Forwarded-For hop (weak under spoofing; the
- *  global preset budget is the real backstop for cost abuse). */
+/**
+ * Identity for rate limiting: the anonymous visitor cookie (strong — HttpOnly,
+ * unguessable), else the real client IP via req.ip (which respects the app's
+ * `trust proxy` setting). The raw X-Forwarded-For header is deliberately NOT
+ * trusted — it is client-assertable and trivially spoofable.
+ */
 export function requestKey(req, cookieName = 'yinghua_payment_visitor') {
   const cookies = String(req.headers.cookie || '').split(';');
   for (const cookie of cookies) {
@@ -42,10 +45,6 @@ export function requestKey(req, cookieName = 'yinghua_payment_visitor') {
       const token = decodeURIComponent(value.join('='));
       if (token) return `cookie:${token}`;
     }
-  }
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string' && fwd.trim()) {
-    return `ip:${fwd.split(',')[0].trim()}`;
   }
   const ip = req.ip || req.socket?.remoteAddress || '';
   return ip ? `ip:${ip}` : null;
@@ -56,16 +55,30 @@ export function requestKey(req, cookieName = 'yinghua_payment_visitor') {
 // (SEEDREAM / OPENAI / VISION) via useServerPreset. Counts per UTC day in
 // process memory; PRESET_DAILY_CAP=0 disables server-preset usage entirely.
 
-const presetUsage = new Map(); // 'YYYY-MM-DD' -> count
+const presetUsage = new Map(); // 'YYYY-MM-DD' -> count (global)
+const presetUsageByIdentity = new Map(); // 'YYYY-MM-DD:<identity>' -> count
+const PRESET_DAILY_PER_IDENTITY_CAP = Number(process.env.PRESET_DAILY_PER_IDENTITY_CAP || 20);
 
-/** Atomically consume one unit of the daily budget. Returns true if allowed. */
-export function consumePresetBudget() {
+/**
+ * Atomically consume one unit of the daily budget. Enforces BOTH a global daily
+ * cap (PRESET_DAILY_CAP) and a per-identity daily cap, so a single caller can't
+ * monopolize the whole day's quota. `identityKey` is an opaque caller-supplied
+ * string (openid hash / visitor cookie / client IP).
+ */
+export function consumePresetBudget(identityKey = '') {
   const raw = process.env.PRESET_DAILY_CAP;
   const cap = raw === undefined || raw === '' ? 200 : Number(raw);
   if (!Number.isFinite(cap) || cap <= 0) return false; // cap 0 → deny all
   const today = new Date().toISOString().slice(0, 10);
-  const used = presetUsage.get(today) || 0;
-  if (used >= cap) return false;
-  presetUsage.set(today, used + 1);
+  const usedGlobal = presetUsage.get(today) || 0;
+  if (usedGlobal >= cap) return false;
+  let usedIdentity = 0;
+  const identityBudgetKey = identityKey ? `${today}:${identityKey}` : '';
+  if (identityBudgetKey) {
+    usedIdentity = presetUsageByIdentity.get(identityBudgetKey) || 0;
+    if (usedIdentity >= PRESET_DAILY_PER_IDENTITY_CAP) return false;
+  }
+  presetUsage.set(today, usedGlobal + 1);
+  if (identityBudgetKey) presetUsageByIdentity.set(identityBudgetKey, usedIdentity + 1);
   return true;
 }

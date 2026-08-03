@@ -1,21 +1,26 @@
 import { request, fetchBinaryToFile } from './request';
 import { uploadFile } from './upload';
 import { cacheFilePath, writeBase64File } from './image';
-import { USE_SERVER_PRESET, STORAGE_OPENID } from './constants';
+import { USE_SERVER_PRESET, STORAGE_OPENID, STORAGE_SESSION_TOKEN } from './constants';
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
-export function wechatLogin(code: string): Promise<{ openid: string }> {
+export function wechatLogin(code: string): Promise<{ openid: string; sessionToken: string }> {
   return request('/auth/wechat-login', { method: 'POST', data: { code } });
 }
 
-/** Ensure an openid is available: read cache, else wx.login → code2session. */
+/**
+ * Ensure a session token is available: read cache, else wx.login → code2session.
+ * The server issues a session token bound to the openid; all later identity-
+ * gated calls send it as x-session-token (never the raw openid, which the
+ * server no longer accepts as proof of identity).
+ */
 export async function login(): Promise<string> {
-  let openid = '';
+  let token = '';
   try {
-    openid = (wx.getStorageSync(STORAGE_OPENID) as string) || '';
+    token = (wx.getStorageSync(STORAGE_SESSION_TOKEN) as string) || '';
   } catch { /* ignore */ }
-  if (openid) return openid;
+  if (token) return token;
   const code = await new Promise<string>((resolve, reject) => {
     wx.login({
       success: (r: any) => (r.code ? resolve(r.code) : reject(new Error('微信登录失败'))),
@@ -23,8 +28,9 @@ export async function login(): Promise<string> {
     });
   });
   const res = await wechatLogin(code);
-  wx.setStorageSync(STORAGE_OPENID, res.openid);
-  return res.openid;
+  wx.setStorageSync(STORAGE_SESSION_TOKEN, res.sessionToken);
+  wx.setStorageSync(STORAGE_OPENID, res.openid); // keep for reference/display
+  return res.sessionToken;
 }
 
 // ── Generate (multipart upload + asyncMode polling) ──────────────────────────
@@ -117,11 +123,12 @@ export interface SponsorOrder {
 export function createWechatOrder(
   amount: string,
   idempotencyKey: string,
-  openid: string,
 ): Promise<{ order: SponsorOrder; payment: PaymentParams | null }> {
+  // Identity is proven by the x-session-token header; the server resolves the
+  // openid from its own session map. The client never asserts an openid.
   return request('/payments/wechat/orders', {
     method: 'POST',
-    data: { amount, idempotencyKey, openid },
+    data: { amount, idempotencyKey },
   });
 }
 

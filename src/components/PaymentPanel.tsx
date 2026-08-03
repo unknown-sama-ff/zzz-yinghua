@@ -78,6 +78,9 @@ export function PaymentPanel() {
       setError('浏览器拦截了新标签页，请允许本站打开新窗口后重试');
       return;
     }
+    // Break the opener link so a cross-origin page in the payment chain (Alipay,
+    // or any redirect it serves) can't navigate this tab to a phishing URL.
+    paymentWindow.opener = null;
     paymentWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>正在打开支付宝…</title></head><body></body></html>');
     paymentWindow.document.close();
     setBusy(true);

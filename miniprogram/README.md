@@ -17,8 +17,8 @@ miniprogram/
 ├── types.d.ts            # wx/App/Page 最小声明（无需 npm 安装类型包）
 ├── utils/
 │   ├── constants.ts      # API_BASE、轮询参数、金额范围、存储 key
-│   ├── request.ts        # wx.request Promise 封装 + x-openid 注入 + 任务轮询
-│   ├── upload.ts         # wx.uploadFile 封装
+│   ├── request.ts        # wx.request Promise 封装 + session-token 注入 + 任务轮询
+│   ├── upload.ts         # wx.uploadFile 封装（同样注入 session-token）
 │   ├── image.ts          # 选图/压缩/读写本地文件
 │   ├── idempotency.ts    # 幂等键 / 画廊删除凭证
 │   ├── store.ts          # 页面间共享状态单例

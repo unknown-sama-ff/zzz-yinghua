@@ -22,6 +22,12 @@ ALTER TABLE gallery ENABLE ROW LEVEL SECURITY;
 
 -- Public read only. Inserts/deletes go through the Express server (service-role
 -- key) so anonymous visitors can't wipe the gallery or spam rows.
+-- Column-level privileges restrict what the browser's anon key can read:
+-- `delete_token_hash` (the SHA-256 of the deletion capability) must NEVER be
+-- queryable by the anon client, so it can't be attacked offline.
+REVOKE SELECT ON gallery FROM anon;
+GRANT SELECT (id, created_at, image_url, style, character_name, prompt, provider) ON gallery TO anon;
+
 CREATE POLICY "anon_select"
 ON gallery FOR SELECT
 TO anon
@@ -34,6 +40,9 @@ USING (true);
 > ALTER TABLE gallery ADD COLUMN IF NOT EXISTS delete_token_hash TEXT DEFAULT '';
 > DROP POLICY IF EXISTS "anon_insert" ON gallery;
 > DROP POLICY IF EXISTS "anon_delete" ON gallery;
+> -- restrict the anon key to display columns (run after any existing GRANT ALL)
+> REVOKE SELECT ON gallery FROM anon;
+> GRANT SELECT (id, created_at, image_url, style, character_name, prompt, provider) ON gallery TO anon;
 > ```
 
 ## Server-side sponsorship payments

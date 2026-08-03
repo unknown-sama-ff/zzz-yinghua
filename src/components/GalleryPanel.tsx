@@ -28,7 +28,9 @@ interface GalleryRow {
 async function fetchGallery(): Promise<GalleryRow[]> {
   const { data, error } = await supabase
     .from('gallery')
-    .select('*')
+    // Explicit column list — the anon RLS grant is column-scoped and excludes
+    // delete_token_hash, so selecting '*' would fail permission checks.
+    .select('id, created_at, image_url, style, character_name, prompt, provider')
     .order('created_at', { ascending: false })
     .limit(20);
   if (error) throw error;

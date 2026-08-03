@@ -1,4 +1,4 @@
-import { API_BASE, POLL_DEADLINE_MS, POLL_INTERVAL_MS, STORAGE_OPENID } from './constants';
+import { API_BASE, POLL_DEADLINE_MS, POLL_INTERVAL_MS, STORAGE_SESSION_TOKEN } from './constants';
 
 export class ApiError extends Error {
   code: string;
@@ -8,9 +8,9 @@ export class ApiError extends Error {
   }
 }
 
-function getOpenid(): string {
+function getSessionToken(): string {
   try {
-    return (wx.getStorageSync(STORAGE_OPENID) as string) || '';
+    return (wx.getStorageSync(STORAGE_SESSION_TOKEN) as string) || '';
   } catch {
     return '';
   }
@@ -22,9 +22,9 @@ interface RequestOptions {
   timeout?: number;
 }
 
-/** Promise wrapper around wx.request with x-openid injection + error normalization. */
+/** Promise wrapper around wx.request with session-token injection + error normalization. */
 export function request<T>(url: string, options: RequestOptions = {}): Promise<T> {
-  const openid = getOpenid();
+  const sessionToken = getSessionToken();
   return new Promise<T>((resolve, reject) => {
     wx.request({
       url: API_BASE + url,
@@ -33,7 +33,7 @@ export function request<T>(url: string, options: RequestOptions = {}): Promise<T
       timeout: options.timeout || 60000,
       header: {
         'content-type': 'application/json',
-        ...(openid ? { 'x-openid': openid } : {}),
+        ...(sessionToken ? { 'x-session-token': sessionToken } : {}),
       },
       success: (res: any) => {
         const data = res.data as { ok?: boolean; code?: string; message?: string } | undefined;
@@ -50,14 +50,14 @@ export function request<T>(url: string, options: RequestOptions = {}): Promise<T
 
 /** Fetch a binary (image) with responseType arraybuffer, write to a local file. */
 export function fetchBinaryToFile(url: string, filePath: string): Promise<string> {
-  const openid = getOpenid();
+  const sessionToken = getSessionToken();
   return new Promise((resolve, reject) => {
     wx.request({
       url: API_BASE + url,
       method: 'GET',
       responseType: 'arraybuffer',
       timeout: 60000,
-      header: openid ? { 'x-openid': openid } : {},
+      header: sessionToken ? { 'x-session-token': sessionToken } : {},
       success: (res: any) => {
         if (res.statusCode !== 200 || !(res.data instanceof ArrayBuffer)) {
           reject(new ApiError('UNKNOWN', `图片下载失败 (${res.statusCode})`));

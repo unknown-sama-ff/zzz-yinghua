@@ -30,5 +30,11 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** Max pixels sharp will decompress (64 MP) — bounds memory on hostile images. */
 export const MAX_INPUT_PIXELS = 64_000_000;
 
+/** Max bytes a server-side remote image fetch will read (20 MB). */
+export const MAX_FETCH_BYTES = 20 * 1024 * 1024;
+
+/** Max images a single generate request may ask an upstream for. */
+export const MAX_GENERATE_N = 4;
+
 /** Task store TTL (5 min). */
 export const TASK_TTL_MS = 5 * 60_000;

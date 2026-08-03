@@ -5,10 +5,17 @@
 // through this server using the service-role key, so the anon key is read-only.
 //
 // Ownership is enforced with a client-generated delete token: the raw token is
-// sent on save/delete but only its SHA-256 hash is stored, so the anon-read
-// gallery can't leak deletable tokens. A user can only delete works they saved
+// sent on save/delete but only its SHA-256 hash is stored, so the token itself
+// can't be recovered from the gallery. A user can only delete works they saved
 // in the same browser (the raw token lives in that browser's localStorage).
+//
+// NOTE: the RLS `anon_select` policy must be column-restricted so the public
+// read path never exposes `delete_token_hash` (see Supabase-Schema.md). With a
+// strong CSPRNG token the hash is unbrute-forceable, but the hash must not be
+// queryable by the browser's anon key either.
 import crypto from 'node:crypto';
+import sharp from 'sharp';
+import { MAX_INPUT_PIXELS } from './lib/constants.js';
 
 const MAX_GALLERY_IMAGE_BYTES = 10 * 1024 * 1024;
 const DELETE_TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -62,7 +69,7 @@ function storagePathFromPublicUrl(publicUrl) {
   }
 }
 
-export async function saveGalleryItem({ imageBase64, mime, style, characterName, prompt, provider, deleteToken }) {
+export async function saveGalleryItem({ imageBase64, style, characterName, prompt, provider, deleteToken }) {
   if (typeof imageBase64 !== 'string' || !imageBase64) {
     throw new GalleryStorageError('缺少图片数据');
   }
@@ -73,15 +80,28 @@ export async function saveGalleryItem({ imageBase64, mime, style, characterName,
   if (!DELETE_TOKEN_RE.test(deleteToken || '')) {
     throw new GalleryStorageError('删除凭证无效');
   }
-  const safeMime = /^image\/(png|jpe?g|webp)$/i.test(mime || '') ? mime : 'image/webp';
-  const ext = safeMime === 'image/jpeg' || safeMime === 'image/jpg' ? 'jpg' : safeMime === 'image/png' ? 'png' : 'webp';
+  // Server-side decode validation + re-encode. The bytes must actually decode as
+  // an image (not arbitrary content smuggled in as image/*), and re-encoding to
+  // WebP strips any trailing polyglot payload so the public bucket only ever
+  // holds clean images. The client-supplied `mime` is no longer trusted for the
+  // stored content type.
+  let uploadBuffer;
+  try {
+    const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+    if (!meta.format || !meta.width || !meta.height || !['png', 'jpeg', 'jpg', 'webp'].includes(meta.format)) {
+      throw new Error('unsupported');
+    }
+    uploadBuffer = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).webp({ quality: 90 }).toBuffer();
+  } catch {
+    throw new GalleryStorageError('图片数据无效（仅支持 PNG/JPEG/WebP）');
+  }
 
   const supabase = await db();
-  const path = `gallery/${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`;
+  const path = `gallery/${Date.now()}-${crypto.randomBytes(6).toString('hex')}.webp`;
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(path, buffer, {
-      contentType: safeMime,
+    .upload(path, uploadBuffer, {
+      contentType: 'image/webp',
       cacheControl: 'public, max-age=31536000, immutable',
       upsert: false,
     });
