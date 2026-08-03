@@ -600,7 +600,7 @@ app.post('/api/generate', rateLimit, upload.fields([
     // background and return a taskId immediately for the mini program to poll.
     const taskId = createTaskId();
     const outcome = (async () => {
-      const result = await executeGeneration(body, idempotencyKey);
+      const result = await executeGeneration(budgetKey(req), body, idempotencyKey);
       finalizeAsyncTask(taskId, result);
       return { status: 200, body: { ok: true, taskId } };
     })();
@@ -612,7 +612,7 @@ app.post('/api/generate', rateLimit, upload.fields([
     return res.json({ ok: true, taskId });
   }
 
-  const outcome = executeGeneration(body, idempotencyKey);
+  const outcome = executeGeneration(budgetKey(req), body, idempotencyKey);
   if (idempotencyKey) {
     const timer = setTimeout(() => cleanupGenerationFlight(idempotencyKey), TASK_TTL_MS);
     generationFlights.set(idempotencyKey, { outcome, timer });
@@ -674,7 +674,7 @@ async function resolveImageBuffer(image) {
   }
 }
 
-async function executeGeneration(body, idempotencyKey) {
+async function executeGeneration(budgetIdentity, body, idempotencyKey) {
   const { provider, prompt } = body;
 
   if (!provider || !VALID_PROVIDERS.has(provider)) {
@@ -690,7 +690,7 @@ async function executeGeneration(body, idempotencyKey) {
 
   // Server-preset (freeload) calls spend the operator's paid keys — cap daily
   // usage so anonymous callers can't burn through the quota.
-  if (body.useServerPreset === true && !consumePresetBudget(budgetKey(req))) {
+  if (body.useServerPreset === true && !consumePresetBudget(budgetIdentity)) {
     return { status: 429, body: { ok: false, code: 'RATE_LIMITED', message: '服务端免费额度今日已用尽，请明日再来或自行填写 API Key' } };
   }
 
