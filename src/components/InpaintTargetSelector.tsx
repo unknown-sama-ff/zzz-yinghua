@@ -12,11 +12,21 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
   // Cache the last serialized clone state so we can skip React updates when
   // nothing actually moved (cheap string compare vs. re-rendering portal).
   const lastSnapshotRef = useRef<string>('');
-  // Throttle scroll-triggered clone updates: during active scrolling we skip
-  // expensive getBoundingClientRect + React re-renders. Updates only fire
-  // after scrolling has been idle for 120ms, which is imperceptible for glow
-  // clones but eliminates layout-thrash on dense pages like module 02.
-  const scrollDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+  // Settle timer: after active scrolling stops, one full reconcile re-measures
+  // positions, mounts clones for images that entered the viewport, and updates
+  // React state. During the scroll itself a cheap direct-DOM hot path
+  // (moveClones) follows every frame, so no 120ms idle wait is needed.
+  const settleRef = useRef<ReturnType<typeof setTimeout>>();
+  // Periodic re-scan catches images added after selection began (e.g. a
+  // generation finishing while selection mode is active).
+  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  // Cache of the source <img> elements for the hot path. Building it once per
+  // reconcile (not per scroll tick) avoids the expensive querySelectorAll
+  // traversal of module 02's deep costume-history DOM on every frame.
+  const imgCacheRef = useRef<{ id: string; src: string; zone: string; img: HTMLImageElement }[]>([]);
+  // id -> mounted clone div, so the hot loop is a pure Map.get (no per-frame
+  // querySelector or attribute lookup). Refilled by the clone ref-callbacks.
+  const cloneDivsRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const updateClones = useCallback(() => {
     // Query each zone's descendant images directly, avoiding the per-image
@@ -24,6 +34,8 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
     // makes closest() expensive on every scroll tick.
     const zones = document.querySelectorAll('[data-inpaint-zone]');
     const newClones: { id: string; src: string; rect: DOMRect; zone: string }[] = [];
+    // Full (pre-cap) list of scanned images, cached for the scroll hot path.
+    const nextCache: { id: string; src: string; zone: string; img: HTMLImageElement }[] = [];
 
     zones.forEach((zone) => {
       const zoneType = zone.getAttribute('data-inpaint-zone') || 'unknown';
@@ -36,14 +48,20 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
         if (rect.bottom < 0 || rect.top > window.innerHeight) return;
         if (rect.right < 0 || rect.left > window.innerWidth) return;
         if (!imageEl.src) return;
+        const id = `${zoneType}-${i}-${imageEl.src.slice(-20)}`;
+        nextCache.push({ id, src: imageEl.src, zone: zoneType, img: imageEl });
         newClones.push({
-          id: `${zoneType}-${i}-${imageEl.src.slice(-20)}`,
+          id,
           src: imageEl.src,
           rect,
           zone: zoneType,
         });
       });
     });
+
+    // Cache every scanned image (including ones the cap drops) so the hot path
+    // can position any mounted clone, and dropped images can be tracked too.
+    imgCacheRef.current = nextCache;
 
     // Hard cap visible glow clones to avoid compositing overload on pages
     // with many inpaintable images (e.g. module 02's costume history list).
@@ -68,30 +86,66 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
     }
   }, []);
 
-  // Sync clone positions on scroll/resize. Scroll updates are debounced
-  // to avoid layout thrash on dense pages (module 02's scrollable costume
-  // history fires many scroll ticks, each forcing synchronous layout via
-  // getBoundingClientRect).
+  // Real-time scroll following: on every animation frame while scrolling, read
+  // the cached source-image rects and write positions DIRECTLY onto the
+  // already-mounted clone divs (no React state, no DOM re-query, no
+  // reconciliation of the animated clones). getBoundingClientRect is cheap on
+  // the shallow cached set; writing left/top does not collide with the
+  // transform-only glow-pulse animation. The 150ms settle reconcile then does
+  // one corrective measure after the scroll stops.
+  const moveClones = useCallback(() => {
+    rafRef.current = 0;
+    for (const { id, img } of imgCacheRef.current) {
+      const div = cloneDivsRef.current.get(id);
+      if (!div) continue;             // not mounted (cap/offscreen) — reconciled below
+      if (!img.isConnected) continue; // stale node — skip until reconcile
+      const r = img.getBoundingClientRect();
+      if (r.width <= 10 || r.height <= 10) { div.style.display = 'none'; continue; }
+      div.style.display = '';
+      div.style.left   = `${r.left}px`;
+      div.style.top    = `${r.top}px`;
+      div.style.width  = `${r.width}px`;
+      div.style.height = `${r.height}px`;
+    }
+  }, []);
+
+  // Sync clone positions on scroll/resize. Scroll events are captured on
+  // window so BOTH the document scroll and module 02's nested costume
+  // history scroller are heard. Positions follow every animation frame via
+  // moveClones (cheap, direct DOM), then a short settle reconciles: re-measures
+  // exact rects, mounts clones for images that entered the viewport, and
+  // updates React state once — instead of every tick.
   useLayoutEffect(() => {
     updateClones();
     const onScroll = () => {
-      cancelAnimationFrame(rafRef.current);
-      clearTimeout(scrollDebounceRef.current);
-      scrollDebounceRef.current = setTimeout(() => {
-        rafRef.current = requestAnimationFrame(updateClones);
-      }, 120);
+      // Real-time follow on the very next frame.
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(moveClones);
+      // One corrective reconcile after scrolling has been idle for 150ms.
+      clearTimeout(settleRef.current);
+      settleRef.current = setTimeout(updateClones, 150);
     };
     const onResize = () => updateClones();
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onResize);
+    // Re-scan periodically so images generated after selection began get glow.
+    intervalRef.current = setInterval(updateClones, 2000);
 
     return () => {
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onResize);
-      clearTimeout(scrollDebounceRef.current);
+      clearTimeout(settleRef.current);
+      clearInterval(intervalRef.current);
       cancelAnimationFrame(rafRef.current);
     };
-  }, [updateClones]);
+  }, [updateClones, moveClones]);
+
+  // Reposition newly mounted clones (e.g. after a reconcile swap or resize
+  // re-render) even when the user isn't mid-scroll. No-op if all ids are
+  // already mounted, so this stays cheap on every combination change.
+  useLayoutEffect(() => {
+    requestAnimationFrame(moveClones);
+  }, [clones, moveClones]);
 
   if (clones.length === 0) return null;
 
@@ -100,6 +154,7 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
       {clones.map((clone) => (
         <div
           key={clone.id}
+          ref={(el) => (el ? cloneDivsRef.current.set(clone.id, el) : cloneDivsRef.current.delete(clone.id))}
           data-inpaint-portal={clone.id}
           className={`absolute rounded-xl overflow-hidden ${clone.id === hoveredId ? 'inpaint-portal-clone-hovered' : ''}`}
           style={{
