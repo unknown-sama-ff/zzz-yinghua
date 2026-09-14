@@ -1,5 +1,4 @@
 import type { YinghuaStyleId } from '../types';
-import { stitchImages } from './imageWorkerPool';
 
 const STYLE_REFERENCE_URLS: Record<YinghuaStyleId, string[]> = {
   1: [
@@ -19,7 +18,7 @@ const STYLE_REFERENCE_URLS: Record<YinghuaStyleId, string[]> = {
   ],
 };
 
-const styleReferenceSheetCache = new Map<YinghuaStyleId, Promise<string>>();
+const styleReferenceCache = new Map<YinghuaStyleId, Promise<string[]>>();
 
 async function urlToDataUrl(url: string): Promise<string> {
   const res = await fetch(url);
@@ -33,24 +32,18 @@ async function urlToDataUrl(url: string): Promise<string> {
   });
 }
 
-async function buildStyleReferenceSheetUncached(styleId: YinghuaStyleId): Promise<string> {
-  const urls = STYLE_REFERENCE_URLS[styleId];
-  const dataUrls = await Promise.all(urls.map(urlToDataUrl));
-  return stitchImages(dataUrls);
-}
-
-export function buildStyleReferenceSheet(styleId: YinghuaStyleId): Promise<string> {
-  const cached = styleReferenceSheetCache.get(styleId);
+export function loadStyleReferenceImages(styleId: YinghuaStyleId): Promise<string[]> {
+  const cached = styleReferenceCache.get(styleId);
   if (cached) return cached;
 
-  const promise = buildStyleReferenceSheetUncached(styleId).catch((err) => {
-    styleReferenceSheetCache.delete(styleId);
+  const promise = Promise.all(STYLE_REFERENCE_URLS[styleId].map(urlToDataUrl)).catch((err) => {
+    styleReferenceCache.delete(styleId);
     throw err;
   });
-  styleReferenceSheetCache.set(styleId, promise);
+  styleReferenceCache.set(styleId, promise);
   return promise;
 }
 
-export function preloadStyleReferenceSheets(styleIds: YinghuaStyleId[] = [1, 2, 3]): Promise<void> {
-  return Promise.all(styleIds.map((id) => buildStyleReferenceSheet(id))).then(() => undefined);
+export function preloadStyleReferenceImages(styleIds: YinghuaStyleId[] = [1, 2, 3]): Promise<void> {
+  return Promise.all(styleIds.map(loadStyleReferenceImages)).then(() => undefined);
 }

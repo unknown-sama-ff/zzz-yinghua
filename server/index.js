@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { providers, registerTaskStore } from './providers.js';
 import { compositeEmbed, compositeStitch } from './lib/composite.js';
+import { maxInputImagesForGptModel } from './lib/gptImageCapabilities.js';
 import {
   UpstreamError,
   fetchWithTimeout,
@@ -563,7 +564,7 @@ app.get('/api/task/:id/images/:index', taskRateLimit, async (req, res) => {
 
 app.post('/api/generate', rateLimit, upload.fields([
   { name: 'image', maxCount: 1 },
-  { name: 'refImages', maxCount: 6 },
+  { name: 'refImages', maxCount: 15 },
 ]), async (req, res) => {
   const body = { ...(req.body || {}) };
 
@@ -682,6 +683,40 @@ async function executeGeneration(budgetIdentity, body, idempotencyKey) {
   }
   if (!prompt || typeof prompt !== 'string') {
     return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: '缺少 prompt' } };
+  }
+
+  if (body.refImages !== undefined) {
+    if (!Array.isArray(body.refImages)) {
+      return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: 'refImages 必须是图片数组' } };
+    }
+    if (body.refImages.length > 0) {
+      if (provider !== 'gpt-image') {
+        return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: '多张参考图仅支持 gpt-image 提供方' } };
+      }
+      if (typeof body.imageBase64 !== 'string' || !body.imageBase64) {
+        return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: '多张参考图需要主图' } };
+      }
+      if (!body.refImages.every((image) => image
+        && typeof image.base64 === 'string'
+        && image.base64
+        && (image.mime === undefined || typeof image.mime === 'string'))) {
+        return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: '参考图格式无效' } };
+      }
+      const model = body.useServerPreset === true
+        ? (process.env.GPT_IMAGE_MODEL || 'gpt-image-2')
+        : body.model;
+      const maxInputImages = maxInputImagesForGptModel(model);
+      if (1 + body.refImages.length > maxInputImages) {
+        return {
+          status: 400,
+          body: {
+            ok: false,
+            code: 'INVALID_INPUT',
+            message: `模型 ${model || '当前配置'} 最多支持 ${maxInputImages} 张输入图（包含主图）`,
+          },
+        };
+      }
+    }
   }
 
   const started = Date.now();

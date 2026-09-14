@@ -9,8 +9,8 @@ export const POLL_DEADLINE_MS = 180000;
 /** Max dimension for server-side image compression. */
 export const MAX_COMPRESS_DIM = 1024;
 
-/** JPEG quality for server-side compression (0–1). */
-export const JPEG_QUALITY = 0.80;
+/** JPEG quality for server-side compression (1–100). */
+export const JPEG_QUALITY = 80;
 
 /** Retry resize dimension when upload exceeds threshold. */
 export const RETRY_RESIZE_DIM = 512;
@@ -19,7 +19,7 @@ export const RETRY_RESIZE_DIM = 512;
 export const RETRY_SIZE_KB_THRESHOLD = 300;
 
 /** JPEG quality for retry (lower quality for smaller payload). */
-export const RETRY_JPEG_QUALITY = 0.70;
+export const RETRY_JPEG_QUALITY = 70;
 
 /** Retry attempts for upstream requests. */
 export const UPSTREAM_RETRIES = 2;

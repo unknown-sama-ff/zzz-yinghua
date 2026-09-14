@@ -10,7 +10,8 @@ import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
 import { stitchImages, embedThumbnails } from '../lib/imageWorkerPool';
 import type { ThumbEntry } from '../lib/imageWorkerPool';
-import { buildStyleReferenceSheet, preloadStyleReferenceSheets } from '../lib/styleReferences';
+import { loadStyleReferenceImages, preloadStyleReferenceImages } from '../lib/styleReferences';
+import { maxReferenceImagesForModel, supportsMultipleImageInputs } from '../lib/gptImageCapabilities';
 import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
@@ -251,7 +252,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
 
   // Warm the style reference sheets on mount.
   useEffect(() => {
-    void preloadStyleReferenceSheets();
+    void preloadStyleReferenceImages();
   }, []);
 
   const runFaceDetect = async (src: string) => {
@@ -319,10 +320,26 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     setYinghuaSlot(id, { status: 'loading', error: undefined });
 
     let imageOverride: string | undefined;
+    let refImages: { base64: string; mime: string }[] | undefined;
     try {
       if (id === 1) {
-        const styleSheet = await buildStyleReferenceSheet(id);
-        imageOverride = await stitchImages([sourceImage, addonImage, styleSheet]);
+        const styleReferences = await loadStyleReferenceImages(id);
+        const selectedModel = creds[selectedProvider].model;
+        if (supportsMultipleImageInputs(selectedProvider, selectedModel)) {
+          const referenceDataUrls = [addonImage, ...styleReferences].filter((url): url is string => Boolean(url));
+          const maxReferences = maxReferenceImagesForModel(selectedProvider, selectedModel);
+          if (referenceDataUrls.length > maxReferences) {
+            throw new Error(`当前模型最多支持 ${maxReferences} 张额外参考图`);
+          }
+          imageOverride = sourceImage;
+          refImages = referenceDataUrls.map((url) => {
+            const parsed = parseDataUrl(url);
+            return { base64: parsed.base64, mime: parsed.mime };
+          });
+        } else {
+          const styleSheet = await stitchImages(styleReferences);
+          imageOverride = await stitchImages([sourceImage, addonImage, styleSheet]);
+        }
       } else {
         const baseImg = id === 3
           ? (selectedFace === 'back' ? sourceSlots[3].images[0] : sourceSlots[2].images[0])
@@ -360,8 +377,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         }
         imageOverride = await compressDataUrl(src);
       }
-    } catch {
-      const msg = '风格参考图合成失败';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '风格参考图准备失败';
       setYinghuaSlot(id, { status: 'error', error: msg });
       showError(msg);
       endYinghuaGeneration(idempotencyKey);
@@ -370,8 +387,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
 
     try {
       const sizeOpts = selectedProvider === 'seedream'
-        ? { size: '2848x1600', imageOverride }
-        : { size: YINGHUA_SIZE, imageOverride };
+        ? { size: '2848x1600', imageOverride, refImages }
+        : { size: YINGHUA_SIZE, imageOverride, refImages };
       const images = await generate({
         ...buildRequest(prompt, sizeOpts),
         idempotencyKey,

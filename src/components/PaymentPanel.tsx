@@ -1,120 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { createSponsorOrder, getSponsorOrder, submitAlipayForm, type SponsorOrder } from '../lib/paymentClient';
+import { useState } from 'react';
 import { useUploadStore } from '../store/useUploadStore';
 import { SectionHeader } from './SectionHeader';
 import { SponsorList } from './SponsorList';
 
-const MIN_AMOUNT = 0.01;
-const MAX_AMOUNT = 100000;
-const POLL_LIMIT = 20;
-
-function formatStatus(status: SponsorOrder['status']): string {
-  if (status === 'paid') return '赞助已确认';
-  if (status === 'closed') return '订单已关闭';
-  if (status === 'refunded') return '订单已退款';
-  return '等待支付宝确认';
-}
-
 export function PaymentPanel() {
   const palette = useUploadStore((s) => s.palette);
-  const [amount, setAmount] = useState('5.00');
-  const [name, setName] = useState('Traveler');
-  const [order, setOrder] = useState<SponsorOrder | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [sponsorListOpen, setSponsorListOpen] = useState(false);
-
-  const refreshOrder = useCallback(async (orderNo: string) => {
-    const next = await getSponsorOrder(orderNo);
-    setOrder(next);
-    return next;
-  }, []);
-
-  useEffect(() => {
-    const orderNo = order?.status === 'pending' ? order.orderNo : null;
-    if (!orderNo) return;
-    let cancelled = false;
-    setNotice('支付结果仍在确认中…');
-    (async () => {
-      for (let attempt = 0; attempt < POLL_LIMIT && !cancelled; attempt += 1) {
-        try {
-          const next = await getSponsorOrder(orderNo);
-          if (cancelled) return;
-          setOrder(next);
-          if (next.status !== 'pending') {
-            setNotice(null);
-            return;
-          }
-        } catch (err) {
-          if (!cancelled) setError(err instanceof Error ? err.message : '无法查询赞助订单');
-          return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-      if (!cancelled) setNotice('支付结果仍在确认中，可稍后刷新状态。');
-    })();
-    return () => { cancelled = true; };
-  }, [order?.orderNo]);
-
-  function validateAmount(): string | null {
-    const normalized = amount.trim();
-    if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return '请输入最多两位小数的金额';
-    const value = Number(normalized);
-    if (!Number.isFinite(value) || value < MIN_AMOUNT || value > MAX_AMOUNT) {
-      return `金额需在 ¥${MIN_AMOUNT.toFixed(2)}–¥${MAX_AMOUNT.toFixed(2)} 之间`;
-    }
-    return null;
-  }
-
-  async function startPayment() {
-    const validationError = validateAmount();
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-    const paymentWindow = window.open('', '_blank');
-    if (!paymentWindow) {
-      setError('浏览器拦截了新标签页，请允许本站打开新窗口后重试');
-      return;
-    }
-    // Break the opener link so a cross-origin page in the payment chain (Alipay,
-    // or any redirect it serves) can't navigate this tab to a phishing URL.
-    paymentWindow.opener = null;
-    paymentWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>正在打开支付宝…</title></head><body></body></html>');
-    paymentWindow.document.close();
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const result = await createSponsorOrder(amount.trim(), name.trim() || 'Traveler');
-      setOrder(result.order);
-      if (result.paymentHtml) submitAlipayForm(result.paymentHtml, paymentWindow);
-      else {
-        paymentWindow.close();
-        setNotice('该订单已存在或正在处理中，请刷新状态。');
-      }
-    } catch (err) {
-      paymentWindow.close();
-      setError(err instanceof Error ? err.message : '无法创建赞助订单');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function refresh() {
-    if (!order) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await refreshOrder(order.orderNo);
-      setNotice(next.status === 'pending' ? '支付结果仍在确认中。' : null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '无法查询赞助订单');
-    } finally {
-      setBusy(false);
-    }
-  }
+  const [qrPinned, setQrPinned] = useState(false);
 
   return (
     <section className="glass p-6" style={{ borderColor: 'color-mix(in srgb, var(--zzz-primary) 32%, transparent)' }}>
@@ -131,68 +23,41 @@ export function PaymentPanel() {
         }
       />
       <p className="mb-4 font-mono text-xs leading-relaxed text-zzz-text/55">
-        赞助用于维护模型额度与创作工具。PC 网页与手机浏览器均使用支付宝网页支付，不影响现有免费功能。
+        赞助用于维护模型额度与创作工具，不影响现有免费功能。请使用支付宝扫码支持。
       </p>
 
-      <label className="block font-mono text-xs text-zzz-text/60">
-        赞助人昵称（留空默认 Traveler）
-        <div className="mt-1 flex items-center glass-input overflow-hidden px-3 py-2">
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={20}
-            aria-label="赞助人"
-            className="w-full bg-transparent font-mono text-sm text-zzz-text outline-none"
-            placeholder="Traveler"
-          />
-        </div>
-      </label>
-
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="flex-1 font-mono text-xs text-zzz-text/60">
-          赞助金额（人民币）
-          <div className="mt-1 flex items-center glass-input overflow-hidden px-3 py-2">
-            <span className="mr-2 text-zzz-primary">¥</span>
-            <input
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              inputMode="decimal"
-              maxLength={9}
-              aria-label="赞助金额"
-              className="w-full bg-transparent font-mono text-sm text-zzz-text outline-none"
-              placeholder="5.00"
-            />
-          </div>
-        </label>
+      <div className="group relative inline-flex" onMouseLeave={() => setQrPinned(false)}>
         <button
           type="button"
-          onClick={startPayment}
-          disabled={busy}
-          className="glass-btn px-5 py-2.5 font-mono text-xs text-zzz-text transition-colors disabled:cursor-wait disabled:opacity-50"
+          aria-controls="personal-alipay-qr"
+          aria-expanded={qrPinned}
+          onBlur={() => setQrPinned(false)}
+          onFocus={() => setQrPinned(true)}
+          onClick={() => setQrPinned((pinned) => !pinned)}
+          className="glass-btn px-5 py-2.5 font-mono text-xs text-zzz-text transition-colors"
           style={{ borderColor: 'color-mix(in srgb, var(--zzz-primary) 55%, transparent)', boxShadow: '0 0 18px color-mix(in srgb, var(--zzz-primary) 20%, transparent)' }}
         >
-          {busy ? '处理中…' : '去赞助 →'}
+          扫码赞助 →
         </button>
-      </div>
-      <p className="mt-2 font-mono text-[11px] text-zzz-text/40">金额范围 ¥0.01–¥100,000 · 当前主题色会随立绘自适应</p>
-
-      {(notice || error || order) && (
-        <div className="mt-4 border-t border-zzz-text/10 pt-4" aria-live="polite">
-          {notice && <p className="font-mono text-xs text-zzz-primary">{notice}</p>}
-          {error && <p className="font-mono text-xs text-zzz-magenta">{error}</p>}
-          {order && (
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px] text-zzz-text/55">
-              <span>订单 {order.orderNo} · ¥{order.amount} · {formatStatus(order.status)}</span>
-              {order.status === 'pending' && (
-                <button type="button" onClick={refresh} disabled={busy} className="text-zzz-primary underline underline-offset-4 disabled:opacity-50">
-                  刷新状态
-                </button>
-              )}
-            </div>
-          )}
-          {order?.status === 'paid' && <p className="mt-2 font-mono text-xs text-zzz-primary">感谢你的支持，影画工坊会继续保持免费。</p>}
+        <div
+          id="personal-alipay-qr"
+          role="tooltip"
+          className={`absolute bottom-full left-1/2 z-20 mb-3 w-64 max-w-[calc(100vw-3rem)] -translate-x-1/2 rounded-xl border border-zzz-primary/45 bg-[#0d0a14] p-3 shadow-2xl transition ${qrPinned ? 'visible opacity-100' : 'invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100'}`}
+        >
+          <img
+            src="/alipay-sponsor-qr.jpg"
+            alt="支付宝个人收款二维码，扫码支持影画工坊"
+            className="aspect-[9/16] w-full rounded-lg bg-white object-contain"
+          />
+          <p className="mt-2 text-center font-mono text-[11px] leading-relaxed text-zzz-text/60">
+            使用支付宝扫描二维码支持影画工坊
+          </p>
         </div>
-      )}
+      </div>
+      <p className="mt-3 font-mono text-[11px] leading-relaxed text-zzz-text/40">
+        个人收款暂不自动登记至赞助名单，感谢你的理解与支持。
+      </p>
+
       {palette && <span className="sr-only">赞助卡片已跟随当前立绘主题色</span>}
       <SponsorList open={sponsorListOpen} onClose={() => setSponsorListOpen(false)} />
     </section>

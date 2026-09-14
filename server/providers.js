@@ -276,6 +276,33 @@ async function gptImage(req) {
     let processedBuffer = buffer;
     let processedMime = mime;
     let processedExt = ext;
+    const rawReferences = Array.isArray(req.refImages) ? req.refImages : [];
+    const processedReferences = await Promise.all(rawReferences.map(async (reference) => {
+      const referenceBuffer = Buffer.from(reference.base64, 'base64');
+      const referenceMime = reference.mime || 'image/png';
+      const referenceExt = referenceMime === 'image/jpeg' || referenceMime === 'image/jpg' ? 'jpg' : 'png';
+      let buffer = referenceBuffer;
+      let mime = referenceMime;
+      let ext = referenceExt;
+      try {
+        const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+        const needsResize = meta.width && meta.height && (meta.width > MAX_COMPRESS_DIM || meta.height > MAX_COMPRESS_DIM);
+        const needsFormatChange = mime !== 'image/jpeg';
+        if (needsResize || needsFormatChange) {
+          const pipeline = sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS });
+          if (needsResize) pipeline.resize(MAX_COMPRESS_DIM, MAX_COMPRESS_DIM, { fit: 'inside', withoutEnlargement: true });
+          if (needsFormatChange) {
+            mime = 'image/jpeg';
+            ext = 'jpg';
+            pipeline.jpeg({ quality: JPEG_QUALITY });
+          }
+          buffer = await pipeline.toBuffer();
+        }
+      } catch (e) {
+        console.warn(`[gpt-image] reference processing failed, using original: ${e.message}`);
+      }
+      return { buffer, mime, ext };
+    }));
     console.log(`[gpt-image] edits payload (raw): ${payloadBytes} bytes (${(payloadBytes/1024).toFixed(1)} KB) mime=${mime} ext=${ext}`);
     try {
       const maxDim = MAX_COMPRESS_DIM;
@@ -300,7 +327,11 @@ async function gptImage(req) {
       console.warn(`[gpt-image] server-side processing failed, using original: ${e.message}`);
     }
 
-    console.log(`[gpt-image] edits payload: ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) mime=${processedMime} ext=${processedExt} size=${size || 'default'}`);
+    console.log(`[gpt-image] edits payload: ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) mime=${processedMime} ext=${processedExt} size=${size || 'default'} references=${processedReferences.length}`);
+    const inputImages = [
+      { buffer: processedBuffer, mime: processedMime, ext: processedExt },
+      ...processedReferences,
+    ];
 
     async function tryEdits(formBody) {
       const res = await fetchWithTimeout(`${root}/images/edits`, {
@@ -320,7 +351,9 @@ async function gptImage(req) {
       form.append('size', size || '1024x1024');
     }
     form.append('n', String(n));
-    form.append('image', new Blob([processedBuffer], { type: processedMime }), `image.${processedExt}`);
+    for (const [index, image] of inputImages.entries()) {
+      form.append('image', new Blob([image.buffer], { type: image.mime }), `image-${index}.${image.ext}`);
+    }
     if (req.maskBase64) {
       const maskBuf = Buffer.from(req.maskBase64, 'base64');
       const maskMime = req.maskMime || 'image/png';
@@ -333,13 +366,17 @@ async function gptImage(req) {
       const bodyText = await res.text().catch(() => '');
       console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
       // Cheap relays may still reject. Retry with smaller size if this was a large image.
-      if (res.status === 400 && processedBuffer.length > RETRY_SIZE_KB_THRESHOLD * 1024) {
+      if (res.status === 400 && inputImages.some((image) => image.buffer.length > RETRY_SIZE_KB_THRESHOLD * 1024)) {
         console.log(`[gpt-image] retrying with reduced quality (${RETRY_RESIZE_DIM}px, ${RETRY_JPEG_QUALITY})...`);
         try {
-          const reduced = await sharp(processedBuffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS })
-            .resize(RETRY_RESIZE_DIM, RETRY_RESIZE_DIM, { fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: RETRY_JPEG_QUALITY })
-            .toBuffer();
+          const reducedInputs = await Promise.all(inputImages.map(async (image) => ({
+            buffer: await sharp(image.buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS })
+              .resize(RETRY_RESIZE_DIM, RETRY_RESIZE_DIM, { fit: 'inside', withoutEnlargement: true })
+              .jpeg({ quality: RETRY_JPEG_QUALITY })
+              .toBuffer(),
+            mime: 'image/jpeg',
+            ext: 'jpg',
+          })));
           const retryForm = new FormData();
           retryForm.append('model', model);
           retryForm.append('prompt', req.prompt);
@@ -349,7 +386,9 @@ async function gptImage(req) {
             retryForm.append('size', size || '1024x1024');
           }
           retryForm.append('n', String(n));
-          retryForm.append('image', new Blob([reduced], { type: 'image/jpeg' }), 'image.jpg');
+          for (const [index, image] of reducedInputs.entries()) {
+            retryForm.append('image', new Blob([image.buffer], { type: image.mime }), `image-${index}.${image.ext}`);
+          }
           if (req.maskBase64) {
             const maskBuf = Buffer.from(req.maskBase64, 'base64');
             retryForm.append('mask', new Blob([maskBuf], { type: req.maskMime || 'image/png' }), 'mask.png');
