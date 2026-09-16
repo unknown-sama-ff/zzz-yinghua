@@ -155,7 +155,6 @@ export async function generate(req: GenRequest): Promise<string[]> {
 export async function inpaint(params: {
   imageDataUrl: string;
   maskDataUrl?: string;
-  maskBlobUrl?: string;
   prompt: string;
   provider?: string;
   model?: string;
@@ -166,7 +165,6 @@ export async function inpaint(params: {
   const {
     imageDataUrl,
     maskDataUrl,
-    maskBlobUrl,
     prompt,
     provider = 'gpt-image',
     model,
@@ -177,24 +175,32 @@ export async function inpaint(params: {
 
   function parseDataUrl(dataUrl: string): { base64: string; mime: string } {
     const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-    if (!match) throw new Error('Invalid data URL');
+    if (!match) throw new ApiError('INVALID_INPUT', '图片格式无效，请重新选择图片后重试');
     return { base64: match[2], mime: match[1] };
   }
 
   function base64ToUint8Array(b64: string): Uint8Array {
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
+    try {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    } catch {
+      throw new ApiError('INVALID_INPUT', '图片数据无效，请重新选择图片后重试');
+    }
   }
 
-  const { base64: imageBase64, mime: imageMime } = parseDataUrl(imageDataUrl);
-  const imageBytes = base64ToUint8Array(imageBase64);
-  const imageBlob = new Blob([imageBytes as BlobPart], { type: imageMime });
-  const imageExt = imageMime === 'image/jpeg' || imageMime === 'image/jpg' ? 'jpg' : 'png';
-
   const form = new FormData();
-  form.append('image', imageBlob, `image.${imageExt}`);
+  if (/^https?:\/\//i.test(imageDataUrl)) {
+    form.append('imageUrl', imageDataUrl);
+  } else {
+    const { base64: imageBase64, mime: imageMime } = parseDataUrl(imageDataUrl);
+    const imageBytes = base64ToUint8Array(imageBase64);
+    const imageBlob = new Blob([imageBytes as BlobPart], { type: imageMime });
+    const imageExt = imageMime === 'image/jpeg' || imageMime === 'image/jpg' ? 'jpg' : 'png';
+    form.append('image', imageBlob, `image.${imageExt}`);
+  }
+
   form.append('prompt', prompt);
   form.append('provider', provider);
   if (model) form.append('model', model);
@@ -202,10 +208,7 @@ export async function inpaint(params: {
   if (baseUrl) form.append('baseUrl', baseUrl);
   if (useServerPreset) form.append('useServerPreset', 'true');
 
-  if (maskBlobUrl) {
-    const maskBlob = await fetch(maskBlobUrl).then((r) => r.blob());
-    form.append('mask', maskBlob, 'mask.png');
-  } else if (maskDataUrl) {
+  if (maskDataUrl) {
     const { base64: maskBase64, mime: maskMime } = parseDataUrl(maskDataUrl);
     const maskBytes = base64ToUint8Array(maskBase64);
     const maskBlob = new Blob([maskBytes as BlobPart], { type: maskMime });

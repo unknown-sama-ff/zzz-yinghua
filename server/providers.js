@@ -35,6 +35,37 @@ function capN(req) {
   return Number.isInteger(n) && n > 1 ? Math.min(n, MAX_GENERATE_N) : 1;
 }
 
+/**
+ * OpenAI-compatible image edit endpoints require a PNG mask with an alpha
+ * channel that exactly matches the primary image's final dimensions. The
+ * primary image may have been converted or resized by the upload pipeline, so
+ * derive the target size from its processed buffer rather than the original.
+ */
+async function prepareEditMask(maskBase64, targetBuffer) {
+  let maskBuffer;
+  try {
+    maskBuffer = Buffer.from(maskBase64, 'base64');
+    const [maskMeta, targetMeta] = await Promise.all([
+      sharp(maskBuffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata(),
+      sharp(targetBuffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata(),
+    ]);
+    if (!maskMeta.width || !maskMeta.height || !targetMeta.width || !targetMeta.height) {
+      throw new Error('missing image dimensions');
+    }
+    if (!maskMeta.hasAlpha) {
+      throw new UpstreamError('INVALID_INPUT', '重绘蒙版必须包含透明通道', 400);
+    }
+    return await sharp(maskBuffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS })
+      .ensureAlpha()
+      .resize(targetMeta.width, targetMeta.height, { fit: 'fill' })
+      .png()
+      .toBuffer();
+  } catch (error) {
+    if (error instanceof UpstreamError) throw error;
+    throw new UpstreamError('INVALID_INPUT', '重绘蒙版无效或无法读取', 400);
+  }
+}
+
 // When running on Vercel serverless, spawn a Worker thread for long-polling
 // so the function can return immediately and the Worker (own event loop) keeps
 // polling upstream until the task completes.
@@ -252,7 +283,7 @@ async function gptImage(req) {
     let buffer;
     let mime;
     let ext;
-    if (req.imageBase64.startsWith('http://') || req.imageBase64.startsWith('https://')) {
+    if (/^https?:\/\//i.test(req.imageBase64)) {
       // Remote URL is fully attacker-controlled — validate (SSRF) before fetching.
       await assertSafeUrl(req.imageBase64);
       console.log(`[gpt-image] fetching remote image: ${req.imageBase64.slice(0, 120)}`);
@@ -332,6 +363,10 @@ async function gptImage(req) {
       { buffer: processedBuffer, mime: processedMime, ext: processedExt },
       ...processedReferences,
     ];
+    const sourceMaskBase64 = req.maskBase64 || null;
+    const preparedMask = sourceMaskBase64
+      ? await prepareEditMask(sourceMaskBase64, processedBuffer)
+      : null;
 
     async function tryEdits(formBody) {
       const res = await fetchWithTimeout(`${root}/images/edits`, {
@@ -342,31 +377,37 @@ async function gptImage(req) {
       return res;
     }
 
-    const form = new FormData();
-    form.append('model', model);
-    form.append('prompt', req.prompt);
-    if (req.aspectRatio) {
-      form.append('aspect_ratio', req.aspectRatio);
-    } else {
-      form.append('size', size || '1024x1024');
+    function buildEditForm(images, mask) {
+      const form = new FormData();
+      form.append('model', model);
+      form.append('prompt', req.prompt);
+      if (req.aspectRatio) {
+        form.append('aspect_ratio', req.aspectRatio);
+      } else {
+        form.append('size', size || '1024x1024');
+      }
+      form.append('n', String(n));
+      for (const [index, image] of images.entries()) {
+        form.append('image', new Blob([image.buffer], { type: image.mime }), `image-${index}.${image.ext}`);
+      }
+      if (mask) {
+        form.append('mask', new Blob([mask], { type: 'image/png' }), 'mask.png');
+      }
+      return form;
     }
-    form.append('n', String(n));
-    for (const [index, image] of inputImages.entries()) {
-      form.append('image', new Blob([image.buffer], { type: image.mime }), `image-${index}.${image.ext}`);
+
+    if (preparedMask) {
+      console.log(`[gpt-image] normalized mask: ${preparedMask.length} bytes (${(preparedMask.length / 1024).toFixed(1)} KB)`);
     }
-    if (req.maskBase64) {
-      const maskBuf = Buffer.from(req.maskBase64, 'base64');
-      const maskMime = req.maskMime || 'image/png';
-      const maskExt = maskMime === 'image/jpeg' || maskMime === 'image/jpg' ? 'jpg' : 'png';
-      form.append('mask', new Blob([maskBuf], { type: maskMime }), `mask.${maskExt}`);
-      console.log(`[gpt-image] mask attached: ${maskBuf.length} bytes (${(maskBuf.length/1024).toFixed(1)} KB)`);
-    }
-    let res = await tryEdits(form);
+    let res = await tryEdits(buildEditForm(inputImages, preparedMask));
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
       console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
       // Cheap relays may still reject. Retry with smaller size if this was a large image.
-      if (res.status === 400 && inputImages.some((image) => image.buffer.length > RETRY_SIZE_KB_THRESHOLD * 1024)) {
+      if (res.status === 400 && (
+        inputImages.some((image) => image.buffer.length > RETRY_SIZE_KB_THRESHOLD * 1024)
+        || (preparedMask && preparedMask.length > RETRY_SIZE_KB_THRESHOLD * 1024)
+      )) {
         console.log(`[gpt-image] retrying with reduced quality (${RETRY_RESIZE_DIM}px, ${RETRY_JPEG_QUALITY})...`);
         try {
           const reducedInputs = await Promise.all(inputImages.map(async (image) => ({
@@ -377,30 +418,18 @@ async function gptImage(req) {
             mime: 'image/jpeg',
             ext: 'jpg',
           })));
-          const retryForm = new FormData();
-          retryForm.append('model', model);
-          retryForm.append('prompt', req.prompt);
-          if (req.aspectRatio) {
-            retryForm.append('aspect_ratio', req.aspectRatio);
-          } else {
-            retryForm.append('size', size || '1024x1024');
-          }
-          retryForm.append('n', String(n));
-          for (const [index, image] of reducedInputs.entries()) {
-            retryForm.append('image', new Blob([image.buffer], { type: image.mime }), `image-${index}.${image.ext}`);
-          }
-          if (req.maskBase64) {
-            const maskBuf = Buffer.from(req.maskBase64, 'base64');
-            retryForm.append('mask', new Blob([maskBuf], { type: req.maskMime || 'image/png' }), 'mask.png');
-          }
-          res = await tryEdits(retryForm);
+          const reducedMask = sourceMaskBase64
+            ? await prepareEditMask(sourceMaskBase64, reducedInputs[0].buffer)
+            : null;
+          res = await tryEdits(buildEditForm(reducedInputs, reducedMask));
           if (!res.ok) {
             const retryText = await res.text().catch(() => '');
             console.warn(`[gpt-image] reduced retry also failed ${res.status}: ${retryText.slice(0, 200)}`);
             throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status} (已尝试原图+降级)`, res.status);
           }
-        } catch (e) {
-          console.warn(`[gpt-image] reduced retry error: ${e.message}`);
+        } catch (error) {
+          if (error instanceof UpstreamError) throw error;
+          console.warn(`[gpt-image] reduced retry error: ${error.message}`);
           throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status}`, res.status);
         }
       } else {

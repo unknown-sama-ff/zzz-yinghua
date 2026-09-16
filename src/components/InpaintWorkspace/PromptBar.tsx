@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import { useInpaintStore } from '../../store/useInpaintStore';
 import { inpaint, ApiError } from '../../lib/apiClient';
 import { useToast } from '../../store/useToast';
+import { useProviderStore } from '../../store/useProviderStore';
 import { ModeSwitch } from './ModeSwitch';
 
 export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (images: string[]) => void }) {
@@ -17,6 +18,8 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
   const brushSize = useInpaintStore((s) => s.brushSize);
   const setBrushSize = useInpaintStore((s) => s.setBrushSize);
   const setFeatherRadius = useInpaintStore((s) => s.setFeatherRadius);
+  const gptCredentials = useProviderStore((s) => s.creds['gpt-image']);
+  const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
 
   const showError = useToast((s) => s.show);
   const [localPrompt, setLocalPrompt] = useState(prompt);
@@ -35,23 +38,37 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
       showError('请先在画布上涂抹要编辑的区域');
       return;
     }
+    if (!freeloadEnabled && !gptCredentials.apiKey.trim()) {
+      showError('请先在「接口与角色」模块填写 gpt-image API Key');
+      return;
+    }
+    if (!freeloadEnabled && !gptCredentials.baseUrl.trim()) {
+      showError('请先在「接口与角色」模块填写 gpt-image Base URL');
+      return;
+    }
 
     setIsGenerating(true);
     try {
-      // Apply feather before generating
       const canvas = window.__inpaintCanvas;
-      if (mode === 'precise' && canvas) {
-        await canvas.applyFeather();
+      let currentMaskDataUrl: string | undefined;
+      if (mode === 'precise') {
+        canvas?.applyFeather();
+        currentMaskDataUrl = canvas?.exportMask() ?? undefined;
+        if (!currentMaskDataUrl) {
+          showError('无法导出重绘蒙版，请重新涂抹后重试');
+          return;
+        }
       }
 
       const images = await inpaint({
         imageDataUrl: targetImage.url,
-        maskDataUrl: mode === 'precise' ? maskDataUrl || undefined : undefined,
-        maskBlobUrl: mode === 'precise'
-          ? window.__inpaintCanvas?.getMaskBlobUrl?.() || undefined
-          : undefined,
+        maskDataUrl: currentMaskDataUrl,
         prompt: localPrompt,
         provider: 'gpt-image',
+        apiKey: gptCredentials.apiKey.trim() || undefined,
+        baseUrl: gptCredentials.baseUrl.trim() || undefined,
+        model: gptCredentials.model.trim() || undefined,
+        useServerPreset: freeloadEnabled,
       });
       onResult(images);
     } catch (err) {
@@ -60,7 +77,7 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
     } finally {
       setIsGenerating(false);
     }
-  }, [targetImage, localPrompt, mode, maskDataUrl, setIsGenerating, onResult, showError]);
+  }, [targetImage, localPrompt, mode, maskDataUrl, gptCredentials, freeloadEnabled, setIsGenerating, onResult, showError]);
 
   return (
     <div className="border-t border-[var(--zzz-text)]/10 bg-[var(--zzz-ink)]/80 p-3 backdrop-blur-md">

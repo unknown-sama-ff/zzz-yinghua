@@ -44,7 +44,7 @@ export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPic
   return (
     <div className="mt-3 grid grid-cols-1 gap-3">
       {slot.images.map((src, i) => (
-        <figure key={i} className="group relative overflow-hidden rounded-xl">
+        <figure key={`${src}-${i}`} className="group relative overflow-hidden rounded-xl">
           <img
             key={imageKey ? `${imageKey}-${i}` : i}
             src={src}
@@ -55,7 +55,7 @@ export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPic
             className={`w-full object-contain${imageClassName ? ` ${imageClassName}` : ''}`}
           />
           <figcaption className="absolute bottom-0 right-0 flex gap-2 p-2 opacity-0 transition-opacity group-hover:opacity-100">
-            {saveInfo && <GallerySaveButton saveInfo={saveInfo} />}
+            {saveInfo && <GallerySaveButton key={saveInfo.imageUrl} saveInfo={saveInfo} />}
             {onPick && (
               <button
                 onClick={() => onPick(src)}

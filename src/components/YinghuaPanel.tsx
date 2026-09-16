@@ -351,16 +351,41 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           return;
         }
         const threeView = sourceThreeView;
-        const thumbs: ThumbEntry[] = [];
-        if (addonImage) {
-          thumbs.push({ url: addonImage, size: 0.18, position: 'bottom-left' });
+        const references = [addonImage, threeView].filter((url): url is string => Boolean(url));
+        const selectedModel = creds[selectedProvider].model;
+        if (supportsMultipleImageInputs(selectedProvider, selectedModel)) {
+          const maxReferences = maxReferenceImagesForModel(selectedProvider, selectedModel);
+          if (references.length > maxReferences) {
+            throw new Error(`当前模型最多支持 ${maxReferences} 张额外参考图`);
+          }
+          imageOverride = baseImg;
+          refImages = await Promise.all(references.map(async (url) => {
+            let dataUrl = url;
+            if (dataUrl.startsWith('http://') || dataUrl.startsWith('https://')) {
+              const res = await fetch(dataUrl);
+              const blob = await res.blob();
+              dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result));
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+            }
+            const parsed = parseDataUrl(dataUrl);
+            return { base64: parsed.base64, mime: parsed.mime };
+          }));
+        } else {
+          const thumbs: ThumbEntry[] = [];
+          if (addonImage) {
+            thumbs.push({ url: addonImage, size: 0.18, position: 'bottom-left' });
+          }
+          if (threeView) {
+            thumbs.push({ url: threeView, size: 0.2, position: 'bottom-right' });
+          }
+          imageOverride = thumbs.length > 0
+            ? await embedThumbnails(baseImg, thumbs)
+            : baseImg;
         }
-        if (threeView) {
-          thumbs.push({ url: threeView, size: 0.2, position: 'bottom-right' });
-        }
-        imageOverride = thumbs.length > 0
-          ? await embedThumbnails(baseImg, thumbs)
-          : baseImg;
       }
 
       if (selectedProvider === 'gpt-image' && imageOverride) {

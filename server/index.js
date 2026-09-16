@@ -768,13 +768,28 @@ app.post('/api/inpaint', rateLimit, upload.fields([
   { name: 'image', maxCount: 1 },
   { name: 'mask', maxCount: 1 },
 ]), async (req, res) => {
-  if (!req.files?.image || !Array.isArray(req.files.image) || req.files.image.length === 0) {
-    return fail(res, 400, 'INVALID_INPUT', '缺少图片文件 (field: image)');
-  }
-  const imageFile = req.files.image[0];
-  const maskFile = req.files.mask?.[0];
+  const bodyFields = req.body || {};
+  const useServerPreset = bodyFields.useServerPreset === true || bodyFields.useServerPreset === 'true';
+  const imageFile = req.files?.image?.[0];
+  const maskFile = req.files?.mask?.[0];
+  const imageUrl = typeof bodyFields.imageUrl === 'string' ? bodyFields.imageUrl.trim() : '';
 
-  const { prompt, provider, model, apiKey, baseUrl, useServerPreset } = req.body || {};
+  if (!imageFile && !imageUrl) {
+    return fail(res, 400, 'INVALID_INPUT', '缺少图片文件 (field: image) 或图片 URL');
+  }
+  if (imageFile && imageUrl) {
+    return fail(res, 400, 'INVALID_INPUT', '只能上传图片文件或图片 URL 其中之一');
+  }
+  if (imageUrl) {
+    try {
+      await assertSafeUrl(imageUrl);
+    } catch (err) {
+      const message = err instanceof UpstreamError ? err.message : '图片 URL 无效';
+      return fail(res, 400, 'INVALID_INPUT', message);
+    }
+  }
+
+  const { prompt, provider, model, apiKey, baseUrl } = bodyFields;
   if (!prompt || typeof prompt !== 'string') {
     return fail(res, 400, 'INVALID_INPUT', '缺少 prompt');
   }
@@ -786,26 +801,26 @@ app.post('/api/inpaint', rateLimit, upload.fields([
     return fail(res, 400, 'INVALID_INPUT', '局部重绘目前仅支持 gpt-image 提供方');
   }
 
-  const imageBase64 = imageFile.buffer.toString('base64');
+  const imageBase64 = imageFile ? imageFile.buffer.toString('base64') : imageUrl;
   const maskBase64 = maskFile ? maskFile.buffer.toString('base64') : undefined;
 
   const body = {
     provider: targetProvider,
     prompt,
     imageBase64,
-    imageMime: imageFile.mimetype,
+    imageMime: imageFile?.mimetype,
     maskBase64,
-    maskMime: maskFile ? maskFile.mimetype : undefined,
+    maskMime: maskFile?.mimetype,
     n: 1,
     ...(typeof model === 'string' && model ? { model } : {}),
     ...(typeof apiKey === 'string' && apiKey ? { apiKey } : {}),
     ...(typeof baseUrl === 'string' && baseUrl ? { baseUrl } : {}),
-    ...(useServerPreset === true ? { useServerPreset: true } : {}),
+    ...(useServerPreset ? { useServerPreset: true } : {}),
   };
 
   const started = Date.now();
   try {
-    if (useServerPreset === true && !consumePresetBudget(budgetKey(req))) {
+    if (useServerPreset && !consumePresetBudget(budgetKey(req))) {
       return fail(res, 429, 'RATE_LIMITED', '服务端免费额度今日已用尽，请明日再来或自行填写 API Key');
     }
     const result = await providers[targetProvider](body);
@@ -1059,6 +1074,12 @@ if (hasDist) {
 
 // Global error handler — must not crash the server
 app.use((err, _req, res, _next) => {
+  if (err instanceof multer.MulterError) {
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? `图片文件过大，单个文件不能超过 ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`
+      : '图片上传格式无效';
+    return fail(res, 400, 'INVALID_INPUT', message);
+  }
   console.error('[server] unhandled error:', err?.message || err);
   if (!res.headersSent) res.status(500).json({ ok: false, code: 'UNKNOWN', message: '服务端内部错误' });
 });

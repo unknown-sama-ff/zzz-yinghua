@@ -1,4 +1,4 @@
-import { useState, memo } from 'react';
+import { useRef, useState, memo } from 'react';
 import { parseDataUrl } from '../lib/validation';
 import { saveToGallery } from '../lib/galleryClient';
 
@@ -120,8 +120,11 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: Props) {
   const [state, setState] = useState<SaveState>('idle');
+  const savingRef = useRef(false);
 
   const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setState('saving');
     try {
       const { mime, base64 } = parseDataUrl(saveInfo.imageUrl);
@@ -145,8 +148,11 @@ export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: P
       setState('saved');
     } catch {
       setState('error');
+      savingRef.current = false;
       // Let the user retry after a moment.
-      setTimeout(() => setState('idle'), 3000);
+      setTimeout(() => {
+        if (!savingRef.current) setState('idle');
+      }, 3000);
     }
   };
 
