@@ -56,6 +56,111 @@ test('gpt-image sends primary and references as repeated image fields', async ()
   }
 });
 
+test('gpt-image preserves primary, canonical three-view, then addon image order', async () => {
+  const makeImage = async (background) => (await sharp({
+    create: { width: 8, height: 8, channels: 3, background },
+  }).png().toBuffer()).toString('base64');
+  const [baseImage, threeViewImage, addonImage] = await Promise.all([
+    makeImage('#e00000'),
+    makeImage('#00d000'),
+    makeImage('#0000e0'),
+  ]);
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GPT_IMAGE_API_KEY;
+  const originalBase = process.env.GPT_IMAGE_BASE_URL;
+  const originalModel = process.env.GPT_IMAGE_MODEL;
+  const received = [];
+
+  process.env.GPT_IMAGE_API_KEY = 'test-key';
+  process.env.GPT_IMAGE_BASE_URL = 'https://openlux.invalid/v1';
+  process.env.GPT_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
+  globalThis.fetch = async (_url, init) => {
+    const images = init.body.getAll('image');
+    for (const image of images) {
+      const pixel = await sharp(Buffer.from(await image.arrayBuffer()))
+        .raw()
+        .toBuffer();
+      received.push([...pixel.subarray(0, 3)]);
+    }
+    return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    await providers['gpt-image']({
+      useServerPreset: true,
+      prompt: 'test',
+      imageBase64: baseImage,
+      imageMime: 'image/png',
+      // 六命调用方 is responsible for this semantic order.
+      refImages: [
+        { base64: threeViewImage, mime: 'image/png' },
+        { base64: addonImage, mime: 'image/png' },
+      ],
+    });
+
+    assert.equal(received.length, 3);
+    assert.ok(received[0][0] > received[0][1] && received[0][0] > received[0][2]);
+    assert.ok(received[1][1] > received[1][0] && received[1][1] > received[1][2]);
+    assert.ok(received[2][2] > received[2][0] && received[2][2] > received[2][1]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.GPT_IMAGE_API_KEY;
+    else process.env.GPT_IMAGE_API_KEY = originalKey;
+    if (originalBase === undefined) delete process.env.GPT_IMAGE_BASE_URL;
+    else process.env.GPT_IMAGE_BASE_URL = originalBase;
+    if (originalModel === undefined) delete process.env.GPT_IMAGE_MODEL;
+    else process.env.GPT_IMAGE_MODEL = originalModel;
+  }
+});
+
+test('gpt-image preserves the requested high-fidelity edit dimension within the server limit', async () => {
+  const imageBase64 = (await sharp({
+    create: { width: 1800, height: 900, channels: 3, background: '#ffffff' },
+  }).png().toBuffer()).toString('base64');
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GPT_IMAGE_API_KEY;
+  const originalBase = process.env.GPT_IMAGE_BASE_URL;
+  const originalModel = process.env.GPT_IMAGE_MODEL;
+  let receivedMeta;
+
+  process.env.GPT_IMAGE_API_KEY = 'test-key';
+  process.env.GPT_IMAGE_BASE_URL = 'https://openlux.invalid/v1';
+  process.env.GPT_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
+  globalThis.fetch = async (_url, init) => {
+    const image = init.body.get('image');
+    assert.ok(image);
+    receivedMeta = await sharp(Buffer.from(await image.arrayBuffer())).metadata();
+    return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    await providers['gpt-image']({
+      useServerPreset: true,
+      prompt: 'test',
+      imageBase64,
+      imageMime: 'image/png',
+      inputImageMaxDimension: 1536,
+    });
+
+    assert.equal(receivedMeta.width, 1536);
+    assert.equal(receivedMeta.height, 768);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.GPT_IMAGE_API_KEY;
+    else process.env.GPT_IMAGE_API_KEY = originalKey;
+    if (originalBase === undefined) delete process.env.GPT_IMAGE_BASE_URL;
+    else process.env.GPT_IMAGE_BASE_URL = originalBase;
+    if (originalModel === undefined) delete process.env.GPT_IMAGE_MODEL;
+    else process.env.GPT_IMAGE_MODEL = originalModel;
+  }
+});
+
 test('gpt-image normalizes a precise mask to the processed primary image dimensions', async () => {
   const imageBase64 = (await sharp({
     create: { width: 1400, height: 700, channels: 3, background: '#ffffff' },

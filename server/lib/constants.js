@@ -9,6 +9,9 @@ export const POLL_DEADLINE_MS = 180000;
 /** Max dimension for server-side image compression. */
 export const MAX_COMPRESS_DIM = 1024;
 
+/** Maximum high-fidelity primary image dimension accepted for 六命阳 edits. */
+export const MAX_HIGH_FIDELITY_EDIT_DIM = 1536;
+
 /** JPEG quality for server-side compression (1–100). */
 export const JPEG_QUALITY = 80;
 

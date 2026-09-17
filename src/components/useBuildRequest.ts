@@ -32,7 +32,13 @@ export function useBuildRequest() {
   const creds = useProviderStore((s) => s.creds);
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
 
-  return (prompt: string, opts?: { imageOverride?: string; size?: string; aspectRatio?: string; refImages?: { base64: string; mime: string }[] }): GenRequest => {
+  return (prompt: string, opts?: {
+    imageOverride?: string;
+    size?: string;
+    aspectRatio?: string;
+    refImages?: { base64: string; mime: string }[];
+    inputImageMaxDimension?: number;
+  }): GenRequest => {
     const image = opts?.imageOverride ?? uploadedImage ?? undefined;
     const parsed = image ? parseDataUrl(image) : undefined;
 
@@ -61,6 +67,7 @@ export function useBuildRequest() {
       aspectRatio,
       n: 1,
       refImages: opts?.refImages,
+      inputImageMaxDimension: opts?.inputImageMaxDimension,
       ...(freeloadEnabled ? { useServerPreset: true } : {}),
     };
     if (provider === 'seedream' || provider === 'gpt-image') {

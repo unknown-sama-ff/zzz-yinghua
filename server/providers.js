@@ -14,6 +14,7 @@ import {
   POLL_DEADLINE_MS,
   DEFAULT_TIMEOUT_MS,
   MAX_COMPRESS_DIM,
+  MAX_HIGH_FIDELITY_EDIT_DIM,
   JPEG_QUALITY,
   RETRY_RESIZE_DIM,
   RETRY_SIZE_KB_THRESHOLD,
@@ -307,6 +308,10 @@ async function gptImage(req) {
     let processedBuffer = buffer;
     let processedMime = mime;
     let processedExt = ext;
+    const requestedMaxDim = Number(req.inputImageMaxDimension);
+    const imageMaxDim = Number.isInteger(requestedMaxDim)
+      ? Math.min(Math.max(requestedMaxDim, MAX_COMPRESS_DIM), MAX_HIGH_FIDELITY_EDIT_DIM)
+      : MAX_COMPRESS_DIM;
     const rawReferences = Array.isArray(req.refImages) ? req.refImages : [];
     const processedReferences = await Promise.all(rawReferences.map(async (reference) => {
       const referenceBuffer = Buffer.from(reference.base64, 'base64');
@@ -317,11 +322,11 @@ async function gptImage(req) {
       let ext = referenceExt;
       try {
         const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
-        const needsResize = meta.width && meta.height && (meta.width > MAX_COMPRESS_DIM || meta.height > MAX_COMPRESS_DIM);
+        const needsResize = meta.width && meta.height && (meta.width > imageMaxDim || meta.height > imageMaxDim);
         const needsFormatChange = mime !== 'image/jpeg';
         if (needsResize || needsFormatChange) {
           const pipeline = sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS });
-          if (needsResize) pipeline.resize(MAX_COMPRESS_DIM, MAX_COMPRESS_DIM, { fit: 'inside', withoutEnlargement: true });
+          if (needsResize) pipeline.resize(imageMaxDim, imageMaxDim, { fit: 'inside', withoutEnlargement: true });
           if (needsFormatChange) {
             mime = 'image/jpeg';
             ext = 'jpg';
@@ -336,7 +341,7 @@ async function gptImage(req) {
     }));
     console.log(`[gpt-image] edits payload (raw): ${payloadBytes} bytes (${(payloadBytes/1024).toFixed(1)} KB) mime=${mime} ext=${ext}`);
     try {
-      const maxDim = MAX_COMPRESS_DIM;
+      const maxDim = imageMaxDim;
       const jpegQuality = JPEG_QUALITY;
       const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
       const needsResize = meta.width && meta.height && (meta.width > maxDim || meta.height > maxDim);
@@ -352,7 +357,7 @@ async function gptImage(req) {
           pipeline.jpeg({ quality: jpegQuality });
         }
         processedBuffer = await pipeline.toBuffer();
-        console.log(`[gpt-image] server-side processed: ${payloadBytes} -> ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) resize=${needsResize} format=${needsFormatChange ? 'to-jpeg' : 'unchanged'}`);
+        console.log(`[gpt-image] server-side processed: ${payloadBytes} -> ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) maxDim=${maxDim} resize=${needsResize} format=${needsFormatChange ? 'to-jpeg' : 'unchanged'}`);
       }
     } catch (e) {
       console.warn(`[gpt-image] server-side processing failed, using original: ${e.message}`);

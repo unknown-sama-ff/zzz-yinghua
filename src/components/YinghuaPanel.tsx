@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useIdentityStore } from '../store/useIdentityStore';
 import { useProviderStore } from '../store/useProviderStore';
 import { useUploadStore } from '../store/useUploadStore';
-import { useWorkbenchStore } from '../store/useWorkbenchStore';
 import { useYinghuaStore } from '../store/useYinghuaStore';
 import { useViewerStore } from '../store/useViewerStore';
 import { useToast } from '../store/useToast';
@@ -13,6 +12,7 @@ import type { ThumbEntry } from '../lib/imageWorkerPool';
 import { loadStyleReferenceImages, preloadStyleReferenceImages } from '../lib/styleReferences';
 import { maxReferenceImagesForModel, supportsMultipleImageInputs } from '../lib/gptImageCapabilities';
 import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
+import { SIX_FATE_EDIT_MAX_DIM } from '../lib/constants';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { resolveYinghuaFaceImage } from '../lib/yinghuaFace';
@@ -207,8 +207,6 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const setViewerClipRegions = useViewerStore((s) => s.setViewerClipRegions);
   const setDetectFaceError = useViewerStore((s) => s.setDetectFaceError);
   const setFaceBounds = useViewerStore((s) => s.setFaceBounds);
-  const threeViewSlot = useWorkbenchStore((s) => s.threeViewSlot);
-  const costumeChangeHistory = useWorkbenchStore((s) => s.costumeChangeHistory);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
 
@@ -314,7 +312,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     const sourceImage = uploadedImage;
     const addonImage = yinghuaAddonImage;
     const sourceSlots = yinghuaSlots;
-    const sourceThreeView = costumeChangeHistory[0] ?? threeViewSlot.images[0];
+    // 模块 02 的上传三视图是整条影画链路的角色原始参考；它通常来自
+    // 模块 01 的“用作主立绘”，也可由用户直接上传。不要使用服装改造历史。
+    const identityReference = sourceImage;
     const selectedProvider = provider;
     const capturedPalette = palette;
     setYinghuaSlot(id, { status: 'loading', error: undefined });
@@ -350,8 +350,16 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             : '请先生成零命，三命需要零命结果锁定姿势与文字位置');
           return;
         }
-        const threeView = sourceThreeView;
-        const references = [addonImage, threeView].filter((url): url is string => Boolean(url));
+        const threeView = identityReference;
+        if (id === 3 && selectedFace === 'front' && !threeView) {
+          showError('请先在模块 01 生成三视图，或在模块 02 上传三视图后再生成六命阳');
+          return;
+        }
+        // Keep semantic priority stable for GPT edits: base composition first,
+        // canonical color/identity three-view second, optional prop last.
+        const references = [threeView, addonImage]
+          .filter((url): url is string => Boolean(url))
+          .filter((url, index, all) => all.indexOf(url) === index);
         const selectedModel = creds[selectedProvider].model;
         if (supportsMultipleImageInputs(selectedProvider, selectedModel)) {
           const maxReferences = maxReferenceImagesForModel(selectedProvider, selectedModel);
@@ -376,11 +384,11 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           }));
         } else {
           const thumbs: ThumbEntry[] = [];
-          if (addonImage) {
-            thumbs.push({ url: addonImage, size: 0.18, position: 'bottom-left' });
-          }
           if (threeView) {
             thumbs.push({ url: threeView, size: 0.2, position: 'bottom-right' });
+          }
+          if (addonImage && addonImage !== threeView) {
+            thumbs.push({ url: addonImage, size: 0.18, position: 'bottom-left' });
           }
           imageOverride = thumbs.length > 0
             ? await embedThumbnails(baseImg, thumbs)
@@ -400,7 +408,10 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             reader.readAsDataURL(blob);
           });
         }
-        imageOverride = await compressDataUrl(src);
+        imageOverride = await compressDataUrl(
+          src,
+          id === 3 && selectedFace === 'front' ? SIX_FATE_EDIT_MAX_DIM : 1024,
+        );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '风格参考图准备失败';
@@ -411,9 +422,15 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     }
 
     try {
+      const isSixFateFront = id === 3 && selectedFace === 'front';
       const sizeOpts = selectedProvider === 'seedream'
         ? { size: '2848x1600', imageOverride, refImages }
-        : { size: YINGHUA_SIZE, imageOverride, refImages };
+        : {
+            size: YINGHUA_SIZE,
+            imageOverride,
+            refImages,
+            ...(isSixFateFront ? { inputImageMaxDimension: SIX_FATE_EDIT_MAX_DIM } : {}),
+          };
       const images = await generate({
         ...buildRequest(prompt, sizeOpts),
         idempotencyKey,

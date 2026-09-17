@@ -10,6 +10,8 @@ export interface GenRequest {
   imageMime?: string;
   /** Multiple independent reference images for GPT image-edit workflows. */
   refImages?: { base64: string; mime: string }[];
+  /** Maximum long edge for all image-edit inputs; the server clamps this to safe presets. */
+  inputImageMaxDimension?: number;
   size?: string;
   aspectRatio?: string;
   n?: number;
