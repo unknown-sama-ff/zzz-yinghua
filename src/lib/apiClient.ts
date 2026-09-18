@@ -161,6 +161,8 @@ export async function inpaint(params: {
   apiKey?: string;
   baseUrl?: string;
   useServerPreset?: boolean;
+  /** Tells the proxy to reject a request if its required precise-edit mask is lost. */
+  editMode?: 'smart' | 'precise';
 }): Promise<string[]> {
   const {
     imageDataUrl,
@@ -171,6 +173,7 @@ export async function inpaint(params: {
     apiKey,
     baseUrl,
     useServerPreset,
+    editMode = 'smart',
   } = params;
 
   function parseDataUrl(dataUrl: string): { base64: string; mime: string } {
@@ -203,6 +206,7 @@ export async function inpaint(params: {
 
   form.append('prompt', prompt);
   form.append('provider', provider);
+  form.append('editMode', editMode);
   if (model) form.append('model', model);
   if (apiKey) form.append('apiKey', apiKey);
   if (baseUrl) form.append('baseUrl', baseUrl);

@@ -74,6 +74,7 @@ export const PromptBar = memo(function PromptBar() {
         baseUrl: gptCredentials.baseUrl.trim() || undefined,
         model: gptCredentials.model.trim() || undefined,
         useServerPreset: freeloadEnabled,
+        editMode: mode,
       });
       if (!images[0] || !appendVersion(images[0], instruction, currentVersionId)) {
         showError('生成结果无法加入当前编辑会话，请重新打开图片后重试');

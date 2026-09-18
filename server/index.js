@@ -790,6 +790,13 @@ app.post('/api/inpaint', rateLimit, upload.fields([
   }
 
   const { prompt, provider, model, apiKey, baseUrl } = bodyFields;
+  const editMode = bodyFields.editMode === undefined ? 'smart' : bodyFields.editMode;
+  if (editMode !== 'smart' && editMode !== 'precise') {
+    return fail(res, 400, 'INVALID_INPUT', '无效的重绘模式');
+  }
+  if (editMode === 'precise' && !maskFile) {
+    return fail(res, 400, 'INVALID_INPUT', '精准重绘缺少蒙版文件');
+  }
   if (!prompt || typeof prompt !== 'string') {
     return fail(res, 400, 'INVALID_INPUT', '缺少 prompt');
   }
@@ -836,7 +843,7 @@ app.post('/api/inpaint', rateLimit, upload.fields([
     if (!result.images || result.images.length === 0) {
       return fail(res, 502, 'UPSTREAM_ERROR', '上游未返回图片');
     }
-    console.log(`[inpaint] ok images=${result.images.length} (${Date.now() - started}ms) mask=${Boolean(maskBase64)}`);
+    console.log(`[inpaint] ok images=${result.images.length} (${Date.now() - started}ms) mode=${editMode} mask=${Boolean(maskBase64)} maskBytes=${maskFile?.size ?? 0}`);
     return res.json({ ok: true, images: result.images });
   } catch (err) {
     if (err instanceof UpstreamError) {

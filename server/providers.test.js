@@ -289,3 +289,64 @@ test('gpt-image resizes the precise mask again for the reduced-payload retry', a
     else process.env.GPT_IMAGE_MODEL = originalModel;
   }
 });
+
+test('gpt-image preserves precise-mask alpha semantics for the upstream edit', async () => {
+  const width = 4;
+  const height = 4;
+  const sourcePixels = Buffer.alloc(width * height * 3, 255);
+  const sourceImage = (await sharp(sourcePixels, {
+    raw: { width, height, channels: 3 },
+  }).png().toBuffer()).toString('base64');
+  // This is the exact convention emitted by CanvasEditor: selected pixels are
+  // transparent, while everything outside the selection remains opaque.
+  const maskPixels = Buffer.alloc(width * height * 4, 0);
+  for (let i = 3; i < maskPixels.length; i += 4) maskPixels[i] = 255;
+  const selectedOffset = (1 * width + 2) * 4 + 3;
+  maskPixels[selectedOffset] = 0;
+  const maskBase64 = (await sharp(maskPixels, {
+    raw: { width, height, channels: 4 },
+  }).png().toBuffer()).toString('base64');
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GPT_IMAGE_API_KEY;
+  const originalBase = process.env.GPT_IMAGE_BASE_URL;
+  const originalModel = process.env.GPT_IMAGE_MODEL;
+  let upstreamMask;
+
+  process.env.GPT_IMAGE_API_KEY = 'test-key';
+  process.env.GPT_IMAGE_BASE_URL = 'https://openlux.invalid/v1';
+  process.env.GPT_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
+  globalThis.fetch = async (_url, init) => {
+    const mask = init.body.get('mask');
+    assert.ok(mask);
+    upstreamMask = await sharp(Buffer.from(await mask.arrayBuffer()))
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    await providers['gpt-image']({
+      useServerPreset: true,
+      prompt: 'edit only the selected pixel',
+      imageBase64: sourceImage,
+      imageMime: 'image/png',
+      maskBase64,
+      maskMime: 'image/png',
+    });
+
+    assert.equal(upstreamMask[selectedOffset], 0, 'the brushed selection must remain transparent');
+    assert.equal(upstreamMask[3], 255, 'unselected pixels must remain opaque');
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.GPT_IMAGE_API_KEY;
+    else process.env.GPT_IMAGE_API_KEY = originalKey;
+    if (originalBase === undefined) delete process.env.GPT_IMAGE_BASE_URL;
+    else process.env.GPT_IMAGE_BASE_URL = originalBase;
+    if (originalModel === undefined) delete process.env.GPT_IMAGE_MODEL;
+    else process.env.GPT_IMAGE_MODEL = originalModel;
+  }
+});

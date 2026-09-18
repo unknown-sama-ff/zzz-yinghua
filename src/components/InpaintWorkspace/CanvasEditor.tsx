@@ -432,13 +432,14 @@ export function CanvasEditor({
 
   const handlePointerDown = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
-      if (spaceHeld || !isWorkspaceOpen) return;
+      if (!isWorkspaceOpen || spaceHeld) return;
       e.preventDefault();
       if ('button' in e && e.button === 1) {
         setMiddleHeld(true);
         middlePanStartRef.current = { x: e.clientX, y: e.clientY, px: currentPanRef.current.x, py: currentPanRef.current.y };
         return;
       }
+      if (mode !== 'precise') return;
       const pos = screenToImage(e);
       if (tool === 'shape') {
         rectStartRef.current = pos;
@@ -462,7 +463,7 @@ export function CanvasEditor({
         redraw();
       }
     },
-    [spaceHeld, tool, screenToImage, drawDot, redraw, isWorkspaceOpen, exportMask],
+    [spaceHeld, tool, mode, screenToImage, drawDot, redraw, isWorkspaceOpen, exportMask],
   );
 
   const handlePointerMove = useCallback(
@@ -503,6 +504,12 @@ export function CanvasEditor({
         }
         return;
       }
+      if (mode !== 'precise') {
+        isDrawingRef.current = false;
+        rectStartRef.current = null;
+        lastPosRef.current = null;
+        return;
+      }
       if (!isDrawingRef.current) return;
       const pos = screenToImage(e);
       if (tool === 'shape' && rectStartRef.current) {
@@ -521,6 +528,13 @@ export function CanvasEditor({
     (e: React.MouseEvent | React.TouchEvent) => {
       if (spaceHeld) { panStartRef.current = null; return; }
       if (middleHeld) { middlePanStartRef.current = null; setMiddleHeld(false); return; }
+      if (mode !== 'precise') {
+        isDrawingRef.current = false;
+        rectStartRef.current = null;
+        lastPosRef.current = null;
+        cancelScheduledRedraw();
+        return;
+      }
       if (tool === 'shape' && rectStartRef.current && isDrawingRef.current) {
         const pos = screenToImage(e);
         fillShape(rectStartRef.current.x, rectStartRef.current.y, pos.x, pos.y);
@@ -536,7 +550,7 @@ export function CanvasEditor({
         if (dataUrl) { setMaskDataUrl(dataUrl); onMaskChange(dataUrl); }
       } else { onMaskEmpty(); }
     },
-    [spaceHeld, middleHeld, tool, fillShape, redraw, screenToImage, checkMaskEmpty, exportMask, setMaskDataUrl, onMaskChange, onMaskEmpty],
+    [spaceHeld, middleHeld, tool, mode, fillShape, redraw, screenToImage, checkMaskEmpty, exportMask, setMaskDataUrl, onMaskChange, onMaskEmpty, cancelScheduledRedraw],
   );
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -586,6 +600,7 @@ export function CanvasEditor({
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
       if (e.code === 'Space') { e.preventDefault(); setSpaceHeld(true); }
+      if (useInpaintStore.getState().mode !== 'precise') return;
       if (e.key === 'b') useInpaintStore.getState().setTool('brush');
       if (e.key === 'e') useInpaintStore.getState().setTool('eraser');
       if (e.key === 'u') useInpaintStore.getState().setTool('shape');
