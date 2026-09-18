@@ -72,6 +72,33 @@ export type NamePlacement = 'auto' | 'top-left+bottom-right' | 'top-right+bottom
 /** One of the three ZZZ yinghua art styles. */
 export type YinghuaStyleId = 1 | 2 | 3;
 
+/** A displayed image that can be opened in the local continuous editing workspace. */
+export type InpaintTargetType = 'yinghua' | 'poster' | 'costume' | 'three-view' | 'upload' | 'preview';
+
+/** One image version in the current browser-only editing session. */
+export interface ImageEditVersion {
+  id: string;
+  /** `null` identifies the original module image opened into the session. */
+  parentId: string | null;
+  url: string;
+  /** The user instruction that produced this version; absent on the original. */
+  instruction: string | null;
+  createdAt: number;
+}
+
+/**
+ * Identifies both the source image shown on the canvas and, when possible, the
+ * exact module slot that a confirmed inpaint result may replace.
+ */
+export interface InpaintTarget {
+  url: string;
+  type: InpaintTargetType;
+  /** Yinghua style ID for `type: 'yinghua'`. */
+  slotId?: YinghuaStyleId;
+  /** Image index within the module slot (six-fate: 0 = 阳, 1 = 阴). */
+  index?: number;
+}
+
 export interface YinghuaStyle {
   id: YinghuaStyleId;
   label: string;

@@ -39,10 +39,21 @@ export const FIDELITY_PREFIX_EN =
  * fidelity, the pipeline note, and clean output.
  */
 export const FIDELITY_EDIT_PREFIX =
-  '本图为对已生成底图的编辑：第1张输入图是已生成的角色底图，只用于锁定姿态、构图、文字位置、面部位置与身体结构；第2张输入图（模块01生成的全彩角色三视图，或模块02上传的等价三视图）是角色身份、面部五官、发型、发色、肤色、服装配色、花纹与结构的唯一最高权威，必须压倒第1张灰阶底图的任何色彩暗示。第3张输入图（若存在）仅为武器、道具或装饰参考，绝不可改变角色身份或配色。所有参考图均为独立输入，严禁把参考图缩略图复制到输出，生成的必须是同一角色本人，严禁自行设计或创造新角色；必须严格保持原角色的固有年龄感、身材比例与体态——原角色原始是何种体型、性别、物种与年龄分类，就必须保持该固有参数不变，严禁擅自改变年龄感、转换体型分类、转换性别表现、增大或缩小身体各部位比例、拉长或压缩身材、改变身体曲线与轮廓；最终画面只保留角色主体与英文名字文字，不要任何额外贴纸、徽标、条码、说明字、小标签或背景装饰。画面必须为横向构图（宽屏横幅），在此前提下进行如下处理：';
+  '本图为对已生成底图的编辑：第1张输入图是已生成的角色底图，只用于锁定姿态、构图、文字位置、面部位置与身体结构；第2张输入图（模块01生成的全彩角色三视图，或模块02上传的等价三视图）是角色身份、面部五官、发型、发色、肤色、服装配色、花纹与结构的唯一最高权威，必须压倒第1张灰阶底图的任何色彩暗示。第3张输入图（若存在）在六命中是从第2张三视图提取的正面结构锚点，用于核对脸部、手指、四肢、关节和遮挡关系；在三命中可为武器、道具或装饰参考。第4张输入图（若存在）才是六命的武器、道具或装饰参考，绝不可改变角色身份或配色。所有参考图均为独立输入，严禁把参考图缩略图复制到输出，生成的必须是同一角色本人，严禁自行设计或创造新角色；必须严格保持原角色的固有年龄感、身材比例与体态——原角色原始是何种体型、性别、物种与年龄分类，就必须保持该固有参数不变，严禁擅自改变年龄感、转换体型分类、转换性别表现、增大或缩小身体各部位比例、拉长或压缩身材、改变身体曲线与轮廓；最终画面只保留角色主体与英文名字文字，不要任何额外贴纸、徽标、条码、说明字、小标签或背景装饰。画面必须为横向构图（宽屏横幅），在此前提下进行如下处理：';
 
 export const FIDELITY_EDIT_PREFIX_EN =
-  'This image edits an already-generated base image. The first input image is the generated character base and is used ONLY to lock pose, composition, text placement, face position, and body structure. The second input image (the full-color character three-view generated in module 01, or the equivalent three-view uploaded in module 02) is the SOLE HIGHEST AUTHORITY for identity, facial features, hairstyle, hair color, skin tone, clothing colors, patterns, and structure; it MUST override every color implication of the grayscale first image. A third input image, if present, is ONLY a weapon, prop, or decoration reference and must never alter the character identity or palette. All references are supplied as separate images; never reproduce any reference thumbnail in the output. The output MUST be the exact same character — strictly forbid designing or creating a new character. Strictly preserve the character\'s intrinsic age impression, body proportions, and physique — whatever body type, gender, species, and age classification the character originally has must remain unchanged; strictly forbid altering age impression, converting body type classification, converting gender expression, enlarging or shrinking body part proportions, elongating or compressing height, or altering body curves and contours. The final image keeps only the character subject and the English name text — no extra stickers, logos, barcodes, caption text, small labels, or background decoration. The image MUST be landscape composition (widescreen banner). Under these constraints, proceed as follows: ';
+  'This image edits an already-generated base image. The first input image is the generated character base and is used ONLY to lock pose, composition, text placement, face position, and body structure. The second input image (the full-color character three-view generated in module 01, or the equivalent three-view uploaded in module 02) is the SOLE HIGHEST AUTHORITY for identity, facial features, hairstyle, hair color, skin tone, clothing colors, patterns, and structure; it MUST override every color implication of the grayscale first image. A third input image, if present, is the front structure anchor cropped from the second-input three-view for six-fate face, finger, limb, joint, and occlusion checks; for three-fate it may be a weapon, prop, or decoration reference. A fourth input image, if present, is the six-fate weapon, prop, or decoration reference and must never alter the character identity or palette. All references are supplied as separate images; never reproduce any reference thumbnail in the output. The output MUST be the exact same character — strictly forbid designing or creating a new character. Strictly preserve the character\'s intrinsic age impression, body proportions, and physique — whatever body type, gender, species, and age classification the character originally has must remain unchanged; strictly forbid altering age impression, converting body type classification, converting gender expression, enlarging or shrinking body part proportions, elongating or compressing height, or altering body curves and contours. The final image keeps only the character subject and the English name text — no extra stickers, logos, barcodes, caption text, small labels, or background decoration. The image MUST be landscape composition (widescreen banner). Under these constraints, proceed as follows: ';
+
+/**
+ * Six-fate's highest-priority instruction is intentionally short and placed
+ * before the long editable templates. Some compatible edit relays truncate
+ * long prompts, so anatomy must not be buried after decoration instructions.
+ */
+export const SIX_FATE_ANATOMY_PRIORITY_PREFIX =
+  '【六命最高优先级·先执行】第1张输入图只锁定当前海报的构图、相机、文字、脸位与原姿势；第2张输入图（模块02全彩三视图）是身份、发色、服装和人体比例的最高权威；第3张输入图（若存在）是从第2张裁出的正面结构锚点，只用于脸部、手指、四肢、关节和遮挡关系；第4张输入图（若存在）才是道具。输出必须为一个完整、解剖正确的同一角色：两只眼、两只手、每手五根自然分开的手指、两条手臂、两条腿，肩—肘—腕和髋—膝—踝连续自然。严禁新增、缺失、融合、断裂、错位、镜像或扭曲任何肢体/手指。仅允许不改变骨架连接、遮挡关系、相机和主体姿势的小幅手脚或微表情调整。';
+
+export const SIX_FATE_ANATOMY_PRIORITY_PREFIX_EN =
+  '[SIX-FATE HIGHEST PRIORITY — DO THIS FIRST] Input 1 locks only the current poster composition, camera, typography, face location, and original pose. Input 2 (the module-02 full-color three-view) is the highest authority for identity, hair, costume, and body proportions. Input 3, when present, is a front structure anchor cropped from input 2 and is only for face, fingers, limbs, joints, and occlusion. Input 4, when present, is the prop. Output exactly one complete anatomically correct instance of the same character: two eyes, two hands, five naturally separated fingers per hand, two arms, two legs, and continuous natural shoulder–elbow–wrist and hip–knee–ankle chains. Never add, remove, merge, break, misplace, mirror, or twist any limb or finger. Only small hand, foot, or expression adjustments are allowed; never change skeletal connections, occlusion, camera, or the main pose. ';
 
 /**
  * Three-view + close-up generation prompt.
@@ -151,5 +162,8 @@ export function fillName(
   const prefix = isEdit
     ? (lang === 'en' ? FIDELITY_EDIT_PREFIX_EN : FIDELITY_EDIT_PREFIX)
     : (lang === 'en' ? FIDELITY_PREFIX_EN : FIDELITY_PREFIX);
-  return prefix + filled;
+  const sixFatePriority = styleId === 3
+    ? (lang === 'en' ? SIX_FATE_ANATOMY_PRIORITY_PREFIX_EN : SIX_FATE_ANATOMY_PRIORITY_PREFIX)
+    : '';
+  return sixFatePriority + prefix + filled;
 }

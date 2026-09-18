@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { useInpaintStore } from '../../store/useInpaintStore';
 import { inpaint, ApiError } from '../../lib/apiClient';
+import { buildContextualEditPrompt } from '../../lib/inpaintPrompt';
 import { useToast } from '../../store/useToast';
 import { useProviderStore } from '../../store/useProviderStore';
 import { ModeSwitch } from './ModeSwitch';
 
-export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (images: string[]) => void }) {
+export const PromptBar = memo(function PromptBar() {
   const prompt = useInpaintStore((s) => s.prompt);
   const setPrompt = useInpaintStore((s) => s.setPrompt);
   const mode = useInpaintStore((s) => s.mode);
@@ -13,6 +14,9 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
   const isGenerating = useInpaintStore((s) => s.isGenerating);
   const setIsGenerating = useInpaintStore((s) => s.setIsGenerating);
   const targetImage = useInpaintStore((s) => s.targetImage);
+  const currentVersionId = useInpaintStore((s) => s.currentVersionId);
+  const currentVersionUrl = useInpaintStore((s) => s.currentVersionUrl);
+  const appendVersion = useInpaintStore((s) => s.appendVersion);
   const closeWorkspace = useInpaintStore((s) => s.closeWorkspace);
   const featherRadius = useInpaintStore((s) => s.featherRadius);
   const brushSize = useInpaintStore((s) => s.brushSize);
@@ -29,9 +33,10 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
   }, [prompt]);
 
   const handleGenerate = useCallback(async () => {
-    if (!targetImage) return;
-    if (!localPrompt.trim()) {
-      showError('请输入重绘提示词');
+    if (!targetImage || !currentVersionId || !currentVersionUrl) return;
+    const instruction = localPrompt.trim();
+    if (!instruction) {
+      showError('请输入修改说明');
       return;
     }
     if (mode === 'precise' && !maskDataUrl) {
@@ -61,32 +66,32 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
       }
 
       const images = await inpaint({
-        imageDataUrl: targetImage.url,
+        imageDataUrl: currentVersionUrl,
         maskDataUrl: currentMaskDataUrl,
-        prompt: localPrompt,
+        prompt: buildContextualEditPrompt(instruction, mode),
         provider: 'gpt-image',
         apiKey: gptCredentials.apiKey.trim() || undefined,
         baseUrl: gptCredentials.baseUrl.trim() || undefined,
         model: gptCredentials.model.trim() || undefined,
         useServerPreset: freeloadEnabled,
       });
-      onResult(images);
+      if (!images[0] || !appendVersion(images[0], instruction, currentVersionId)) {
+        showError('生成结果无法加入当前编辑会话，请重新打开图片后重试');
+      }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
       showError(msg);
     } finally {
       setIsGenerating(false);
     }
-  }, [targetImage, localPrompt, mode, maskDataUrl, gptCredentials, freeloadEnabled, setIsGenerating, onResult, showError]);
+  }, [targetImage, currentVersionId, currentVersionUrl, localPrompt, mode, maskDataUrl, gptCredentials, freeloadEnabled, appendVersion, setIsGenerating, showError]);
 
   return (
     <div className="border-t border-[var(--zzz-text)]/10 bg-[var(--zzz-ink)]/80 p-3 backdrop-blur-md">
       <div className="flex items-center gap-3">
-        {/* Mode switch */}
         <ModeSwitch />
 
-        {/* Prompt input */}
-        <div className="flex-1 relative">
+        <div className="relative flex-1">
           <textarea
             value={localPrompt}
             onChange={(e) => {
@@ -95,11 +100,11 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
             }}
             placeholder={
               mode === 'smart'
-                ? '描述你想如何修改这张图片...'
-                : '描述你想对涂抹区域做什么修改...'
+                ? '直接描述下一步改进，例如“让左眼高光更明显，其他不变”…'
+                : '描述要对涂抹区域做什么修改…'
             }
             rows={1}
-            className="w-full resize-none rounded-xl border border-[var(--zzz-text)]/10 bg-[var(--zzz-bg)]/60 px-4 py-2.5 font-mono text-sm text-[var(--zzz-text)] placeholder:text-[var(--zzz-text)]/30 focus:border-[var(--zzz-primary)]/50 focus:outline-none focus:shadow-[0_0_0_3px_var(--zzz-primary)]/15"
+            className="w-full resize-none rounded-xl border border-black/20 bg-white px-4 py-2.5 font-mono text-sm text-black placeholder:text-black/45 focus:border-[var(--zzz-primary)]/70 focus:outline-none focus:shadow-[0_0_0_3px_var(--zzz-primary)]/15"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -109,10 +114,9 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
           />
         </div>
 
-        {/* Brush size slider (precise mode) */}
         {mode === 'precise' && (
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] text-[var(--zzz-text)]/40 whitespace-nowrap">
+            <span className="whitespace-nowrap font-mono text-[10px] text-[var(--zzz-text)]/40">
               笔刷 {brushSize}px
             </span>
             <input
@@ -123,7 +127,7 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
               onChange={(e) => setBrushSize(Number(e.target.value))}
               className="h-1 w-16 accent-[var(--zzz-primary)]"
             />
-            <span className="font-mono text-[10px] text-[var(--zzz-text)]/40 whitespace-nowrap">
+            <span className="whitespace-nowrap font-mono text-[10px] text-[var(--zzz-text)]/40">
               羽化 {featherRadius}px
             </span>
             <input
@@ -137,7 +141,6 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
           </div>
         )}
 
-        {/* Generate button */}
         <button
           onClick={() => void handleGenerate()}
           disabled={isGenerating || !localPrompt.trim() || (mode === 'precise' && !maskDataUrl)}
@@ -149,11 +152,10 @@ export const PromptBar = memo(function PromptBar({ onResult }: { onResult: (imag
               生成中...
             </>
           ) : (
-            <>🚀 生成</>
+            <>✨ 继续生成</>
           )}
         </button>
 
-        {/* Close button */}
         <button
           onClick={closeWorkspace}
           className="glass-btn px-3 py-2 font-mono text-xs text-[var(--zzz-text)]/60 hover:text-[var(--zzz-text)]"

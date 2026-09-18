@@ -1,6 +1,6 @@
 import { downloadImage } from '../lib/download';
 import { GallerySaveButton, type GallerySaveInfo } from './GallerySaveButton';
-import type { GenSlot } from '../types';
+import type { GenSlot, InpaintTarget } from '../types';
 import { memo } from 'react';
 
 interface ResultViewProps {
@@ -12,8 +12,9 @@ interface ResultViewProps {
   /** When provided, a "save to gallery" button appears next to the download button. */
   saveInfo?: GallerySaveInfo;
   /** When provided, an inpaint button appears in the hover toolbar. */
-  onInpaintClick?: (src: string, meta: { type: string; slotId?: string; index?: number }) => void;
-  inpaintMeta?: { type: string; slotId?: string; index?: number };
+  onInpaintClick?: (src: string, target: InpaintTarget) => void;
+  /** Module location used to replace a confirmed inpaint result. */
+  inpaintMeta?: Omit<InpaintTarget, 'url' | 'index'> & { index?: number };
   /** Optional image class and key used by callers that animate image replacement. */
   imageClassName?: string;
   imageKey?: string;
@@ -66,10 +67,11 @@ export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPic
             )}
             {onInpaintClick && inpaintMeta && (
               <button
-                onClick={() => onInpaintClick(src, inpaintMeta)}
+                title="基于此图继续自然语言编辑或局部重绘"
+                onClick={() => onInpaintClick(src, { ...inpaintMeta, url: src, index: inpaintMeta.index ?? i })}
                 className="glass-btn px-3 py-1 text-xs text-[var(--zzz-primary)]"
               >
-                🎨 局部重绘
+                ✨ 继续修改
               </button>
             )}
             <button

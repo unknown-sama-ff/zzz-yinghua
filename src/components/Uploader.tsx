@@ -76,7 +76,7 @@ export const Uploader = memo(function Uploader() {
   };
 
   return (
-    <section className="glass flex flex-col p-6">
+    <section className="glass flex flex-col p-6" data-inpaint-zone="upload">
       <SectionHeader step="02" title="上传三视图立绘" />
       <p className="mb-3 font-mono text-xs text-zzz-text/55">
         建议上传三视图成品以获得最佳生成效果。没有三视图？使用上方工作台生成 ↑
@@ -214,9 +214,9 @@ export const Uploader = memo(function Uploader() {
             <ResultView
               slot={costumeChangeSlot}
               downloadPrefix="costume-change"
-              onInpaintClick={(src) => {
+              onInpaintClick={(_src, target) => {
                 const openWorkspace = useInpaintStore.getState().openWorkspace;
-                openWorkspace({ url: src, type: 'costume' });
+                openWorkspace(target);
               }}
               inpaintMeta={{ type: 'costume' }}
             />

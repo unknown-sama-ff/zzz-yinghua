@@ -9,7 +9,7 @@ export function CanvasEditor({
   onMaskEmpty: () => void;
 }) {
   const { mode, tool, brushSize, featherRadius, shapeType, setMaskDataUrl, maskDataUrl } = useInpaintStore((s) => s);
-  const targetImage = useInpaintStore((s) => s.targetImage);
+  const currentVersionUrl = useInpaintStore((s) => s.currentVersionUrl);
   const isWorkspaceOpen = useInpaintStore((s) => s.isWorkspaceOpen);
 
   const displayRef = useRef<HTMLCanvasElement>(null);
@@ -194,9 +194,11 @@ export function CanvasEditor({
   }, []);
 
   useEffect(() => {
-    if (!isWorkspaceOpen || !targetImage) return;
+    if (!isWorkspaceOpen || !currentVersionUrl) return;
+    let cancelled = false;
     const img = new Image();
     img.onload = () => {
+      if (cancelled) return;
       originalImgRef.current = img;
       const w = img.naturalWidth;
       const h = img.naturalHeight;
@@ -210,8 +212,11 @@ export function CanvasEditor({
       setZoom(1);
       setPan({ x: 0, y: 0 });
     };
-    img.src = targetImage.url;
-  }, [isWorkspaceOpen, targetImage]);
+    img.src = currentVersionUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [isWorkspaceOpen, currentVersionUrl]);
 
   const maskBlobUrlRef = useRef<string | null>(null);
   useEffect(() => {
@@ -592,7 +597,7 @@ export function CanvasEditor({
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onUp); };
   }, []);
 
-  if (!targetImage || !isWorkspaceOpen) return null;
+  if (!currentVersionUrl || !isWorkspaceOpen) return null;
 
   return (
     <div ref={containerRef} className="flex-1 relative overflow-hidden bg-black/50" onWheel={handleWheel}>

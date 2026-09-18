@@ -170,9 +170,9 @@ export const PosterPanel = memo(function PosterPanel() {
           prompt,
           provider,
         } : undefined}
-        onInpaintClick={(src) => {
+        onInpaintClick={(_src, target) => {
           const openWorkspace = useInpaintStore.getState().openWorkspace;
-          openWorkspace({ url: src, type: 'poster' });
+          openWorkspace(target);
         }}
         inpaintMeta={{ type: 'poster' }}
       />

@@ -56,13 +56,14 @@ test('gpt-image sends primary and references as repeated image fields', async ()
   }
 });
 
-test('gpt-image preserves primary, canonical three-view, then addon image order', async () => {
+test('gpt-image preserves composition, canonical three-view, structure anchor, then addon order', async () => {
   const makeImage = async (background) => (await sharp({
     create: { width: 8, height: 8, channels: 3, background },
   }).png().toBuffer()).toString('base64');
-  const [baseImage, threeViewImage, addonImage] = await Promise.all([
+  const [baseImage, threeViewImage, structureAnchorImage, addonImage] = await Promise.all([
     makeImage('#e00000'),
     makeImage('#00d000'),
+    makeImage('#e0d000'),
     makeImage('#0000e0'),
   ]);
   const originalFetch = globalThis.fetch;
@@ -97,14 +98,16 @@ test('gpt-image preserves primary, canonical three-view, then addon image order'
       // 六命调用方 is responsible for this semantic order.
       refImages: [
         { base64: threeViewImage, mime: 'image/png' },
+        { base64: structureAnchorImage, mime: 'image/png' },
         { base64: addonImage, mime: 'image/png' },
       ],
     });
 
-    assert.equal(received.length, 3);
+    assert.equal(received.length, 4);
     assert.ok(received[0][0] > received[0][1] && received[0][0] > received[0][2]);
     assert.ok(received[1][1] > received[1][0] && received[1][1] > received[1][2]);
-    assert.ok(received[2][2] > received[2][0] && received[2][2] > received[2][1]);
+    assert.ok(received[2][0] > received[2][2] && received[2][1] > received[2][2]);
+    assert.ok(received[3][2] > received[3][0] && received[3][2] > received[3][1]);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.GPT_IMAGE_API_KEY;

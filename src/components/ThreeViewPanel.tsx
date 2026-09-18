@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useUploadStore } from '../store/useUploadStore';
 import { useProviderStore } from '../store/useProviderStore';
 import { useWorkbenchStore } from '../store/useWorkbenchStore';
+import { useInpaintStore } from '../store/useInpaintStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_SIZE } from '../lib/prompts';
@@ -134,7 +135,7 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
   };
 
   return (
-    <section className="glass p-6">
+    <section className="glass p-6" data-inpaint-zone="three-view">
         <SectionHeader step="01" title="三视图生成工作台（有三视图直接跳到02）" />
 
       <p className="mb-4 font-mono text-xs text-zzz-text/55">
@@ -174,6 +175,10 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
         downloadPrefix="three-view"
         onPick={(src) => void useAsMain(src)}
         pickLabel="用作主立绘"
+        onInpaintClick={(_src, target) => {
+          useInpaintStore.getState().openWorkspace(target);
+        }}
+        inpaintMeta={{ type: 'three-view' }}
       />
     </section>
   );

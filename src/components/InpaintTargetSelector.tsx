@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { useInpaintStore } from '../store/useInpaintStore';
+import { resolveInpaintTarget } from '../lib/inpaintTarget';
 import { FloatingInpaintButton } from './FloatingInpaintButton';
 
 /** Portal clones of inpaintable images, positioned exactly over the originals,
@@ -43,6 +44,9 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
       imgs.forEach((img, i) => {
         const imageEl = img as HTMLImageElement;
         if (imageEl.hasAttribute('data-no-inpaint')) return;
+        // Nested zones (module 02 contains its costume submodule) belong only
+        // to their nearest owner; otherwise the portal would clone them twice.
+        if (imageEl.closest('[data-inpaint-zone]') !== zone) return;
         const rect = imageEl.getBoundingClientRect();
         if (rect.width <= 10 || rect.height <= 10) return;
         if (rect.bottom < 0 || rect.top > window.innerHeight) return;
@@ -221,6 +225,12 @@ export const InpaintTargetSelector = memo(function InpaintTargetSelector({ child
   const isSelecting = useInpaintStore((s) => s.isSelecting);
   const setIsSelecting = useInpaintStore((s) => s.setIsSelecting);
   const openWorkspace = useInpaintStore((s) => s.openWorkspace);
+  const handleSelect = useCallback(
+    (selection: { url: string; type: string }) => {
+      openWorkspace(resolveInpaintTarget(selection.url, selection.type));
+    },
+    [openWorkspace],
+  );
 
   // Toggle body class for CSS-driven effects during selection mode.
   // Disables backdrop-filter on background glass panels so the overlay's
@@ -249,13 +259,13 @@ export const InpaintTargetSelector = memo(function InpaintTargetSelector({ child
       const zoneType = zone.getAttribute('data-inpaint-zone') || 'unknown';
       const src = img.src || '';
       if (src) {
-        openWorkspace({ url: src, type: zoneType });
+        handleSelect({ url: src, type: zoneType });
       }
     };
 
     document.addEventListener('click', handleClick, true);
     return () => document.removeEventListener('click', handleClick, true);
-  }, [isSelecting, openWorkspace]);
+  }, [isSelecting, handleSelect]);
 
   // Escape key to cancel
   useEffect(() => {
@@ -281,7 +291,7 @@ export const InpaintTargetSelector = memo(function InpaintTargetSelector({ child
 
       {/* Portal layer: z-100, clones of glowing images float above blur */}
       {isSelecting && (
-        <InpaintPortal onSelect={openWorkspace} />
+        <InpaintPortal onSelect={handleSelect} />
       )}
 
       {/* Tooltip + floating button: z-70 */}
@@ -290,7 +300,7 @@ export const InpaintTargetSelector = memo(function InpaintTargetSelector({ child
           <div className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
             <div className="flex items-center gap-3 rounded-full border border-[var(--zzz-primary)]/40 bg-[var(--zzz-primary)]/15 px-5 py-2.5 backdrop-blur-md">
               <span className="font-mono text-sm text-[var(--zzz-text)]">
-                🖌 点击发光图片进入重绘 · 再次点击按钮或 Esc 取消
+                ✨ 点击发光图片进入连续编辑 · 再次点击按钮或 Esc 取消
               </span>
             </div>
           </div>

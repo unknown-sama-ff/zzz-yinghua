@@ -23,7 +23,7 @@ export const FloatingInpaintButton = memo(function FloatingInpaintButton() {
           : 'bg-[var(--zzz-ink)]/80 text-[var(--zzz-primary)] border border-[var(--zzz-text)]/20 hover:border-[var(--zzz-primary)]/60 hover:shadow-[0_0_20px_var(--zzz-primary)]'
         }
       `}
-      title={isSelecting ? '取消选择' : '局部重绘'}
+      title={isSelecting ? '取消选择' : '连续编辑图片'}
     >
       {isSelecting ? (
         <>
@@ -41,7 +41,7 @@ export const FloatingInpaintButton = memo(function FloatingInpaintButton() {
             <path d="M2 2l7.586 7.586" />
             <circle cx="11" cy="11" r="2" />
           </svg>
-          <span>局部重绘</span>
+          <span>编辑图片</span>
         </>
       )}
     </button>

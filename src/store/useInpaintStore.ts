@@ -1,14 +1,24 @@
 import { create } from 'zustand';
+import type { ImageEditVersion, InpaintTarget } from '../types';
+import { MAX_UNDO_HISTORY } from '../lib/constants';
 
 interface InpaintState {
-  // --- Selection ---
+  // --- Selection / source ownership ---
   isSelecting: boolean;
-  targetImage: { url: string; type: string; slotId?: string; index?: number } | null;
+  /** The original module image that an approved draft may replace. */
+  targetImage: InpaintTarget | null;
   isWorkspaceOpen: boolean;
   setIsSelecting: (v: boolean) => void;
-  setTargetImage: (t: { url: string; type: string; slotId?: string; index?: number } | null) => void;
-  openWorkspace: (t: { url: string; type: string; slotId?: string; index?: number }) => void;
+  setTargetImage: (t: InpaintTarget | null) => void;
+  openWorkspace: (t: InpaintTarget) => void;
   closeWorkspace: () => void;
+
+  // --- In-memory editing session ---
+  versions: ImageEditVersion[];
+  currentVersionId: string | null;
+  currentVersionUrl: string | null;
+  selectVersion: (id: string) => void;
+  appendVersion: (url: string, instruction: string, parentId?: string) => ImageEditVersion | null;
 
   // --- Mode ---
   mode: 'smart' | 'precise';
@@ -40,85 +50,112 @@ interface InpaintState {
   reset: () => void;
 }
 
-import { MAX_UNDO_HISTORY } from '../lib/constants';
-
-const LS_KEY = 'inpaint-state';
-
-function loadPersisted(): { targetImageUrl: string; maskDataUrl: string | null; prompt: string; mode: 'smart' | 'precise' } | null {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (data?.targetImage?.url) {
-      return { targetImageUrl: data.targetImage.url, maskDataUrl: data.maskDataUrl ?? null, prompt: data.prompt ?? '', mode: data.mode ?? 'smart' };
-    }
-  } catch { /* ignore */ }
-  return null;
+function createVersionId(): string {
+  return crypto.randomUUID();
 }
 
-function persistState(state: Partial<InpaintState> & { targetImage: { url: string } | null }) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify({
-      targetImage: state.targetImage,
-      maskDataUrl: state.maskDataUrl,
-      prompt: state.prompt,
-      mode: state.mode,
-    }));
-  } catch { /* ignore quota errors */ }
+function createInitialState() {
+  return {
+    isSelecting: false,
+    targetImage: null as InpaintTarget | null,
+    isWorkspaceOpen: false,
+    versions: [] as ImageEditVersion[],
+    currentVersionId: null as string | null,
+    currentVersionUrl: null as string | null,
+    mode: 'smart' as const,
+    maskDataUrl: null as string | null,
+    prompt: '',
+    brushSize: 24,
+    featherRadius: 12,
+    tool: 'brush' as const,
+    shapeType: 'rect' as const,
+    history: [] as string[],
+    isGenerating: false,
+  };
 }
-
-const persisted = loadPersisted();
-
-const initialState = {
-  isSelecting: false,
-  targetImage: null,
-  isWorkspaceOpen: false,
-  mode: (persisted?.mode ?? 'smart') as 'smart' | 'precise',
-  maskDataUrl: persisted?.maskDataUrl ?? null,
-  prompt: persisted?.prompt ?? '',
-  brushSize: 24,
-  featherRadius: 12,
-  tool: 'brush' as const,
-  shapeType: 'rect' as const,
-  history: [] as string[],
-  isGenerating: false,
-};
 
 export const useInpaintStore = create<InpaintState>((set, get) => ({
-  ...initialState,
+  ...createInitialState(),
 
   setIsSelecting: (v) => set({ isSelecting: v }),
   setTargetImage: (t) => set({ targetImage: t }),
-  openWorkspace: (t) => {
-    // Try to restore persisted state for the same image
-    const saved = loadPersisted();
-    const restored = (saved && saved.targetImageUrl === t.url)
-      ? { maskDataUrl: saved.maskDataUrl, prompt: saved.prompt, mode: saved.mode }
-      : { maskDataUrl: null as string | null, prompt: '', mode: 'smart' as const };
-    set({ ...restored, targetImage: t, isWorkspaceOpen: true, isSelecting: false });
-    persistState({ ...restored, targetImage: t });
-  },
-
-  closeWorkspace: () => {
-    const { targetImage, maskDataUrl, prompt, mode } = get();
-    persistState({ targetImage, maskDataUrl, prompt, mode });
+  openWorkspace: (targetImage) => {
+    const root: ImageEditVersion = {
+      id: createVersionId(),
+      parentId: null,
+      url: targetImage.url,
+      instruction: null,
+      createdAt: Date.now(),
+    };
     set({
-      isWorkspaceOpen: false,
+      targetImage,
+      isWorkspaceOpen: true,
       isSelecting: false,
-      targetImage: null,
+      versions: [root],
+      currentVersionId: root.id,
+      currentVersionUrl: root.url,
+      mode: 'smart',
       maskDataUrl: null,
       history: [],
+      prompt: '',
       isGenerating: false,
     });
   },
 
-  setMode: (m) => { set({ mode: m }); persistState(get()); },
+  closeWorkspace: () => {
+    set({
+      targetImage: null,
+      isWorkspaceOpen: false,
+      isSelecting: false,
+      versions: [],
+      currentVersionId: null,
+      currentVersionUrl: null,
+      maskDataUrl: null,
+      history: [],
+      prompt: '',
+      isGenerating: false,
+    });
+  },
 
-  setMaskDataUrl: (d) => { set({ maskDataUrl: d }); persistState(get()); },
-  setBrushSize: (s) => set({ brushSize: Math.max(5, Math.min(80, s)) }),
-  setFeatherRadius: (r) => set({ featherRadius: Math.max(0, Math.min(30, r)) }),
-  setTool: (t) => set({ tool: t }),
-  setShapeType: (t) => set({ shapeType: t }),
+  selectVersion: (id) => {
+    const version = get().versions.find((candidate) => candidate.id === id);
+    if (!version) return;
+    set({
+      currentVersionId: version.id,
+      currentVersionUrl: version.url,
+      maskDataUrl: null,
+      history: [],
+    });
+  },
+
+  appendVersion: (url, instruction, parentId) => {
+    const selectedParentId = parentId ?? get().currentVersionId;
+    if (!selectedParentId || !get().versions.some((version) => version.id === selectedParentId)) return null;
+    const version: ImageEditVersion = {
+      id: createVersionId(),
+      parentId: selectedParentId,
+      url,
+      instruction,
+      createdAt: Date.now(),
+    };
+    set((state) => ({
+      versions: [...state.versions, version],
+      currentVersionId: version.id,
+      currentVersionUrl: version.url,
+      maskDataUrl: null,
+      history: [],
+      prompt: '',
+    }));
+    return version;
+  },
+
+  setMode: (mode) => set({ mode }),
+
+  setMaskDataUrl: (maskDataUrl) => set({ maskDataUrl }),
+  setBrushSize: (brushSize) => set({ brushSize: Math.max(5, Math.min(80, brushSize)) }),
+  setFeatherRadius: (featherRadius) => set({ featherRadius: Math.max(0, Math.min(30, featherRadius)) }),
+  setTool: (tool) => set({ tool }),
+  setShapeType: (shapeType) => set({ shapeType }),
 
   pushHistory: () => {
     const { maskDataUrl, history } = get();
@@ -131,15 +168,14 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
   undo: () => {
     const { history } = get();
     if (history.length === 0) return;
-    const prev = history[history.length - 1];
-    const rest = history.slice(0, -1);
-    set({ maskDataUrl: prev, history: rest });
+    const previous = history[history.length - 1];
+    set({ maskDataUrl: previous, history: history.slice(0, -1) });
   },
 
   clearMask: () => set({ maskDataUrl: null, history: [] }),
 
-  setPrompt: (p) => set({ prompt: p }),
-  setIsGenerating: (v) => set({ isGenerating: v }),
+  setPrompt: (prompt) => set({ prompt }),
+  setIsGenerating: (isGenerating) => set({ isGenerating }),
 
-  reset: () => set(initialState),
+  reset: () => set(createInitialState()),
 }));

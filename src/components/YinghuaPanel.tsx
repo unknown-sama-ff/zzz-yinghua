@@ -7,7 +7,7 @@ import { useViewerStore } from '../store/useViewerStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
-import { stitchImages, embedThumbnails } from '../lib/imageWorkerPool';
+import { stitchImages, embedThumbnails, extractFrontViewStructureAnchor } from '../lib/imageWorkerPool';
 import type { ThumbEntry } from '../lib/imageWorkerPool';
 import { loadStyleReferenceImages, preloadStyleReferenceImages } from '../lib/styleReferences';
 import { maxReferenceImagesForModel, supportsMultipleImageInputs } from '../lib/gptImageCapabilities';
@@ -21,7 +21,7 @@ import { useInpaintStore } from '../store/useInpaintStore';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
 import type { GallerySaveInfo } from './GallerySaveButton';
-import type { GenSlot, YinghuaStyleId } from '../types';
+import type { GenSlot, InpaintTarget, YinghuaStyleId } from '../types';
 
 // ---------------------------------------------------------------------------
 // Per-style card — memoized so changes to one style don't re-render the others
@@ -50,12 +50,14 @@ const StyleCard = memo(function StyleCard({
   style3Face: 'front' | 'back';
   onRun: (id: YinghuaStyleId) => void;
   onPromptChange: (styleId: YinghuaStyleId, value: string) => void;
-  onInpaintClick: (src: string) => void;
+  onInpaintClick: (src: string, target: InpaintTarget) => void;
   onFlipStyle3: () => void;
 }) {
   const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
   const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
-  const frontReady = yinghuaSlots[3].status === 'done' && Boolean(yinghuaSlots[3].images[0]);
+  // 六命阳是否存在必须只看正面图本身：阴面失败会把共享 slot 标为 error，
+  // 但绝不能让已完成的阳图失去后续生成资格。
+  const frontReady = Boolean(yinghuaSlots[3].images[0]);
   // 链路：零命→三命→六命
   const needsBase = style.id === 2
     ? !zeroReady
@@ -165,7 +167,11 @@ const StyleCard = memo(function StyleCard({
         }
         imageClassName={style.id === 3 && displayedSixImage ? 'fx-face-flip' : undefined}
         onInpaintClick={onInpaintClick}
-        inpaintMeta={{ type: 'yinghua', slotId: String(style.id), index: 0 }}
+        inpaintMeta={{
+          type: 'yinghua',
+          slotId: style.id,
+          ...(style.id === 3 ? { index: style3Face === 'front' ? 0 : 1 } : {}),
+        }}
       />
     </div>
   );
@@ -355,9 +361,16 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           showError('请先在模块 01 生成三视图，或在模块 02 上传三视图后再生成六命阳');
           return;
         }
+        // A conventional horizontal three-view has the full front view at the
+        // left. Give six-fate a separate crop for anatomy without duplicating
+        // the canonical full-color identity image.
+        const structureAnchor = id === 3 && threeView
+          ? await extractFrontViewStructureAnchor(threeView)
+          : null;
         // Keep semantic priority stable for GPT edits: base composition first,
-        // canonical color/identity three-view second, optional prop last.
-        const references = [threeView, addonImage]
+        // canonical color/identity three-view second, front anatomy anchor
+        // third when available, optional prop last.
+        const references = [threeView, structureAnchor, addonImage]
           .filter((url): url is string => Boolean(url))
           .filter((url, index, all) => all.indexOf(url) === index);
         const selectedModel = creds[selectedProvider].model;
@@ -387,7 +400,10 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           if (threeView) {
             thumbs.push({ url: threeView, size: 0.2, position: 'bottom-right' });
           }
-          if (addonImage && addonImage !== threeView) {
+          if (structureAnchor) {
+            thumbs.push({ url: structureAnchor, size: 0.18, position: 'bottom-right' });
+          }
+          if (addonImage && addonImage !== threeView && addonImage !== structureAnchor) {
             thumbs.push({ url: addonImage, size: 0.18, position: 'bottom-left' });
           }
           imageOverride = thumbs.length > 0
@@ -473,9 +489,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     setYinghuaPrompt(styleId, value);
   }, [setYinghuaPrompt]);
 
-  const handleInpaintClick = useCallback((src: string, styleId: YinghuaStyleId) => {
+  const handleInpaintClick = useCallback((src: string, target: InpaintTarget) => {
     const openWorkspace = useInpaintStore.getState().openWorkspace;
-    openWorkspace({ url: src, type: 'yinghua', slotId: String(styleId), index: 0 });
+    openWorkspace({ ...target, url: src });
   }, []);
 
   return (
@@ -592,7 +608,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             style3Face={style3Face}
             onRun={run}
             onPromptChange={handlePromptChange}
-            onInpaintClick={(src) => handleInpaintClick(src, style.id)}
+            onInpaintClick={handleInpaintClick}
             onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
           />
         ))}

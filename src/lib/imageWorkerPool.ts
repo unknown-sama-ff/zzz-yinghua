@@ -36,12 +36,14 @@ interface CacheEntry {
 import { CACHE_TTL_MS, CACHE_PURGE_INTERVAL_MS, WORKER_TIMEOUT_MS } from './constants';
 const stitchCache = new Map<StitchKey, CacheEntry>();
 const embedCache = new Map<EmbedKey, CacheEntry>();
+const structureAnchorCache = new Map<string, CacheEntry>();
 
 // Purge expired entries every 60 s; Map iteration is O(n) but n is tiny.
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of stitchCache) if (now - v.ts > CACHE_TTL_MS) stitchCache.delete(k);
   for (const [k, v] of embedCache)   if (now - v.ts > CACHE_TTL_MS) embedCache.delete(k);
+  for (const [k, v] of structureAnchorCache) if (now - v.ts > CACHE_TTL_MS) structureAnchorCache.delete(k);
 }, CACHE_PURGE_INTERVAL_MS);
 
 // ── Worker reference ──────────────────────────────────────────────────────────
@@ -279,6 +281,52 @@ async function fallbackEmbed(
   });
 }
 
+/**
+ * Extract the left/front third of a conventional horizontal character
+ * three-view. Portrait and square references are deliberately skipped: adding
+ * the same file twice would not give the edit model a second structural cue.
+ */
+async function fallbackExtractFrontViewStructureAnchor(source: string): Promise<string | null> {
+  const image = await loadImg(source);
+  if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth / image.naturalHeight < 1.45) {
+    return null;
+  }
+
+  // Module 01 creates front / side / back views from left to right, followed by
+  // a face close-up. Keep the complete left view with a small outer margin so
+  // hands, shoes, and long hair at the silhouette edge remain intact.
+  const sourceX = Math.round(image.naturalWidth * 0.015);
+  const sourceWidth = Math.round(image.naturalWidth * 0.28);
+  if (sourceWidth < 32) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = sourceWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.drawImage(
+    image,
+    sourceX,
+    0,
+    Math.min(sourceWidth, image.naturalWidth - sourceX),
+    image.naturalHeight,
+    0,
+    0,
+    sourceWidth,
+    image.naturalHeight,
+  );
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return reject(new Error('canvas.toBlob returned null'));
+        blobToDataUrl(blob).then(resolve, reject);
+      },
+      'image/png',
+    );
+  });
+}
+
 function loadImg(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -351,4 +399,22 @@ export async function embedThumbnails(
     }
     return fallbackEmbed(base, thumbs);
   });
+}
+
+/**
+ * Prepare a distinct front-view anatomy reference from a conventional module-01
+ * horizontal three-view. A failure or an unrecognised layout is non-fatal: the
+ * caller simply keeps the original two-reference edit path.
+ */
+export async function extractFrontViewStructureAnchor(source: string): Promise<string | null> {
+  const key = `front-structure-v1:${source}`;
+  try {
+    return await cachedOrRun(structureAnchorCache, key, async () => {
+      const anchor = await fallbackExtractFrontViewStructureAnchor(source);
+      if (!anchor) throw new Error('reference is not a horizontal three-view');
+      return anchor;
+    });
+  } catch {
+    return null;
+  }
 }
