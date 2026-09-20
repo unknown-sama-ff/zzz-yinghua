@@ -51,6 +51,31 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'UNKNOWN';
 
+export interface FreeCreateReference {
+  id: string;
+  dataUrl: string;
+  name: string;
+}
+
+export interface FreeCreateUserMessage {
+  id: string;
+  role: 'user';
+  prompt: string;
+  references: FreeCreateReference[];
+  status: 'sending' | 'complete' | 'error';
+  error?: string;
+  createdAt: number;
+}
+
+export interface FreeCreateAssistantMessage {
+  id: string;
+  role: 'assistant';
+  images: string[];
+  createdAt: number;
+}
+
+export type FreeCreateMessage = FreeCreateUserMessage | FreeCreateAssistantMessage;
+
 /** A semantic palette extracted from the uploaded image. */
 export interface Palette {
   dominant: string;

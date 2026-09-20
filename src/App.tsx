@@ -9,6 +9,8 @@ import { YinghuaViewer } from './components/YinghuaViewer';
 import { PosterPanel } from './components/PosterPanel';
 import { InpaintWorkspace } from './components/InpaintWorkspace';
 import { FloatingInpaintButton } from './components/FloatingInpaintButton';
+import { FreeCreateButton } from './components/FreeCreateButton';
+import { FreeCreateWindow } from './components/FreeCreateWindow';
 import { InpaintTargetSelector } from './components/InpaintTargetSelector';
 import { Toast } from './components/Toast';
 import { CursorEffects } from './components/CursorEffects';
@@ -77,6 +79,8 @@ export default function App() {
         </ErrorBoundary>
       </main>
 
+      <FreeCreateButton />
+      <FreeCreateWindow />
       <FloatingInpaintButton />
       <InpaintWorkspace />
 
