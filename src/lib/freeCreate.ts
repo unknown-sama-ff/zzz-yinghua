@@ -1,4 +1,3 @@
-import { maxInputImagesForModel } from './gptImageCapabilities';
 import { parseDataUrl } from './validation';
 import type { FreeCreateReference, GenRequest } from '../types';
 
@@ -16,10 +15,11 @@ interface BuildFreeCreateRequestInput {
   useServerPreset: boolean;
 }
 
-export function maxFreeCreateReferenceImages(model: string, hasContextImage: boolean): number {
-  const maxInputs = maxInputImagesForModel('gpt-image', model);
-  return hasContextImage ? Math.max(0, maxInputs - 1) : maxInputs;
-}
+/**
+ * References one free-creation turn may attach. Fixed rather than derived from the
+ * model table: the server applies its own free-creation ceiling for these requests.
+ */
+export const MAX_FREE_CREATE_REFERENCES = 16;
 
 export function buildFreeCreateRequest({
   prompt,
@@ -28,9 +28,8 @@ export function buildFreeCreateRequest({
   credentials,
   useServerPreset,
 }: BuildFreeCreateRequestInput): GenRequest {
-  const maxReferences = maxFreeCreateReferenceImages(credentials.model, Boolean(contextImageUrl));
-  if (references.length > maxReferences) {
-    throw new Error(`当前模型本轮最多支持 ${maxReferences} 张参考图`);
+  if (references.length > MAX_FREE_CREATE_REFERENCES) {
+    throw new Error(`单轮最多支持 ${MAX_FREE_CREATE_REFERENCES} 张参考图`);
   }
 
   const primaryImage = contextImageUrl ?? references[0]?.dataUrl;
@@ -41,6 +40,7 @@ export function buildFreeCreateRequest({
     provider: 'gpt-image',
     prompt,
     n: 1,
+    freeCreate: true,
     ...(primary ? { imageBase64: primary.base64, imageMime: primary.mime } : {}),
     ...(additionalReferences.length > 0
       ? {

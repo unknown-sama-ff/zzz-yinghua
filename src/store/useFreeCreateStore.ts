@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import type {
   FreeCreateAssistantMessage,
-  FreeCreateMessage,
   FreeCreateReference,
+  FreeCreateSession,
   FreeCreateUserMessage,
 } from '../types';
 
@@ -13,15 +13,14 @@ export interface FreeCreateGeneration {
 
 interface FreeCreateState {
   isOpen: boolean;
-  sessionId: string;
-  messages: FreeCreateMessage[];
-  draft: string;
-  draftReferences: FreeCreateReference[];
-  contextImageUrl: string | null;
+  /** Every conversation this page visit has produced, newest last. */
+  sessions: FreeCreateSession[];
+  activeSessionId: string;
   isGenerating: boolean;
   open: () => void;
   close: () => void;
   newConversation: () => void;
+  selectSession: (id: string) => void;
   setDraft: (draft: string) => void;
   addDraftReferences: (references: FreeCreateReference[]) => void;
   removeDraftReference: (id: string) => void;
@@ -35,95 +34,159 @@ function createId(): string {
   return crypto.randomUUID();
 }
 
-function createSessionState(isOpen = false) {
+function createSession(): FreeCreateSession {
   return {
-    isOpen,
-    sessionId: createId(),
-    messages: [] as FreeCreateMessage[],
+    id: createId(),
+    messages: [],
     draft: '',
-    draftReferences: [] as FreeCreateReference[],
-    contextImageUrl: null as string | null,
-    isGenerating: false,
+    draftReferences: [],
+    contextImageUrl: null,
+    createdAt: Date.now(),
   };
 }
 
-export const useFreeCreateStore = create<FreeCreateState>((set, get) => ({
-  ...createSessionState(),
+/** Apply a patch to one session, leaving the others untouched. */
+function patchSession(
+  sessions: FreeCreateSession[],
+  id: string,
+  patch: (session: FreeCreateSession) => FreeCreateSession,
+): FreeCreateSession[] {
+  return sessions.map((session) => (session.id === id ? patch(session) : session));
+}
 
-  open: () => set({ isOpen: true }),
-  close: () => set({ isOpen: false }),
-  newConversation: () => set(createSessionState(get().isOpen)),
-  setDraft: (draft) => set({ draft }),
-  addDraftReferences: (references) =>
-    set((state) => ({ draftReferences: [...state.draftReferences, ...references] })),
-  removeDraftReference: (id) =>
-    set((state) => ({
-      draftReferences: state.draftReferences.filter((reference) => reference.id !== id),
-    })),
-  selectContextImage: (contextImageUrl) => set({ contextImageUrl }),
+export function activeSession(state: {
+  sessions: FreeCreateSession[];
+  activeSessionId: string;
+}): FreeCreateSession {
+  return state.sessions.find((session) => session.id === state.activeSessionId) ?? state.sessions[0];
+}
 
-  beginGeneration: (prompt, references) => {
-    const state = get();
-    if (state.isGenerating) return null;
+export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
+  const initial = createSession();
 
-    const generation: FreeCreateGeneration = {
-      sessionId: state.sessionId,
-      userMessageId: createId(),
-    };
-    const message: FreeCreateUserMessage = {
-      id: generation.userMessageId,
-      role: 'user',
-      prompt,
-      references,
-      status: 'sending',
-      createdAt: Date.now(),
-    };
+  return {
+    isOpen: false,
+    sessions: [initial],
+    activeSessionId: initial.id,
+    isGenerating: false,
 
-    set((current) => {
-      if (current.sessionId !== generation.sessionId || current.isGenerating) return current;
-      return {
-        messages: [...current.messages, message],
-        draft: '',
-        draftReferences: [],
-        isGenerating: true,
+    open: () => set({ isOpen: true }),
+    close: () => set({ isOpen: false }),
+
+    // Keep the finished conversation in memory so the user can switch back to it;
+    // only a page refresh discards them.
+    newConversation: () => {
+      const current = activeSession(get());
+      if (current && current.messages.length === 0) return;
+      const next = createSession();
+      set((state) => ({
+        sessions: [...state.sessions, next],
+        activeSessionId: next.id,
+      }));
+    },
+
+    selectSession: (id) => {
+      if (get().isGenerating) return;
+      if (!get().sessions.some((session) => session.id === id)) return;
+      set({ activeSessionId: id });
+    },
+
+    setDraft: (draft) =>
+      set((state) => ({
+        sessions: patchSession(state.sessions, state.activeSessionId, (session) => ({ ...session, draft })),
+      })),
+
+    addDraftReferences: (references) =>
+      set((state) => ({
+        sessions: patchSession(state.sessions, state.activeSessionId, (session) => ({
+          ...session,
+          draftReferences: [...session.draftReferences, ...references],
+        })),
+      })),
+
+    removeDraftReference: (id) =>
+      set((state) => ({
+        sessions: patchSession(state.sessions, state.activeSessionId, (session) => ({
+          ...session,
+          draftReferences: session.draftReferences.filter((reference) => reference.id !== id),
+        })),
+      })),
+
+    selectContextImage: (contextImageUrl) =>
+      set((state) => ({
+        sessions: patchSession(state.sessions, state.activeSessionId, (session) => ({
+          ...session,
+          contextImageUrl,
+        })),
+      })),
+
+    beginGeneration: (prompt, references) => {
+      const state = get();
+      if (state.isGenerating) return null;
+
+      const generation: FreeCreateGeneration = {
+        sessionId: state.activeSessionId,
+        userMessageId: createId(),
       };
-    });
-    return generation;
-  },
-
-  completeGeneration: (generation, images) =>
-    set((state) => {
-      if (state.sessionId !== generation.sessionId) return state;
-      const response: FreeCreateAssistantMessage = {
-        id: createId(),
-        role: 'assistant',
-        images,
+      const message: FreeCreateUserMessage = {
+        id: generation.userMessageId,
+        role: 'user',
+        prompt,
+        references,
+        status: 'sending',
         createdAt: Date.now(),
       };
-      return {
-        messages: [
-          ...state.messages.map((message) =>
+
+      set((current) => ({
+        sessions: patchSession(current.sessions, generation.sessionId, (session) => ({
+          ...session,
+          messages: [...session.messages, message],
+          draft: '',
+          draftReferences: [],
+        })),
+        isGenerating: true,
+      }));
+      return generation;
+    },
+
+    completeGeneration: (generation, images) =>
+      set((state) => {
+        const response: FreeCreateAssistantMessage = {
+          id: createId(),
+          role: 'assistant',
+          images,
+          createdAt: Date.now(),
+        };
+        return {
+          // Route the result to the session that requested it, even if the user
+          // switched conversations while it was in flight.
+          sessions: patchSession(state.sessions, generation.sessionId, (session) => ({
+            ...session,
+            messages: [
+              ...session.messages.map((message) =>
+                message.id === generation.userMessageId && message.role === 'user'
+                  ? { ...message, status: 'complete' as const }
+                  : message,
+              ),
+              response,
+            ],
+            contextImageUrl: images[0] ?? session.contextImageUrl,
+          })),
+          isGenerating: false,
+        };
+      }),
+
+    failGeneration: (generation, error) =>
+      set((state) => ({
+        sessions: patchSession(state.sessions, generation.sessionId, (session) => ({
+          ...session,
+          messages: session.messages.map((message) =>
             message.id === generation.userMessageId && message.role === 'user'
-              ? { ...message, status: 'complete' as const }
+              ? { ...message, status: 'error' as const, error }
               : message,
           ),
-          response,
-        ],
-        contextImageUrl: images[0] ?? state.contextImageUrl,
+        })),
         isGenerating: false,
-      };
-    }),
-
-  failGeneration: (generation, error) =>
-    set((state) => {
-      if (state.sessionId !== generation.sessionId) return state;
-      return {
-        messages: state.messages.map((message) =>
-          message.id === generation.userMessageId && message.role === 'user'
-            ? { ...message, status: 'error' as const, error }
-            : message,
-        ),
-        isGenerating: false,
-      };
-    }),
-}));
+      })),
+  };
+});

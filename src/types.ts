@@ -27,6 +27,8 @@ export interface GenRequest {
   customBodyTemplate?: string;
   /** Opaque token that coalesces retries of one logical generation. */
   idempotencyKey?: string;
+  /** Free-creation chat turns carry their own input-image ceiling, not the model table's. */
+  freeCreate?: boolean;
 }
 
 /** Normalized successful result. `images` are URLs or data URIs. */
@@ -75,6 +77,16 @@ export interface FreeCreateAssistantMessage {
 }
 
 export type FreeCreateMessage = FreeCreateUserMessage | FreeCreateAssistantMessage;
+
+/** One free-creation conversation. Lives in memory only; a page refresh clears it. */
+export interface FreeCreateSession {
+  id: string;
+  messages: FreeCreateMessage[];
+  draft: string;
+  draftReferences: FreeCreateReference[];
+  contextImageUrl: string | null;
+  createdAt: number;
+}
 
 /** A semantic palette extracted from the uploaded image. */
 export interface Palette {

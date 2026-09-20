@@ -62,7 +62,7 @@ import { GalleryStorageError, deleteGalleryItem, listGallery, saveGalleryItem } 
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
 loadEnv();
 
-import { TASK_TTL_MS, MAX_UPLOAD_BYTES, MAX_FETCH_BYTES } from './lib/constants.js';
+import { TASK_TTL_MS, MAX_UPLOAD_BYTES, MAX_FETCH_BYTES, FREE_CREATE_MAX_INPUT_IMAGES } from './lib/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -705,14 +705,21 @@ async function executeGeneration(budgetIdentity, body, idempotencyKey) {
       const model = body.useServerPreset === true
         ? (process.env.GPT_IMAGE_MODEL || 'gpt-image-2')
         : body.model;
-      const maxInputImages = maxInputImagesForGptModel(model);
+      // Free creation is a user-driven chat: it allows its own reference ceiling
+      // instead of the per-model table the yinghua pipeline relies on.
+      const isFreeCreate = body.freeCreate === true || body.freeCreate === 'true';
+      const maxInputImages = isFreeCreate
+        ? FREE_CREATE_MAX_INPUT_IMAGES
+        : maxInputImagesForGptModel(model);
       if (1 + body.refImages.length > maxInputImages) {
         return {
           status: 400,
           body: {
             ok: false,
             code: 'INVALID_INPUT',
-            message: `模型 ${model || '当前配置'} 最多支持 ${maxInputImages} 张输入图（包含主图）`,
+            message: isFreeCreate
+              ? `自由创作单轮最多支持 ${maxInputImages} 张输入图（包含主图）`
+              : `模型 ${model || '当前配置'} 最多支持 ${maxInputImages} 张输入图（包含主图）`,
           },
         };
       }
