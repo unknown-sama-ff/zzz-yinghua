@@ -73,6 +73,8 @@ export interface FreeCreateAssistantMessage {
   id: string;
   role: 'assistant';
   images: string[];
+  /** The user instruction that produced these images — carried for gallery saves. */
+  prompt: string;
   createdAt: number;
 }
 

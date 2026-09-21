@@ -4,10 +4,12 @@ import { buildFreeCreateRequest, MAX_FREE_CREATE_REFERENCES } from '../lib/freeC
 import { downloadImage } from '../lib/download';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
 import { activeSession, useFreeCreateStore } from '../store/useFreeCreateStore';
+import { useIdentityStore } from '../store/useIdentityStore';
 import { useInpaintStore } from '../store/useInpaintStore';
 import { useProviderStore } from '../store/useProviderStore';
 import { useToast } from '../store/useToast';
 import { useViewerStore } from '../store/useViewerStore';
+import { GallerySaveButton } from './GallerySaveButton';
 import type { FreeCreateReference } from '../types';
 
 export const FreeCreateWindow = memo(function FreeCreateWindow() {
@@ -28,6 +30,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
   const failGeneration = useFreeCreateStore((state) => state.failGeneration);
   const gptCredentials = useProviderStore((state) => state.creds['gpt-image']);
   const freeloadEnabled = useProviderStore((state) => state.freeloadEnabled);
+  const characterName = useIdentityStore((state) => state.characterName);
   const showError = useToast((state) => state.show);
   const isWorkspaceOpen = useInpaintStore((state) => state.isWorkspaceOpen);
   const viewerFullscreen = useViewerStore((state) => state.viewerFullscreen);
@@ -279,6 +282,15 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
                         {selected ? '当前上下文' : '历史结果'}
                       </span>
                       <span className="flex gap-1.5">
+                        <GallerySaveButton
+                          saveInfo={{
+                            imageUrl: image,
+                            style: '自由创作',
+                            characterName,
+                            prompt: message.prompt,
+                            provider: 'gpt-image',
+                          }}
+                        />
                         <button
                           type="button"
                           onClick={() => selectContextImage(image)}

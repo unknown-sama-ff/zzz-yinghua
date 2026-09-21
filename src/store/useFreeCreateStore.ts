@@ -151,10 +151,15 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
 
     completeGeneration: (generation, images) =>
       set((state) => {
+        const requestingSession = state.sessions.find((session) => session.id === generation.sessionId);
+        const requestingMessage = requestingSession?.messages.find(
+          (message) => message.id === generation.userMessageId && message.role === 'user',
+        );
         const response: FreeCreateAssistantMessage = {
           id: createId(),
           role: 'assistant',
           images,
+          prompt: requestingMessage?.role === 'user' ? requestingMessage.prompt : '',
           createdAt: Date.now(),
         };
         return {
