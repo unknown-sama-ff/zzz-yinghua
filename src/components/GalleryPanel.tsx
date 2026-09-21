@@ -25,6 +25,10 @@ interface GalleryRow {
   provider: string;
 }
 
+// The panel advertises room for ~800 saved pieces (see caption below); 1000
+// comfortably covers that in one request without a pagination round-trip.
+const GALLERY_FETCH_LIMIT = 1000;
+
 async function fetchGallery(): Promise<GalleryRow[]> {
   const { data, error } = await supabase
     .from('gallery')
@@ -32,7 +36,7 @@ async function fetchGallery(): Promise<GalleryRow[]> {
     // delete_token_hash, so selecting '*' would fail permission checks.
     .select('id, created_at, image_url, style, character_name, prompt, provider')
     .order('created_at', { ascending: false })
-    .limit(20);
+    .limit(GALLERY_FETCH_LIMIT);
   if (error) throw error;
   return (data as GalleryRow[]) ?? [];
 }
@@ -117,7 +121,11 @@ export const GalleryPanel = memo(function GalleryPanel() {
       )}
 
       {rows.length > 0 && (
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        // max-h caps the panel to roughly 5 rows at the 4-column breakpoint;
+        // overflow-y-auto scrolls internally instead of growing the page to
+        // fit every fetched row.
+        <div className="mt-3 max-h-[900px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {rows.map((row) => (
             <div
               key={row.id}
@@ -146,6 +154,7 @@ export const GalleryPanel = memo(function GalleryPanel() {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
 
