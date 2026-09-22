@@ -25,6 +25,7 @@ interface FreeCreateState {
   addDraftReferences: (references: FreeCreateReference[]) => void;
   removeDraftReference: (id: string) => void;
   selectContextImage: (imageUrl: string) => void;
+  setImageCount: (count: number) => void;
   beginGeneration: (prompt: string, references: FreeCreateReference[]) => FreeCreateGeneration | null;
   completeGeneration: (generation: FreeCreateGeneration, images: string[]) => void;
   failGeneration: (generation: FreeCreateGeneration, error: string) => void;
@@ -41,6 +42,7 @@ function createSession(): FreeCreateSession {
     draft: '',
     draftReferences: [],
     contextImageUrl: null,
+    imageCount: 1,
     createdAt: Date.now(),
   };
 }
@@ -117,6 +119,14 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
         sessions: patchSession(state.sessions, state.activeSessionId, (session) => ({
           ...session,
           contextImageUrl,
+        })),
+      })),
+
+    setImageCount: (count) =>
+      set((state) => ({
+        sessions: patchSession(state.sessions, state.activeSessionId, (session) => ({
+          ...session,
+          imageCount: Math.max(1, Math.min(5, Math.round(count))),
         })),
       })),
 

@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { ApiError, generate } from '../lib/apiClient';
-import { buildFreeCreateRequest, MAX_FREE_CREATE_REFERENCES } from '../lib/freeCreate';
+import { buildFreeCreateRequest, MAX_FREE_CREATE_IMAGES, MAX_FREE_CREATE_REFERENCES, MIN_FREE_CREATE_IMAGES } from '../lib/freeCreate';
 import { downloadImage } from '../lib/download';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
 import { activeSession, useFreeCreateStore } from '../store/useFreeCreateStore';
@@ -25,6 +25,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
   const addDraftReferences = useFreeCreateStore((state) => state.addDraftReferences);
   const removeDraftReference = useFreeCreateStore((state) => state.removeDraftReference);
   const selectContextImage = useFreeCreateStore((state) => state.selectContextImage);
+  const setImageCount = useFreeCreateStore((state) => state.setImageCount);
   const beginGeneration = useFreeCreateStore((state) => state.beginGeneration);
   const completeGeneration = useFreeCreateStore((state) => state.completeGeneration);
   const failGeneration = useFreeCreateStore((state) => state.failGeneration);
@@ -39,7 +40,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const shouldAvoidFullscreen = isWorkspaceOpen || viewerFullscreen;
-  const { draft, draftReferences, messages, contextImageUrl } = session;
+  const { draft, draftReferences, messages, contextImageUrl, imageCount } = session;
 
   useEffect(() => {
     if (!isOpen || shouldAvoidFullscreen) return;
@@ -114,10 +115,15 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
         references: draftReferences,
         credentials: gptCredentials,
         useServerPreset: freeloadEnabled,
+        imageCount,
       });
     } catch (error) {
       showError(error instanceof Error ? error.message : '参考图准备失败');
       return;
+    }
+
+    if (freeloadEnabled && imageCount > 1) {
+      showError('服务端预设通道每轮固定生成 1 张，填写自己的 API Key 后可生成多张');
     }
 
     const generation = beginGeneration(prompt, draftReferences);
@@ -131,7 +137,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
       failGeneration(generation, message);
       showError(message);
     }
-  }, [beginGeneration, completeGeneration, contextImageUrl, draft, draftReferences, failGeneration, freeloadEnabled, gptCredentials, showError]);
+  }, [beginGeneration, completeGeneration, contextImageUrl, draft, draftReferences, failGeneration, freeloadEnabled, gptCredentials, imageCount, showError]);
 
   if (!isOpen || shouldAvoidFullscreen) return null;
 
@@ -343,6 +349,32 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
         <div className="mb-2 flex items-center justify-between gap-3 font-mono text-xs text-zzz-text/45">
           <span>{contextImageUrl ? '将基于当前成图继续修改' : '可直接文字创作或添加参考图'}</span>
           <span>参考图 {draftReferences.length}/{MAX_FREE_CREATE_REFERENCES}</span>
+        </div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="font-mono text-xs text-zzz-text/45">
+            生成数量{freeloadEnabled ? '（预设通道固定 1 张）' : ''}
+          </span>
+          <div className="flex items-center gap-2 rounded-full border border-zzz-text/18 bg-zzz-ink/50 px-1 py-1">
+            <button
+              type="button"
+              onClick={() => setImageCount(imageCount - 1)}
+              disabled={isGenerating || imageCount <= MIN_FREE_CREATE_IMAGES}
+              aria-label="减少生成数量"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-zzz-text/80 transition hover:bg-zzz-text/10 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              −
+            </button>
+            <span className="w-4 text-center font-mono text-xs text-zzz-text">{imageCount}</span>
+            <button
+              type="button"
+              onClick={() => setImageCount(imageCount + 1)}
+              disabled={isGenerating || imageCount >= MAX_FREE_CREATE_IMAGES}
+              aria-label="增加生成数量"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-zzz-text/80 transition hover:bg-zzz-text/10 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              +
+            </button>
+          </div>
         </div>
         <div className="flex items-end gap-2 rounded-2xl border border-zzz-text/18 bg-zzz-ink/55 p-2 shadow-inner">
           <input

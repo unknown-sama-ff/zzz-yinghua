@@ -13,6 +13,8 @@ interface BuildFreeCreateRequestInput {
   references: FreeCreateReference[];
   credentials: GptImageCredentials;
   useServerPreset: boolean;
+  /** How many images to generate this turn (1–5). Server preset forces this to 1. */
+  imageCount: number;
 }
 
 /**
@@ -21,12 +23,17 @@ interface BuildFreeCreateRequestInput {
  */
 export const MAX_FREE_CREATE_REFERENCES = 16;
 
+/** Images a single free-creation turn may generate. */
+export const MIN_FREE_CREATE_IMAGES = 1;
+export const MAX_FREE_CREATE_IMAGES = 5;
+
 export function buildFreeCreateRequest({
   prompt,
   contextImageUrl,
   references,
   credentials,
   useServerPreset,
+  imageCount,
 }: BuildFreeCreateRequestInput): GenRequest {
   if (references.length > MAX_FREE_CREATE_REFERENCES) {
     throw new Error(`单轮最多支持 ${MAX_FREE_CREATE_REFERENCES} 张参考图`);
@@ -35,11 +42,15 @@ export function buildFreeCreateRequest({
   const primaryImage = contextImageUrl ?? references[0]?.dataUrl;
   const additionalReferences = contextImageUrl ? references : references.slice(1);
   const primary = primaryImage ? parseDataUrl(primaryImage) : undefined;
+  const clampedCount = Math.max(MIN_FREE_CREATE_IMAGES, Math.min(MAX_FREE_CREATE_IMAGES, Math.round(imageCount)));
 
   return {
     provider: 'gpt-image',
     prompt,
-    n: 1,
+    // The server preset path forces n:1 server-side regardless of what's sent
+    // (see server/providers.js capN) to protect the shared daily budget — a
+    // self-supplied key is required to actually generate more than one.
+    n: useServerPreset ? 1 : clampedCount,
     freeCreate: true,
     ...(primary ? { imageBase64: primary.base64, imageMime: primary.mime } : {}),
     ...(additionalReferences.length > 0

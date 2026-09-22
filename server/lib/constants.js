@@ -37,7 +37,7 @@ export const MAX_INPUT_PIXELS = 64_000_000;
 export const MAX_FETCH_BYTES = 20 * 1024 * 1024;
 
 /** Max images a single generate request may ask an upstream for. */
-export const MAX_GENERATE_N = 4;
+export const MAX_GENERATE_N = 5;
 
 /**
  * Max input images (primary + references) one free-creation turn may send.

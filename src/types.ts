@@ -87,6 +87,8 @@ export interface FreeCreateSession {
   draft: string;
   draftReferences: FreeCreateReference[];
   contextImageUrl: string | null;
+  /** How many images the next turn should generate (1–5). Sticky across turns. */
+  imageCount: number;
   createdAt: number;
 }
 
