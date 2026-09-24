@@ -1,5 +1,6 @@
 import { useProviderStore } from '../store/useProviderStore';
 import { useUploadStore } from '../store/useUploadStore';
+import { gptImageSizeForAspectRatio } from '../lib/gptImageCapabilities';
 import { parseDataUrl } from '../lib/validation';
 import type { GenRequest } from '../types';
 
@@ -49,12 +50,7 @@ export function useBuildRequest() {
     if (provider === 'gpt-image') {
       // gpt-image prefers size; fall back to aspectRatio if size not provided
       if (!size && aspectRatio) {
-        // Map aspect ratios to gpt-image supported sizes
-        if (aspectRatio === '16:9') size = '1536x864';
-        else if (aspectRatio === '9:16') size = '864x1536';
-        else if (aspectRatio === '4:3') size = '1536x1024';
-        else if (aspectRatio === '3:4') size = '1024x1536';
-        else size = '1024x1024'; // 1:1 default
+        size = gptImageSizeForAspectRatio(aspectRatio);
       }
     }
 

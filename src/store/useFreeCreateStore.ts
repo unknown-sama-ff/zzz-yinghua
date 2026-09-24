@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { DEFAULT_FREE_CREATE_ASPECT_RATIO } from '../lib/freeCreate';
 import type {
   FreeCreateAssistantMessage,
   FreeCreateReference,
@@ -26,6 +27,7 @@ interface FreeCreateState {
   removeDraftReference: (id: string) => void;
   selectContextImage: (imageUrl: string) => void;
   setImageCount: (count: number) => void;
+  setAspectRatio: (aspectRatio: string) => void;
   beginGeneration: (prompt: string, references: FreeCreateReference[]) => FreeCreateGeneration | null;
   completeGeneration: (generation: FreeCreateGeneration, images: string[]) => void;
   failGeneration: (generation: FreeCreateGeneration, error: string) => void;
@@ -43,6 +45,7 @@ function createSession(): FreeCreateSession {
     draftReferences: [],
     contextImageUrl: null,
     imageCount: 1,
+    aspectRatio: DEFAULT_FREE_CREATE_ASPECT_RATIO,
     createdAt: Date.now(),
   };
 }
@@ -127,6 +130,14 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
         sessions: patchSession(state.sessions, state.activeSessionId, (session) => ({
           ...session,
           imageCount: Math.max(1, Math.min(5, Math.round(count))),
+        })),
+      })),
+
+    setAspectRatio: (aspectRatio) =>
+      set((state) => ({
+        sessions: patchSession(state.sessions, state.activeSessionId, (session) => ({
+          ...session,
+          aspectRatio,
         })),
       })),
 

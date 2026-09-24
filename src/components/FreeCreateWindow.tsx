@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { ApiError, generate } from '../lib/apiClient';
-import { buildFreeCreateRequest, MAX_FREE_CREATE_IMAGES, MAX_FREE_CREATE_REFERENCES, MIN_FREE_CREATE_IMAGES } from '../lib/freeCreate';
+import { buildFreeCreateRequest, FREE_CREATE_ASPECT_RATIOS, MAX_FREE_CREATE_IMAGES, MAX_FREE_CREATE_REFERENCES, MIN_FREE_CREATE_IMAGES } from '../lib/freeCreate';
 import { downloadImage } from '../lib/download';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
 import { activeSession, useFreeCreateStore } from '../store/useFreeCreateStore';
@@ -26,6 +26,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
   const removeDraftReference = useFreeCreateStore((state) => state.removeDraftReference);
   const selectContextImage = useFreeCreateStore((state) => state.selectContextImage);
   const setImageCount = useFreeCreateStore((state) => state.setImageCount);
+  const setAspectRatio = useFreeCreateStore((state) => state.setAspectRatio);
   const beginGeneration = useFreeCreateStore((state) => state.beginGeneration);
   const completeGeneration = useFreeCreateStore((state) => state.completeGeneration);
   const failGeneration = useFreeCreateStore((state) => state.failGeneration);
@@ -40,7 +41,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const shouldAvoidFullscreen = isWorkspaceOpen || viewerFullscreen;
-  const { draft, draftReferences, messages, contextImageUrl, imageCount } = session;
+  const { draft, draftReferences, messages, contextImageUrl, imageCount, aspectRatio } = session;
 
   useEffect(() => {
     if (!isOpen || shouldAvoidFullscreen) return;
@@ -116,6 +117,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
         credentials: gptCredentials,
         useServerPreset: freeloadEnabled,
         imageCount,
+        aspectRatio,
       });
     } catch (error) {
       showError(error instanceof Error ? error.message : '参考图准备失败');
@@ -349,6 +351,29 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
         <div className="mb-2 flex items-center justify-between gap-3 font-mono text-xs text-zzz-text/45">
           <span>{contextImageUrl ? '将基于当前成图继续修改' : '可直接文字创作或添加参考图'}</span>
           <span>参考图 {draftReferences.length}/{MAX_FREE_CREATE_REFERENCES}</span>
+        </div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="shrink-0 font-mono text-xs text-zzz-text/45">生成比例</span>
+          <div className="flex flex-wrap justify-end gap-1">
+            {FREE_CREATE_ASPECT_RATIOS.map((ratio) => {
+              const current = ratio === aspectRatio;
+              return (
+                <button
+                  key={ratio}
+                  type="button"
+                  disabled={isGenerating}
+                  onClick={() => setAspectRatio(ratio)}
+                  aria-pressed={current}
+                  data-active={current}
+                  className={`glass-btn px-2 py-1 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
+                    current ? 'text-zzz-primary' : 'text-zzz-text/60'
+                  }`}
+                >
+                  {ratio}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="mb-2 flex items-center justify-between gap-3">
           <span className="font-mono text-xs text-zzz-text/45">

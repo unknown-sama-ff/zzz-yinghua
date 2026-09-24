@@ -89,6 +89,8 @@ export interface FreeCreateSession {
   contextImageUrl: string | null;
   /** How many images the next turn should generate (1–5). Sticky across turns. */
   imageCount: number;
+  /** Output ratio for the next turn (e.g. '1:1', '16:9'). Sticky across turns. */
+  aspectRatio: string;
   createdAt: number;
 }
 

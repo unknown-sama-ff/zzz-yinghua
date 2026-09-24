@@ -1,3 +1,4 @@
+import { gptImageSizeForAspectRatio } from './gptImageCapabilities';
 import { parseDataUrl } from './validation';
 import type { FreeCreateReference, GenRequest } from '../types';
 
@@ -15,6 +16,8 @@ interface BuildFreeCreateRequestInput {
   useServerPreset: boolean;
   /** How many images to generate this turn (1–5). Server preset forces this to 1. */
   imageCount: number;
+  /** One of FREE_CREATE_ASPECT_RATIOS; converted to a pixel size before sending. */
+  aspectRatio: string;
 }
 
 /**
@@ -27,6 +30,10 @@ export const MAX_FREE_CREATE_REFERENCES = 16;
 export const MIN_FREE_CREATE_IMAGES = 1;
 export const MAX_FREE_CREATE_IMAGES = 5;
 
+/** Selectable output ratios. Converted to pixel sizes before the request goes out. */
+export const FREE_CREATE_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
+export const DEFAULT_FREE_CREATE_ASPECT_RATIO = '1:1';
+
 export function buildFreeCreateRequest({
   prompt,
   contextImageUrl,
@@ -34,6 +41,7 @@ export function buildFreeCreateRequest({
   credentials,
   useServerPreset,
   imageCount,
+  aspectRatio,
 }: BuildFreeCreateRequestInput): GenRequest {
   if (references.length > MAX_FREE_CREATE_REFERENCES) {
     throw new Error(`单轮最多支持 ${MAX_FREE_CREATE_REFERENCES} 张参考图`);
@@ -51,6 +59,10 @@ export function buildFreeCreateRequest({
     // (see server/providers.js capN) to protect the shared daily budget — a
     // self-supplied key is required to actually generate more than one.
     n: useServerPreset ? 1 : clampedCount,
+    // Send only `size`, never `aspectRatio`: the server forwards aspect_ratio and
+    // drops size when it sees one (server/providers.js), but the OpenAI images
+    // endpoint only understands size.
+    size: gptImageSizeForAspectRatio(aspectRatio),
     freeCreate: true,
     ...(primary ? { imageBase64: primary.base64, imageMime: primary.mime } : {}),
     ...(additionalReferences.length > 0
