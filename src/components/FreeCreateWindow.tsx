@@ -10,6 +10,7 @@ import { useProviderStore } from '../store/useProviderStore';
 import { useToast } from '../store/useToast';
 import { useViewerStore } from '../store/useViewerStore';
 import { GallerySaveButton } from './GallerySaveButton';
+import { ZoomButton } from './ImageLightbox';
 import type { FreeCreateReference } from '../types';
 
 export const FreeCreateWindow = memo(function FreeCreateWindow() {
@@ -271,7 +272,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
                 return (
                   <figure
                     key={`${message.id}-${index}`}
-                    className={`overflow-hidden rounded-xl border bg-black/20 ${selected ? 'border-zzz-primary shadow-[0_0_18px_color-mix(in_srgb,var(--zzz-primary)_36%,transparent)]' : 'border-zzz-text/16'}`}
+                    className={`relative overflow-hidden rounded-xl border bg-black/20 ${selected ? 'border-zzz-primary shadow-[0_0_18px_color-mix(in_srgb,var(--zzz-primary)_36%,transparent)]' : 'border-zzz-text/16'}`}
                   >
                     <button
                       type="button"
@@ -281,6 +282,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
                     >
                       <img src={image} alt={`自由创作结果 ${index + 1}`} className="max-h-72 w-full object-contain" loading="lazy" />
                     </button>
+                    <ZoomButton src={image} alt={`自由创作结果 ${index + 1}`} />
                     <figcaption className="flex items-center justify-between gap-2 border-t border-zzz-text/10 px-2 py-2">
                       <span className={`font-mono text-xs ${selected ? 'text-zzz-primary' : 'text-zzz-text/45'}`}>
                         {selected ? '当前上下文' : '历史结果'}

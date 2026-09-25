@@ -1,5 +1,6 @@
 import { downloadImage } from '../lib/download';
 import { GallerySaveButton, type GallerySaveInfo } from './GallerySaveButton';
+import { ZoomButton } from './ImageLightbox';
 import type { GenSlot, InpaintTarget } from '../types';
 import { memo } from 'react';
 
@@ -55,6 +56,7 @@ export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPic
             decoding="async"
             className={`w-full object-contain${imageClassName ? ` ${imageClassName}` : ''}`}
           />
+          <ZoomButton src={src} alt={`${downloadPrefix}-${i + 1}`} />
           <figcaption className="absolute bottom-0 right-0 flex gap-2 p-2 opacity-0 transition-opacity group-hover:opacity-100">
             {saveInfo && <GallerySaveButton key={saveInfo.imageUrl} saveInfo={saveInfo} />}
             {onPick && (

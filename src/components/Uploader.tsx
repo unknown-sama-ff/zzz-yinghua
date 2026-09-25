@@ -14,6 +14,7 @@ import { combineImagesSideBySide } from '../lib/combineImages';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
+import { ZoomButton } from './ImageLightbox';
 
 /** Image upload with drag/drop, validation, preview and palette extraction. */
 export const Uploader = memo(function Uploader() {
@@ -116,6 +117,7 @@ export const Uploader = memo(function Uploader() {
               className="h-full max-h-72 w-full object-contain"
               loading="lazy"
             />
+            <ZoomButton src={uploadedImage} alt={uploadedName ?? '已上传图片'} />
           </div>
           <div className="flex items-center justify-between">
             <span className="truncate font-mono text-xs text-zzz-text/50">{uploadedName}</span>
@@ -173,6 +175,10 @@ export const Uploader = memo(function Uploader() {
                       alt={`换装结果 ${costumeChangeHistory.length - i}`}
                       className={`w-full object-contain bg-zzz-ink/40 ${isActive ? 'rounded-md' : 'rounded-lg'}`}
                       loading="lazy"
+                    />
+                    <ZoomButton
+                      src={src}
+                      alt={`换装结果 ${costumeChangeHistory.length - i}`}
                     />
                     <div className="absolute bottom-0 right-0 flex gap-1 p-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                       <button

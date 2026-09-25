@@ -8,6 +8,7 @@ import {
 } from '../lib/galleryClient';
 import { formatTime } from '../lib/formatTime';
 import { SectionHeader } from './SectionHeader';
+import { ZoomButton } from './ImageLightbox';
 
 const TOKENS_KEY = 'yinghua_gallery_tokens';
 
@@ -30,14 +31,20 @@ function readTokens(): Record<string, string> {
  */
 const GalleryImage = memo(function GalleryImage({ url, alt }: { url: string; alt: string }) {
   const [failed, setFailed] = useState(false);
+  const proxied = galleryImageProxyUrl(url);
   return (
-    <img
-      src={failed ? galleryImageProxyUrl(url) : url}
-      alt={alt}
-      loading="lazy"
-      onError={() => setFailed(true)}
-      className="w-full object-contain"
-    />
+    <div className="relative">
+      <img
+        src={failed ? proxied : url}
+        alt={alt}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="w-full object-contain"
+      />
+      {/* Enlarge the URL this thumbnail actually resolved with, so visitors who
+          can't reach supabase directly get the proxied full image too. */}
+      <ZoomButton src={failed ? proxied : url} alt={alt} fallbackSrc={proxied} />
+    </div>
   );
 });
 
@@ -49,7 +56,6 @@ export const GalleryPanel = memo(function GalleryPanel() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<number | string | null>(null);
-  const [lightbox, setLightbox] = useState<string | null>(null);
   // Tokens are read fresh from localStorage on every render, so a work saved
   // after this panel already mounted is still deletable without a reload.
   const tokens = readTokens();
@@ -193,18 +199,6 @@ export const GalleryPanel = memo(function GalleryPanel() {
         </div>
       )}
 
-      {lightbox && (
-        <div
-          className="fixed inset-0 z-50 bg-black"
-          onClick={() => setLightbox(null)}
-        >
-          <img
-            src={lightbox}
-            alt="画廊大图"
-            className="h-full w-full object-contain"
-          />
-        </div>
-      )}
     </section>
   );
 });

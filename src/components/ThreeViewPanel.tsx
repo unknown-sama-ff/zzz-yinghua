@@ -12,6 +12,7 @@ import { extractPalette } from '../lib/colorExtract';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
+import { ZoomButton } from './ImageLightbox';
 import { memo } from 'react';
 
 type ViewKey = 'front' | 'side' | 'back';
@@ -41,6 +42,7 @@ const ViewSlot = memo(function ViewSlot({
             className="h-28 w-full bg-zzz-ink/40 object-contain"
             loading="lazy"
           />
+          <ZoomButton src={dataUrl} alt={label} compact />
           <button
             onClick={onClear}
             className="glass-btn absolute right-1 top-1 px-2 py-0.5 text-[10px] text-zzz-text/70"

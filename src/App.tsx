@@ -13,6 +13,7 @@ import { FreeCreateButton } from './components/FreeCreateButton';
 import { FreeCreateWindow } from './components/FreeCreateWindow';
 import { InpaintTargetSelector } from './components/InpaintTargetSelector';
 import { Toast } from './components/Toast';
+import { ImageLightbox } from './components/ImageLightbox';
 import { CursorEffects } from './components/CursorEffects';
 import { lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -87,6 +88,8 @@ export default function App() {
       <footer className="mx-auto max-w-6xl px-6 pb-8 text-center font-mono text-[11px] text-zzz-text/40">
         密钥仅存于服务端 · custom-url 出站经基础 SSRF 校验 · 切换特效程序化复刻
       </footer>
+
+      <ImageLightbox />
 
       {message && <Toast message={message} onClose={clear} />}
     </div>

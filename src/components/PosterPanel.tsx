@@ -10,6 +10,8 @@ import { YINGHUA_SIZE, splitName } from '../lib/prompts';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
+import { ZoomButton } from './ImageLightbox';
+import { useLightboxStore } from '../store/useLightboxStore';
 
 interface PosterVariant {
   id: string;
@@ -70,10 +72,12 @@ export const PosterPanel = memo(function PosterPanel() {
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [variant, setVariant] = useState<string>(POSTER_VARIANTS[1].id);
-  const [lightbox, setLightbox] = useState(false);
-  const [lightboxSrc, setLightboxSrc] = useState('');
+
+  const openLightbox = useLightboxStore((s) => s.open);
 
   const current = POSTER_VARIANTS.find((v) => v.id === variant) ?? POSTER_VARIANTS[0];
+  const referenceSrc = `/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.webp`;
+  const referenceThumbSrc = `/作者推荐/${current.label}_thumb.webp`;
   const dominant = palette?.dominant ?? '#b026ff';
   const accent = palette?.accent ?? '#ff2d9b';
   const prompt = fillPoster(current.template, characterName, dominant, accent, palette?.textTop, palette?.textTopBright, palette?.textBottom);
@@ -119,27 +123,35 @@ export const PosterPanel = memo(function PosterPanel() {
         ))}
       </div>
 
-      {/* Reference thumbnails — click to enlarge */}
+      {/* Reference thumbnails — click anywhere on one, or its 放大 button. */}
       <div className="mb-3 flex gap-2 overflow-hidden rounded-lg border border-zzz-text/10 p-2">
-        <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.webp`); setLightbox(true); }}>
+        <div
+          className="relative flex-1 cursor-pointer"
+          onClick={() => openLightbox(referenceSrc, `${current.label} 示例1`)}
+        >
           <img
             key={`${current.label}-1`}
-            src={`/作者推荐/${current.id === 'silhouette' ? '剪影版' : current.label}.webp`}
+            src={referenceSrc}
             alt={`${current.label} 示例1`}
             className="mx-auto max-w-xs w-full"
             data-no-inpaint
           />
+          <ZoomButton src={referenceSrc} alt={`${current.label} 示例1`} />
           <p className="text-center font-mono text-[10px] text-zzz-text/45">参考图1 · 点击放大</p>
         </div>
         {current.id === 'surprise' && (
-          <div className="flex-1 cursor-pointer" onClick={() => { setLightboxSrc(`/作者推荐/${current.label}_thumb.webp`); setLightbox(true); }}>
+          <div
+            className="relative flex-1 cursor-pointer"
+            onClick={() => openLightbox(referenceThumbSrc, `${current.label} 示例2`)}
+          >
             <img
               key={`${current.label}-2`}
-              src={`/作者推荐/${current.label}_thumb.webp`}
+              src={referenceThumbSrc}
               alt={`${current.label} 示例2`}
               className="mx-auto max-w-xs w-full"
               data-no-inpaint
             />
+            <ZoomButton src={referenceThumbSrc} alt={`${current.label} 示例2`} />
             <p className="text-center font-mono text-[10px] text-zzz-text/45">参考图2 · 点击放大</p>
           </div>
         )}
@@ -176,21 +188,6 @@ export const PosterPanel = memo(function PosterPanel() {
         }}
         inpaintMeta={{ type: 'poster' }}
       />
-
-      {/* Lightbox overlay */}
-      {lightbox && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setLightbox(false)}
-        >
-          <img
-            src={lightboxSrc}
-            alt={`${current.label} 示例`}
-            className="max-h-full max-w-full rounded-lg object-contain"
-            data-no-inpaint
-          />
-        </div>
-      )}
     </section>
   );
 });

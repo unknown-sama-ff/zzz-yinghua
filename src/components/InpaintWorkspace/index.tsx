@@ -4,6 +4,7 @@ import { useToast } from '../../store/useToast';
 import { ToolPanel } from './ToolPanel';
 import { CanvasEditor } from './CanvasEditor';
 import { PromptBar } from './PromptBar';
+import { ZoomButton } from '../ImageLightbox';
 import { canReplaceInpaintTarget, inpaintTargetLabel, replaceInpaintTarget } from '../../lib/inpaintTarget';
 
 export const InpaintWorkspace = memo(function InpaintWorkspace() {
@@ -99,13 +100,24 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
             const parentIndex = version.parentId
               ? versions.findIndex((candidate) => candidate.id === version.parentId)
               : -1;
+            const versionLabel = index === 0 ? '原图' : `编辑版本 ${index}`;
+            const pick = () => { if (!isGenerating) selectVersion(version.id); };
             return (
-              <button
+              // role=button rather than a real <button> because the 放大 control
+              // nests inside, and a button can't contain another button.
+              <div
                 key={version.id}
-                type="button"
-                disabled={isGenerating}
-                onClick={() => selectVersion(version.id)}
-                className={`flex min-w-36 max-w-52 shrink-0 items-center gap-2 rounded-lg border p-1.5 text-left transition-colors disabled:cursor-not-allowed ${
+                role="button"
+                tabIndex={isGenerating ? -1 : 0}
+                aria-pressed={isCurrent}
+                aria-disabled={isGenerating}
+                onClick={pick}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+                }}
+                className={`relative flex min-w-36 max-w-52 shrink-0 items-center gap-2 rounded-lg border p-1.5 text-left transition-colors ${
+                  isGenerating ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+                } ${
                   isCurrent
                     ? 'border-[var(--zzz-primary)] bg-[var(--zzz-primary)]/15 shadow-[0_0_12px_var(--zzz-primary)]/20'
                     : 'border-[var(--zzz-text)]/15 bg-black/20 hover:border-[var(--zzz-primary)]/55'
@@ -113,9 +125,10 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
               >
                 <img
                   src={version.url}
-                  alt={index === 0 ? '原图' : `编辑版本 ${index}`}
+                  alt={versionLabel}
                   className="h-10 w-12 rounded object-cover"
                 />
+                <ZoomButton src={version.url} alt={versionLabel} compact className="left-0.5 top-0.5" />
                 <span className="min-w-0 font-mono text-[10px] text-[var(--zzz-text)]/75">
                   <strong className="block truncate font-semibold text-[var(--zzz-text)]">
                     {index === 0 ? '原图' : `v${index}`}{parentIndex >= 0 && parentIndex !== index - 1 ? ` · 来自 v${parentIndex}` : ''}
@@ -124,7 +137,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
                     {version.instruction ?? '会话起点'}
                   </span>
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
