@@ -1,6 +1,11 @@
 import { useEffect, useState, memo } from 'react';
-import { supabase } from '../lib/supabase';
-import { deleteFromGallery } from '../lib/galleryClient';
+import {
+  deleteFromGallery,
+  galleryImageProxyUrl,
+  listGalleryPage,
+  GALLERY_PAGE_SIZE,
+  type GalleryRow,
+} from '../lib/galleryClient';
 import { formatTime } from '../lib/formatTime';
 import { SectionHeader } from './SectionHeader';
 
@@ -15,35 +20,32 @@ function readTokens(): Record<string, string> {
   }
 }
 
-interface GalleryRow {
-  id: number | string;
-  created_at: string;
-  image_url: string;
-  style: string;
-  character_name: string;
-  prompt: string;
-  provider: string;
-}
-
-// The panel advertises room for ~800 saved pieces (see caption below); 1000
-// comfortably covers that in one request without a pagination round-trip.
-const GALLERY_FETCH_LIMIT = 1000;
-
-async function fetchGallery(): Promise<GalleryRow[]> {
-  const { data, error } = await supabase
-    .from('gallery')
-    // Explicit column list — the anon RLS grant is column-scoped and excludes
-    // delete_token_hash, so selecting '*' would fail permission checks.
-    .select('id, created_at, image_url, style, character_name, prompt, provider')
-    .order('created_at', { ascending: false })
-    .limit(GALLERY_FETCH_LIMIT);
-  if (error) throw error;
-  return (data as GalleryRow[]) ?? [];
-}
+/**
+ * A gallery thumbnail that falls back to the backend image proxy.
+ *
+ * Images live on *.supabase.co, which some visitors can't reach. The direct URL
+ * is tried first so a healthy connection costs us no bandwidth; on error we
+ * switch to the proxy once. `failed` only ever flips false→true, so if the
+ * proxy fails too the browser shows a broken image instead of looping.
+ */
+const GalleryImage = memo(function GalleryImage({ url, alt }: { url: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <img
+      src={failed ? galleryImageProxyUrl(url) : url}
+      alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="w-full object-contain"
+    />
+  );
+});
 
 export const GalleryPanel = memo(function GalleryPanel() {
   const [rows, setRows] = useState<GalleryRow[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<number | string | null>(null);
@@ -57,13 +59,30 @@ export const GalleryPanel = memo(function GalleryPanel() {
     else setRefreshing(true);
     setError(null);
     try {
-      const data = await fetchGallery();
-      setRows(data);
+      const page = await listGalleryPage({ offset: 0 });
+      setRows(page.rows);
+      setHasMore(page.hasMore);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
       if (mode === 'initial') setLoading(false);
       else setRefreshing(false);
+    }
+  };
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const page = await listGalleryPage({ offset: rows.length });
+      // Append rather than replace; a concurrent save could shift rows, but a
+      // duplicate thumbnail is a far better failure than losing the page.
+      setRows((prev) => [...prev, ...page.rows]);
+      setHasMore(page.hasMore);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载更多失败');
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -113,7 +132,16 @@ export const GalleryPanel = memo(function GalleryPanel() {
       )}
 
       {error && (
-        <p className="mt-2 font-mono text-xs text-zzz-magenta">⚠ {error}</p>
+        <div className="mt-2 flex items-center gap-3">
+          <p className="font-mono text-xs text-zzz-magenta">⚠ {error}</p>
+          <button
+            onClick={() => void loadGallery('initial')}
+            disabled={loading || refreshing}
+            className="glass-btn px-2 py-1 font-mono text-[10px] text-zzz-text disabled:opacity-40"
+          >
+            重试
+          </button>
+        </div>
       )}
 
       {!loading && !error && rows.length === 0 && (
@@ -131,12 +159,7 @@ export const GalleryPanel = memo(function GalleryPanel() {
               key={row.id}
               className="group relative overflow-hidden rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03]"
             >
-              <img
-                src={row.image_url}
-                alt={row.style}
-                loading="lazy"
-                className="w-full object-contain"
-              />
+              <GalleryImage url={row.image_url} alt={row.style} />
               <div className="p-2 font-mono text-[10px] text-zzz-text/55 leading-relaxed">
                 <div className="text-zzz-primary/80 truncate">{row.style}</div>
                 {row.character_name && <div>角色：{row.character_name}</div>}
@@ -155,6 +178,18 @@ export const GalleryPanel = memo(function GalleryPanel() {
             </div>
           ))}
           </div>
+
+          {hasMore && (
+            <div className="mt-3 flex justify-center">
+              <button
+                onClick={() => void loadMore()}
+                disabled={loadingMore || refreshing}
+                className="glass-btn px-4 py-1.5 font-mono text-xs text-zzz-text disabled:opacity-40"
+              >
+                {loadingMore ? '加载中…' : `加载更多（每次 ${GALLERY_PAGE_SIZE} 张）`}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

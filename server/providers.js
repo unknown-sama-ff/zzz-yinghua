@@ -27,9 +27,13 @@ import {
 const IS_VERCEL = Boolean(process.env.VERCEL);
 
 /**
- * Clamp the per-request image count the client may ask the upstream for. The
- * server-preset budget is consumed per REQUEST, not per image, so an unbounded
- * `n` would let one request burn the operator's quota N× — cap it server-side.
+ * Clamp the per-request image count the client may ask the upstream for, so an
+ * arbitrarily large `n` can't reach the provider.
+ *
+ * Known tradeoff: the server-preset budget is consumed per REQUEST, not per
+ * image (see consumePresetBudget in lib/rateLimit.js), so a preset caller asking
+ * for MAX_GENERATE_N images spends that many upstream images against a single
+ * budget unit. Accepted deliberately — per-image accounting is a later decision.
  */
 function capN(req) {
   const n = Number(req.n);
@@ -185,7 +189,7 @@ async function seedream(req) {
   const body = {
     prompt: req.prompt,
     image: req.imageBase64,
-    n: req.useServerPreset === true ? 1 : capN(req),
+    n: capN(req),
     ...(model ? { model } : {}),
   };
   // Prefer aspectRatio when provided, fall back to size or default
@@ -270,7 +274,7 @@ async function gptImage(req) {
   }
   // Prefer aspectRatio when provided, otherwise use size
   const size = req.aspectRatio ? undefined : (req.size || '1024x1024');
-  const n = req.useServerPreset === true ? 1 : capN(req);
+  const n = capN(req);
   const root = base.replace(/\/$/, '');
 
   // With an input image → /images/edits as multipart/form-data so the upload
@@ -487,7 +491,7 @@ async function customUrl(req) {
     body = JSON.stringify({
       prompt: req.prompt,
       image: req.imageBase64,
-      n: req.useServerPreset === true ? 1 : capN(req),
+      n: capN(req),
       ...(req.model ? { model: req.model } : {}),
     });
   }

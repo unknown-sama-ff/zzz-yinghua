@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase';
+import { GALLERY_FETCH_TIMEOUT_MS } from './constants';
 
 export interface GallerySaveInput {
   imageBase64: string;
@@ -18,6 +19,73 @@ export interface GallerySaveResult {
   prompt: string;
   provider: string;
   created_at: string;
+}
+
+/** A saved gallery piece as returned by the read API. */
+export interface GalleryRow {
+  // The table's id may be UUID or BIGINT depending on how it was created
+  // (see Supabase-Schema.md), so both shapes have to be accepted.
+  id: number | string;
+  created_at: string;
+  image_url: string;
+  style: string;
+  character_name: string;
+  prompt: string;
+  provider: string;
+}
+
+export interface GalleryPage {
+  rows: GalleryRow[];
+  hasMore: boolean;
+}
+
+/** Rows fetched per gallery page. */
+export const GALLERY_PAGE_SIZE = 60;
+
+/**
+ * Read a page of the gallery through our own backend.
+ *
+ * This deliberately does not use @supabase/supabase-js from the browser: many
+ * visitors can't reach *.supabase.co reliably, and a stalled direct connection
+ * never rejects, which used to leave the panel loading indefinitely. The server
+ * reads the table with the service-role key instead, so the browser only ever
+ * talks to this origin — and the abort timeout guarantees a decidable outcome.
+ */
+export async function listGalleryPage(
+  { limit = GALLERY_PAGE_SIZE, offset = 0 }: { limit?: number; offset?: number } = {},
+): Promise<GalleryPage> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GALLERY_FETCH_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/gallery?limit=${limit}&offset=${offset}`, {
+      signal: controller.signal,
+    });
+  } catch (err) {
+    // An abort here means the deadline fired, not that the user navigated away.
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('网络超时 // 请检查网络后重试');
+    }
+    throw new Error('无法连接到服务器 // 请检查网络后重试');
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const data = await response.json().catch(() => ({})) as {
+    ok?: boolean;
+    rows?: GalleryRow[];
+    hasMore?: boolean;
+    message?: string;
+  };
+  if (!response.ok || !data.ok || !Array.isArray(data.rows)) {
+    throw new Error(data.message || '加载画廊失败');
+  }
+  return { rows: data.rows, hasMore: Boolean(data.hasMore) };
+}
+
+/** Route an image through our backend — used only when the direct load fails. */
+export function galleryImageProxyUrl(imageUrl: string): string {
+  return `${API_BASE}/proxy-image?url=${encodeURIComponent(imageUrl)}`;
 }
 
 /** Persist a generated piece to the gallery via the server (service-role key). */

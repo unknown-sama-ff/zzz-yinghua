@@ -124,10 +124,6 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
       return;
     }
 
-    if (freeloadEnabled && imageCount > 1) {
-      showError('服务端预设通道每轮固定生成 1 张，填写自己的 API Key 后可生成多张');
-    }
-
     const generation = beginGeneration(prompt, draftReferences);
     if (!generation) return;
 
@@ -376,9 +372,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
           </div>
         </div>
         <div className="mb-2 flex items-center justify-between gap-3">
-          <span className="font-mono text-xs text-zzz-text/45">
-            生成数量{freeloadEnabled ? '（预设通道固定 1 张）' : ''}
-          </span>
+          <span className="font-mono text-xs text-zzz-text/45">生成数量</span>
           <div className="flex items-center gap-2 rounded-full border border-zzz-text/18 bg-zzz-ink/50 px-1 py-1">
             <button
               type="button"

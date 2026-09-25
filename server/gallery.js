@@ -128,14 +128,18 @@ export async function saveGalleryItem({ imageBase64, style, characterName, promp
   return ensureOk({ data: row }, '画廊记录保存失败');
 }
 
-/** Read recent gallery rows, newest first. The mini program reads through this proxy. */
-export async function listGallery(limit = 20) {
+/**
+ * Read gallery rows, newest first. Both the web client and the mini program
+ * read through this proxy — browsers in some regions can't reach *.supabase.co
+ * reliably, and mini program request domains can't whitelist it at all.
+ */
+export async function listGallery(limit = 20, offset = 0) {
   const supabase = await db();
   const result = await supabase
     .from('gallery')
     .select('id, image_url, style, character_name, prompt, provider, created_at')
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(offset, offset + limit - 1);
   return ensureOk(result, '查询画廊失败');
 }
 

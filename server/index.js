@@ -161,6 +161,16 @@ const taskRateLimit = createRateLimiter({
   keyFn: (req) => requestKey(req) || 'unknown',
 });
 
+// One gallery page can fall back to the image proxy for every thumbnail at
+// once, which would blow the default 30/min budget and turn the gallery into a
+// wall of broken images. These are cheap byte-shuffling requests, so they get
+// their own much looser window.
+const imageRateLimit = createRateLimiter({
+  max: Number(process.env.IMAGE_RATE_LIMIT_MAX || 240),
+  windowMs: 60_000,
+  keyFn: (req) => requestKey(req) || 'unknown',
+});
+
 const VALID_PROVIDERS = new Set(['seedream', 'gpt-image', 'custom-url']);
 const VISITOR_COOKIE = 'yinghua_payment_visitor';
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_-]{16,128}$/;
@@ -969,7 +979,7 @@ app.post('/api/composite', rateLimit, async (req, res) => {
 // SSRF-guarded image proxy so the mini program can render remote images whose
 // hosts (supabase.co, provider CDNs) can never be whitelisted as mini program
 // request domains. Callers pass ?url=<https URL>.
-app.get('/api/proxy-image', rateLimit, async (req, res) => {
+app.get('/api/proxy-image', imageRateLimit, async (req, res) => {
   const url = typeof req.query.url === 'string' ? req.query.url : '';
   if (!url) return fail(res, 400, 'INVALID_INPUT', '缺少 url 参数');
   try {
@@ -1044,10 +1054,13 @@ app.delete('/api/gallery/:id', rateLimit, async (req, res) => {
 // Read the gallery through the service-role proxy (mini program request
 // domains can't include *.supabase.co, so it must read here instead).
 app.get('/api/gallery', rateLimit, async (req, res) => {
-  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 60));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
   try {
-    const rows = await listGallery(limit);
-    return res.json({ ok: true, rows });
+    const rows = await listGallery(limit, offset);
+    // A full page implies there may be more; the client stops paging once a
+    // short page comes back, so no extra count query is needed.
+    return res.json({ ok: true, rows, hasMore: rows.length === limit });
   } catch (error) {
     if (error instanceof GalleryStorageError) return fail(res, 503, 'PAYMENT_NOT_CONFIGURED', error.message);
     console.error('[gallery/list] unexpected error:', error?.message || error);
@@ -1060,9 +1073,17 @@ const distDir = path.resolve(__dirname, '..', 'dist');
 const hasDist = fs.existsSync(distDir);
 console.log(`[影画工坊] distDir=${distDir} exists=${hasDist}`);
 
+// index.html names hashed chunks, so a cached copy can outlive them and go on
+// requesting assets that no longer exist after a deploy. `send` only writes its
+// own Cache-Control when the header is unset, so setting it first wins.
+function sendIndexHtml(res) {
+  res.set('Cache-Control', 'no-cache');
+  return res.sendFile(path.join(distDir, 'index.html'));
+}
+
 // Root handler — explicit, no dependency on express.static index resolution.
 app.get('/', (_req, res) => {
-  if (hasDist) return res.sendFile(path.join(distDir, 'index.html'));
+  if (hasDist) return sendIndexHtml(res);
   res.type('html').send('<!DOCTYPE html><html><body><h1>影画工坊</h1><p>dist/ not found</p></body></html>');
 });
 
@@ -1070,19 +1091,26 @@ if (hasDist) {
   // Cache hashed assets (Vite chunks contain `-` in the filename) for 1 year,
   // and everything else for 1 hour. This avoids re-downloading unchanged JS/CSS.
   app.use((req, res, next) => {
-    if (req.path.match(/^\/assets\/.*-[a-f0-9]+\.(js|css)$/)) {
+    // Vite's chunk hashes are mixed-case base64-ish (e.g. `-B4iF47Cv`), not
+    // lowercase hex, so the character class has to cover both cases.
+    if (req.path.match(/^\/assets\/.*-[A-Za-z0-9_-]+\.(js|css)$/)) {
       res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (req.path === '/index.html') {
+      res.set('Cache-Control', 'no-cache');
     } else if (req.path.match(/\.(js|css|woff2|png|webp|jpg|ico)$/)) {
       res.set('Cache-Control', 'public, max-age=3600');
     }
     next();
   });
   app.use(express.static(distDir));
-  // SPA fallback for client-side routes — never swallow /api/*
-  app.get(/^(?!\/api\/).*/, (req, _res, next) => {
+  // SPA fallback for client-side routes — never swallow /api/* or /assets/*.
+  // A missing chunk under /assets/ must 404 rather than resolve to index.html:
+  // a dynamic import() that receives an HTML document fails in a very obscure
+  // way, whereas a real 404 surfaces through the client ErrorBoundary.
+  app.get(/^(?!\/(api|assets)\/).*/, (req, _res, next) => {
     // Only reach here if the path doesn't match a file in dist/
     if (req.path === '/') return next(); // already handled above
-    _res.sendFile(path.join(distDir, 'index.html'));
+    sendIndexHtml(_res);
   });
 }
 

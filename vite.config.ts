@@ -29,16 +29,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
-    // Isolate @supabase/supabase-js (~2 MB) into its own chunk so the main
-    // bundle stays small on first load. The gallery feature is secondary and
-    // the Supabase client is only needed when GalleryPanel mounts.
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          supabase: ['@supabase/supabase-js'],
-        },
-      },
-    },
+    // No manualChunks: @supabase/supabase-js used to be split out here, but the
+    // browser no longer talks to Supabase at all — the gallery reads through
+    // /api/gallery, so the client is server-only now.
     // Warn if any single chunk exceeds 500 KB — catch bundle regressions early.
     chunkSizeWarningLimit: 500,
   },

@@ -55,10 +55,7 @@ export function buildFreeCreateRequest({
   return {
     provider: 'gpt-image',
     prompt,
-    // The server preset path forces n:1 server-side regardless of what's sent
-    // (see server/providers.js capN) to protect the shared daily budget — a
-    // self-supplied key is required to actually generate more than one.
-    n: useServerPreset ? 1 : clampedCount,
+    n: clampedCount,
     // Send only `size`, never `aspectRatio`: the server forwards aspect_ratio and
     // drops size when it sees one (server/providers.js), but the OpenAI images
     // endpoint only understands size.
