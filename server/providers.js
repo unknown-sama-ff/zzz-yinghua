@@ -30,12 +30,11 @@ const IS_VERCEL = Boolean(process.env.VERCEL);
  * Clamp the per-request image count the client may ask the upstream for, so an
  * arbitrarily large `n` can't reach the provider.
  *
- * Known tradeoff: the server-preset budget is consumed per REQUEST, not per
- * image (see consumePresetBudget in lib/rateLimit.js), so a preset caller asking
- * for MAX_GENERATE_N images spends that many upstream images against a single
- * budget unit. Accepted deliberately — per-image accounting is a later decision.
+ * Exported because the server-preset budget charges per image, and it must
+ * charge for exactly the count the provider is asked for — deriving that number
+ * twice would let the two drift apart.
  */
-function capN(req) {
+export function capN(req) {
   const n = Number(req.n);
   return Number.isInteger(n) && n > 1 ? Math.min(n, MAX_GENERATE_N) : 1;
 }

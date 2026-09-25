@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import multer from 'multer';
-import { providers, registerTaskStore } from './providers.js';
+import { providers, registerTaskStore, capN } from './providers.js';
 import { compositeEmbed, compositeStitch } from './lib/composite.js';
 import { maxInputImagesForGptModel } from './lib/gptImageCapabilities.js';
 import {
@@ -741,9 +741,20 @@ async function executeGeneration(budgetIdentity, body, idempotencyKey) {
   const operation = idempotencyKey ? ` operation=${idempotencyKey}` : '';
 
   // Server-preset (freeload) calls spend the operator's paid keys — cap daily
-  // usage so anonymous callers can't burn through the quota.
-  if (body.useServerPreset === true && !consumePresetBudget(budgetIdentity)) {
-    return { status: 429, body: { ok: false, code: 'RATE_LIMITED', message: '服务端免费额度今日已用尽，请明日再来或自行填写 API Key' } };
+  // usage so anonymous callers can't burn through the quota. Charged per image
+  // (capN mirrors what the provider is actually asked for), not per request, so
+  // a 5-image request costs 5 units rather than 1.
+  if (body.useServerPreset === true) {
+    const imageCost = capN(body);
+    if (!consumePresetBudget(budgetIdentity, imageCost)) {
+      // Charging is all-or-nothing, so a multi-image request can be refused
+      // while budget still remains. Say so rather than claiming the day's quota
+      // is gone — reducing the count may well succeed.
+      const message = imageCost > 1
+        ? `服务端免费额度不足以生成 ${imageCost} 张图，请减少生成数量、明日再来，或自行填写 API Key`
+        : '服务端免费额度今日已用尽，请明日再来或自行填写 API Key';
+      return { status: 429, body: { ok: false, code: 'RATE_LIMITED', message } };
+    }
   }
 
   console.log(
