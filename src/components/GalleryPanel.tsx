@@ -33,13 +33,13 @@ const GalleryImage = memo(function GalleryImage({ url, alt }: { url: string; alt
   const [failed, setFailed] = useState(false);
   const proxied = galleryImageProxyUrl(url);
   return (
-    <div className="relative">
+    <div className="relative flex aspect-[4/5] w-full items-center justify-center overflow-hidden bg-zzz-ink/40">
       <img
         src={failed ? proxied : url}
         alt={alt}
         loading="lazy"
         onError={() => setFailed(true)}
-        className="w-full object-contain"
+        className="h-full w-full object-contain"
       />
       {/* Enlarge the URL this thumbnail actually resolved with, so visitors who
           can't reach supabase directly get the proxied full image too. */}

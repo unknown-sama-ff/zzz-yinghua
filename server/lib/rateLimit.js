@@ -56,14 +56,9 @@ export function requestKey(req, cookieName = 'yinghua_payment_visitor') {
 // process memory; PRESET_DAILY_CAP=0 disables server-preset usage entirely.
 
 const presetUsage = new Map(); // 'YYYY-MM-DD' -> count (global)
-const presetUsageByIdentity = new Map(); // 'YYYY-MM-DD:<identity>' -> count
-const PRESET_DAILY_PER_IDENTITY_CAP = Number(process.env.PRESET_DAILY_PER_IDENTITY_CAP || 20);
 
 /**
- * Atomically consume `units` of the daily budget. Enforces BOTH a global daily
- * cap (PRESET_DAILY_CAP) and a per-identity daily cap, so a single caller can't
- * monopolize the whole day's quota. `identityKey` is an opaque caller-supplied
- * string (openid hash / visitor cookie / client IP).
+ * Atomically consume `units` of the global daily budget (PRESET_DAILY_CAP).
  *
  * One unit is one upstream IMAGE, not one request: a request asking for 5
  * images costs the operator 5 images' worth of paid quota, so it must cost 5
@@ -74,7 +69,7 @@ const PRESET_DAILY_PER_IDENTITY_CAP = Number(process.env.PRESET_DAILY_PER_IDENTI
  * budget is denied rather than silently downgraded to fewer images, because the
  * provider would still be asked for the full count.
  */
-export function consumePresetBudget(identityKey = '', units = 1) {
+export function consumePresetBudget(units = 1) {
   const raw = process.env.PRESET_DAILY_CAP;
   const cap = raw === undefined || raw === '' ? 200 : Number(raw);
   if (!Number.isFinite(cap) || cap <= 0) return false; // cap 0 → deny all
@@ -85,13 +80,6 @@ export function consumePresetBudget(identityKey = '', units = 1) {
   const today = new Date().toISOString().slice(0, 10);
   const usedGlobal = presetUsage.get(today) || 0;
   if (usedGlobal + cost > cap) return false;
-  let usedIdentity = 0;
-  const identityBudgetKey = identityKey ? `${today}:${identityKey}` : '';
-  if (identityBudgetKey) {
-    usedIdentity = presetUsageByIdentity.get(identityBudgetKey) || 0;
-    if (usedIdentity + cost > PRESET_DAILY_PER_IDENTITY_CAP) return false;
-  }
   presetUsage.set(today, usedGlobal + cost);
-  if (identityBudgetKey) presetUsageByIdentity.set(identityBudgetKey, usedIdentity + cost);
   return true;
 }

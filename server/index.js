@@ -206,13 +206,6 @@ function getWechatSession(token) {
   return session;
 }
 
-/** Identity key for the server-preset daily budget (per-openid/per-cookie/per-IP). */
-function budgetKey(req) {
-  const identity = resolveIdentity(req);
-  if (identity?.kind === 'openid') return `openid:${identity.hash}`;
-  return requestKey(req) || '';
-}
-
 function getCookie(req, name) {
   const cookies = String(req.headers.cookie || '').split(';');
   for (const cookie of cookies) {
@@ -611,7 +604,7 @@ app.post('/api/generate', rateLimit, upload.fields([
     // background and return a taskId immediately for the mini program to poll.
     const taskId = createTaskId();
     const outcome = (async () => {
-      const result = await executeGeneration(budgetKey(req), body, idempotencyKey);
+      const result = await executeGeneration(body, idempotencyKey);
       finalizeAsyncTask(taskId, result);
       return { status: 200, body: { ok: true, taskId } };
     })();
@@ -623,7 +616,7 @@ app.post('/api/generate', rateLimit, upload.fields([
     return res.json({ ok: true, taskId });
   }
 
-  const outcome = executeGeneration(budgetKey(req), body, idempotencyKey);
+  const outcome = executeGeneration(body, idempotencyKey);
   if (idempotencyKey) {
     const timer = setTimeout(() => cleanupGenerationFlight(idempotencyKey), TASK_TTL_MS);
     generationFlights.set(idempotencyKey, { outcome, timer });
@@ -685,7 +678,7 @@ async function resolveImageBuffer(image) {
   }
 }
 
-async function executeGeneration(budgetIdentity, body, idempotencyKey) {
+async function executeGeneration(body, idempotencyKey) {
   const { provider, prompt } = body;
 
   if (!provider || !VALID_PROVIDERS.has(provider)) {
@@ -746,7 +739,7 @@ async function executeGeneration(budgetIdentity, body, idempotencyKey) {
   // a 5-image request costs 5 units rather than 1.
   if (body.useServerPreset === true) {
     const imageCost = capN(body);
-    if (!consumePresetBudget(budgetIdentity, imageCost)) {
+    if (!consumePresetBudget(imageCost)) {
       // Charging is all-or-nothing, so a multi-image request can be refused
       // while budget still remains. Say so rather than claiming the day's quota
       // is gone — reducing the count may well succeed.
@@ -855,7 +848,7 @@ app.post('/api/inpaint', rateLimit, upload.fields([
 
   const started = Date.now();
   try {
-    if (useServerPreset && !consumePresetBudget(budgetKey(req))) {
+    if (useServerPreset && !consumePresetBudget()) {
       return fail(res, 429, 'RATE_LIMITED', '服务端免费额度今日已用尽，请明日再来或自行填写 API Key');
     }
     const result = await providers[targetProvider](body);
@@ -892,7 +885,7 @@ app.post('/api/detect-face', rateLimit, async (req, res) => {
     console.warn(`[detect-face] missing key useServerPreset=${Boolean(useServerPreset)} usingPreset=${usingPreset} frontHasKey=${Boolean(apiKey)} envHasKey=${Boolean(process.env.VISION_API_KEY)}`);
     return fail(res, 401, 'UNAUTHORIZED', usingPreset ? '视觉模型服务端预设缺少 API Key' : '视觉模型缺少 API Key，请在前端填写');
   }
-  if (usingPreset && !consumePresetBudget(budgetKey(req))) {
+  if (usingPreset && !consumePresetBudget()) {
     return fail(res, 429, 'RATE_LIMITED', '服务端免费额度今日已用尽，请明日再来或自行填写 API Key');
   }
   const root = (usingPreset
