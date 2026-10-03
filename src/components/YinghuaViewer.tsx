@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, memo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useProviderStore } from '../store/useProviderStore';
 import { useYinghuaStore } from '../store/useYinghuaStore';
 import { useViewerStore } from '../store/useViewerStore';
@@ -7,10 +7,12 @@ import { validateImageFile, fileToDataUrl, parseDataUrl } from '../lib/validatio
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { resolveYinghuaFaceImage } from '../lib/yinghuaFace';
+import { downloadBlob } from '../lib/download';
+import { renderYinghuaComposite } from '../lib/yinghuaComposite';
+import { buildYinghuaLayers, containedImageRect, type YinghuaLayer } from '../lib/yinghuaLayers';
 import { ControlBar } from './ControlBar';
 import '../styles/viewer.css';
-import type { ClipRegions } from '../lib/clipRegions';
-import type { GenSlot, LayerPart, YinghuaStyleId } from '../types';
+import type { YinghuaStyleId } from '../types';
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
@@ -30,57 +32,43 @@ const prefersReducedMotion = () =>
  * Only the outer wrapper className differs, handled by the caller.
  */
 const StageContent = memo(function StageContent({
-  baseImg,
-  parts,
-  viewerClipRegions,
-  sweeping,
-  yinghuaSlots,
-  imageAspectRatio,
-  style3Face,
+  layers, sweeping, displayedSixFace, width, height, onLoad, onError,
 }: {
-  baseImg: string | undefined;
-  parts: LayerPart[];
-  viewerClipRegions: ClipRegions | null;
+  layers: readonly YinghuaLayer[];
   sweeping: boolean;
-  yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
-  imageAspectRatio: number;
-  style3Face: 'front' | 'back';
+  displayedSixFace: 'front' | 'back' | undefined;
+  width: number;
+  height: number;
+  onLoad: (layer: YinghuaLayer, image: HTMLImageElement) => void;
+  onError: (layer: YinghuaLayer) => void;
 }) {
-  const displayedSixImage = resolveYinghuaFaceImage(yinghuaSlots[3].images, style3Face);
-  const previousDisplayedFace = useRef(displayedSixImage?.face);
-  const previousVisibleParts = useRef(new Set(parts.filter((part) => part.visible).map((part) => part.code)));
-  const shouldFlipSix = Boolean(
-    displayedSixImage &&
-    previousDisplayedFace.current &&
-    previousDisplayedFace.current !== displayedSixImage.face,
-  );
-
+  const previousFace = useRef(displayedSixFace);
+  const previousParts = useRef(new Set(layers.map((layer) => layer.code)));
+  const shouldFlip = Boolean(displayedSixFace && previousFace.current && previousFace.current !== displayedSixFace);
   useEffect(() => {
-    previousDisplayedFace.current = displayedSixImage?.face;
-    previousVisibleParts.current = new Set(parts.filter((part) => part.visible).map((part) => part.code));
-  }, [displayedSixImage?.face, parts]);
-
-  const tierImage = (id: 1 | 2 | 3): string | undefined =>
-    id === 3 ? displayedSixImage?.src : yinghuaSlots[id].images[0];
+    previousFace.current = displayedSixFace;
+    previousParts.current = new Set(layers.map((layer) => layer.code));
+  }, [displayedSixFace, layers]);
 
   return (
-    <div className="relative h-full w-full" style={{ aspectRatio: `${imageAspectRatio}` }}>
-      {baseImg && <img src={baseImg} alt="零命 底图" className="layer-part" data-visible="true" loading="lazy" />}
-      {parts.map((p) => {
-        const src = tierImage(p.styleId);
-        if (!src || !p.visible) return null;
-        const regionStyle = viewerClipRegions
-          ? { clipPath: [viewerClipRegions.r0, viewerClipRegions.r1, viewerClipRegions.r2][p.region] }
-          : {};
-        const isSixLayer = p.styleId === 3;
-        const layerKey = p.code;
-        const isNewlyVisible = !previousVisibleParts.current.has(p.code);
-        const effectClass = isSixLayer && shouldFlipSix
+    <div className="relative shrink-0" data-yinghua-artboard style={{ width, height }}>
+      {layers.map((layer) => {
+        const effect = Number(layer.code) >= 4 && shouldFlip
           ? 'fx-face-flip'
-          : isNewlyVisible
-            ? 'fx-enter'
-            : '';
-        return <img key={layerKey} src={src} alt={`区域 ${p.code}`} data-visible="true" className={`layer-part ${effectClass}${viewerClipRegions ? '' : ` region-${p.region}`}`} style={regionStyle} loading="lazy" />;
+          : layer.code !== 'base' && !previousParts.current.has(layer.code) ? 'fx-enter' : '';
+        return (
+          <img
+            key={layer.code}
+            src={layer.src}
+            alt={layer.code === 'base' ? '零命 底图' : `区域 ${layer.code}`}
+            data-visible="true"
+            className={`layer-part ${effect}`}
+            style={layer.clipPath ? { clipPath: layer.clipPath } : undefined}
+            onLoad={(event) => onLoad(layer, event.currentTarget)}
+            onError={() => onError(layer)}
+            decoding="async"
+          />
+        );
       })}
       {sweeping && <div className="fx-sweep" />}
     </div>
@@ -105,40 +93,65 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   const [sweeping, setSweeping] = useState(false);
   const [glitch, setGlitch] = useState(false);
   const [detecting, setDetecting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [imageAspectRatio, setImageAspectRatio] = useState<number>(16 / 9); // 默认 16:9
   const isMobile = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const sectionRef = useRef<HTMLElement>(null);
-  const baseImgRef = useRef<HTMLImageElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const exportInProgress = useRef(false);
+  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  const [loadedLayers, setLoadedLayers] = useState<Record<string, string>>({});
+  const [failedLayers, setFailedLayers] = useState<Record<string, string>>({});
   const timers = useRef<number[]>([]);
   const slotInputRefs = useRef<Record<string, HTMLInputElement | null>>({ 1: null, 2: null, 3: null, '3-front': null, '3-back': null });
 
   const baseImg = yinghuaSlots[1].images[0]; // 零命
   const hasBase = Boolean(baseImg);
 
-  // 监听底图加载，获取实际宽高比
+  const layers = useMemo(
+    () => buildYinghuaLayers(yinghuaSlots, parts, viewerClipRegions, style3Face),
+    [yinghuaSlots, parts, viewerClipRegions, style3Face],
+  );
+  const displayedSixImage = resolveYinghuaFaceImage(yinghuaSlots[3].images, style3Face);
+  const exportReady = hasBase && layers.every((layer) => loadedLayers[layer.code] === layer.src);
+  const imageLoadFailed = layers.some((layer) => failedLayers[layer.code] === layer.src);
+  const exportTitle = exportReady
+    ? '按当前可见图层保存原始分辨率 PNG'
+    : imageLoadFailed ? '图层图片加载失败，请重新上传后保存' : '请等待当前图层图片加载完成';
+  const artboard = containedImageRect(stageSize.width, stageSize.height, imageAspectRatio, 1);
+
+  const handleLayerLoad = useCallback((layer: YinghuaLayer, image: HTMLImageElement) => {
+    if (!image.naturalWidth || !image.naturalHeight) return;
+    setLoadedLayers((current) => current[layer.code] === layer.src ? current : { ...current, [layer.code]: layer.src });
+    setFailedLayers((current) => {
+      if (!current[layer.code]) return current;
+      const next = { ...current };
+      delete next[layer.code];
+      return next;
+    });
+    if (layer.code === 'base') setImageAspectRatio(image.naturalWidth / image.naturalHeight);
+  }, []);
+  const handleLayerError = useCallback((layer: YinghuaLayer) => {
+    setLoadedLayers((current) => {
+      const next = { ...current };
+      delete next[layer.code];
+      return next;
+    });
+    setFailedLayers((current) => ({ ...current, [layer.code]: layer.src }));
+  }, []);
+
+  // Keep the actual artboard at the base image ratio even in fullscreen. Clip
+  // polygons are then canvas-relative, not relative to viewport letterboxing.
   useEffect(() => {
-    const img = baseImgRef.current;
-    if (!img) return;
-
-    const updateAspectRatio = () => {
-      if (img.naturalWidth && img.naturalHeight) {
-        const ratio = img.naturalWidth / img.naturalHeight;
-        setImageAspectRatio(ratio);
-      }
-    };
-
-    // 如果图片已加载，立即更新
-    if (img.complete && img.naturalWidth) {
-      updateAspectRatio();
-    } else {
-      img.addEventListener('load', updateAspectRatio);
-    }
-
-    return () => {
-      img.removeEventListener('load', updateAspectRatio);
-    };
-  }, [baseImg]);
+    const stage = stageRef.current;
+    if (!stage) return;
+    const updateSize = () => setStageSize({ width: stage.clientWidth, height: stage.clientHeight });
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(stage);
+    updateSize();
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     return () => timers.current.forEach((t) => clearTimeout(t));
@@ -238,6 +251,27 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
     void runFaceDetect(displayedSixImage.src);
   }, [yinghuaSlots, style3Face, runFaceDetect, showError]);
 
+  const handleExportPng = useCallback(async () => {
+    if (!exportReady || exportInProgress.current || !stageRef.current) return;
+    exportInProgress.current = true;
+    setExporting(true);
+    const snapshot = layers.map((layer) => ({ ...layer }));
+    const background = getComputedStyle(stageRef.current).backgroundColor;
+    const selected = snapshot.filter((layer) => layer.code !== 'base').map((layer) => layer.code).join('-') || '零命';
+    const sixSuffix = snapshot.some((layer) => Number(layer.code) >= 4)
+      ? `-六命${displayedSixImage?.face === 'back' ? '阴' : '阳'}` : '';
+    try {
+      const blob = await renderYinghuaComposite(snapshot, background);
+      downloadBlob(blob, `影画合成-${selected}${sixSuffix}.png`);
+      showError('✓ 已导出当前图层 PNG');
+    } catch (error) {
+      showError(error instanceof Error ? `PNG 保存失败：${error.message}` : 'PNG 保存失败，请重试');
+    } finally {
+      exportInProgress.current = false;
+      setExporting(false);
+    }
+  }, [exportReady, layers, displayedSixImage?.face, showError]);
+
   const handleSlotUpload = useCallback(
     async (id: YinghuaStyleId, file: File) => {
       const check = validateImageFile(file);
@@ -266,16 +300,27 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
 
   return (
     <section ref={sectionRef} className={`${fullscreen ? 'fixed inset-0 z-50 flex flex-col' : 'flex flex-col'} glass overflow-hidden`}>
-      <h2 className={`zzz-heading flex items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text ${fullscreen ? 'hidden' : ''}`}>
+      <h2 className={`zzz-heading flex flex-wrap items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text ${fullscreen ? 'hidden' : ''}`}>
         <span className="step-badge">05</span>
         影画查看器
         {hasBase && (
-          <button
-            onClick={toggleFullscreen}
-            className="glass-btn ml-auto px-3 py-1 font-mono text-[10px] tracking-widest text-zzz-text"
-          >
-            {fullscreen ? '退出全屏' : '全屏'}
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => void handleExportPng()}
+              disabled={!exportReady || exporting}
+              className="glass-btn px-3 py-1 font-mono text-[10px] tracking-widest text-zzz-primary disabled:opacity-40"
+              title={exportTitle}
+              aria-busy={exporting}
+            >
+              {exporting ? '保存中…' : '保存当前 PNG'}
+            </button>
+            <button
+              onClick={toggleFullscreen}
+              className="glass-btn px-3 py-1 font-mono text-[10px] tracking-widest text-zzz-text"
+            >
+              {fullscreen ? '退出全屏' : '全屏'}
+            </button>
+          </div>
         )}
       </h2>
 
@@ -284,27 +329,39 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
 
         {/* Main stage */}
         <div
+          ref={stageRef}
           className={`flex-1 min-h-0 relative overflow-hidden bg-zzz-bg flex items-center justify-center ${glitch ? 'fx-glitch' : ''}`}
           style={{ aspectRatio: `${imageAspectRatio}` }}
         >
           <StageContent
-            baseImg={baseImg}
-            parts={parts}
-            viewerClipRegions={viewerClipRegions}
+            layers={layers}
             sweeping={sweeping}
-            yinghuaSlots={yinghuaSlots}
-            imageAspectRatio={imageAspectRatio}
-            style3Face={style3Face}
+            displayedSixFace={displayedSixImage?.face}
+            width={artboard.width}
+            height={artboard.height}
+            onLoad={handleLayerLoad}
+            onError={handleLayerError}
           />
 
           {/* Fullscreen exit button */}
           {fullscreen && (
-            <button
-              onClick={toggleFullscreen}
-              className="glass-btn absolute right-3 top-3 z-10 px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
-            >
-              退出全屏
-            </button>
+            <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+              {hasBase && (
+                <button
+                  onClick={() => void handleExportPng()}
+                  disabled={!exportReady || exporting}
+                  className="glass-btn px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-primary disabled:opacity-40"
+                >
+                  {exporting ? '保存中…' : '保存 PNG'}
+                </button>
+              )}
+              <button
+                onClick={toggleFullscreen}
+                className="glass-btn px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
+              >
+                退出全屏
+              </button>
+            </div>
           )}
 
           {/* Empty-state hint */}
@@ -321,6 +378,11 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
 
       {/* Legend + manual upload */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zzz-text/10 p-3">
+        {imageLoadFailed && (
+          <p role="alert" className="w-full font-mono text-[11px] text-red-400">
+            图层图片加载失败，请重新上传对应图片后保存 PNG。
+          </p>
+        )}
         {/* Face detection status — refresh button always visible when 零命 exists */}
         <div className="flex w-full items-center gap-2">
           {detecting && (

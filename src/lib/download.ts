@@ -21,3 +21,17 @@ export async function downloadImage(src: string, filename: string): Promise<void
     window.open(src, '_blank');
   }
 }
+
+
+/** Trigger a browser download for an already-rendered binary asset. */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Keep the URL alive long enough for the browser to start reading it.
+  window.setTimeout(() => URL.revokeObjectURL(href), 60_000);
+}

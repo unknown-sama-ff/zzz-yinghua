@@ -5,22 +5,23 @@ interface ToastProps {
   onClose: () => void;
 }
 
-/** ZZZ-styled transient error banner (replaces native alert). */
+/** A transient banner with distinct success and error feedback. */
 export const Toast = memo(function Toast({ message, onClose }: ToastProps) {
+  const isSuccess = message.startsWith('✓');
   useEffect(() => {
     const t = setTimeout(onClose, 5000);
     return () => clearTimeout(t);
-  }, [onClose]);
+  }, [onClose, message]);
 
   return (
     <div
       role="alert"
       className="glass fixed bottom-6 left-1/2 z-[10000] -translate-x-1/2 px-5 py-3"
-      style={{ borderColor: 'var(--zzz-magenta)' }}
+      style={{ borderColor: isSuccess ? 'var(--zzz-primary)' : 'var(--zzz-magenta)' }}
     >
       <div className="flex items-center gap-3">
-        <span className="font-mono text-xs tracking-widest text-zzz-magenta">
-          ⚠ ERROR
+        <span className={`font-mono text-xs tracking-widest ${isSuccess ? 'text-zzz-primary' : 'text-zzz-magenta'}`}>
+          {isSuccess ? '✓ 完成' : '⚠ ERROR'}
         </span>
         <span className="text-sm text-zzz-text">{message}</span>
         <button

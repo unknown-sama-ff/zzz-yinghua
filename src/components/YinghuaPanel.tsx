@@ -170,7 +170,7 @@ const StyleCard = memo(function StyleCard({
         inpaintMeta={{
           type: 'yinghua',
           slotId: style.id,
-          ...(style.id === 3 ? { index: style3Face === 'front' ? 0 : 1 } : {}),
+          ...(style.id === 3 ? { index: displayedSixImage?.index } : {}),
         }}
       />
     </div>
@@ -507,7 +507,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       </div>
       <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
         <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁脸位/大致身位/配色）。六命可切换「阳/阴」：阳为全彩高饱和赛璐珞；阴为服装精简版（自然精简服装、顺势露肤），需先出阳再生成阴；配色统一以三视图原色为准。
+          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁原镜头/透视/动作/配色）。六命可切换「阳/阴」：阳为全彩高饱和赛璐珞；阴为服装精简版（自然精简服装、顺势露肤），需先出阳再生成阴；配色统一以三视图原色为准。
         </p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}

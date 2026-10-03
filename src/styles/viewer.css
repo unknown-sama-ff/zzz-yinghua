@@ -17,20 +17,7 @@
     filter 360ms var(--zzz-ease);
 }
 
-/* Three diagonal bands, full coverage with no gaps.
-   region-0 (01/04) = tight face band — both eyes, as small as possible, no bg
-   region-1 (02/05) = everything ABOVE the face band (head, hair)
-   region-2 (03/06) = everything BELOW the face band (torso, lower body)
-   Cut lines are parallel (slope ~14%), bands tile seamlessly. */
-.region-0 {
-  clip-path: polygon(0 28%, 100% 14%, 100% 42%, 0 56%);
-}
-.region-1 {
-  clip-path: polygon(0 0, 100% 0, 100% 14%, 0 28%);
-}
-.region-2 {
-  clip-path: polygon(0 56%, 100% 42%, 100% 100%, 0 100%);
-}
+/* Diagonal clip paths come from clipRegions.ts, shared with PNG export. */
 
 .layer-part[data-visible='false'] {
   opacity: 0;

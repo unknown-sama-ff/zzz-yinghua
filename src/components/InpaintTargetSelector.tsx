@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { useInpaintStore } from '../store/useInpaintStore';
-import { resolveInpaintTarget } from '../lib/inpaintTarget';
+import { resolveInpaintElementTarget, inpaintTargetLabel } from '../lib/inpaintTarget';
+import type { InpaintTarget } from '../types';
 import { FloatingInpaintButton } from './FloatingInpaintButton';
 
 /** Portal clones of inpaintable images, positioned exactly over the originals,
  *  floating above the blur overlay so they stay crystal clear. */
-const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: { url: string; type: string }) => void }) {
-  const [clones, setClones] = useState<{ id: string; src: string; rect: DOMRect; zone: string }[]>([]);
+const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: InpaintTarget) => void }) {
+  const [clones, setClones] = useState<{ id: string; src: string; rect: DOMRect; zone: string; target: InpaintTarget }[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const rafRef = useRef<number>(0);
   // Cache the last serialized clone state so we can skip React updates when
@@ -34,7 +35,7 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
     // closest() DOM traversal. Module 02's deep costume history nesting
     // makes closest() expensive on every scroll tick.
     const zones = document.querySelectorAll('[data-inpaint-zone]');
-    const newClones: { id: string; src: string; rect: DOMRect; zone: string }[] = [];
+    const newClones: { id: string; src: string; rect: DOMRect; zone: string; target: InpaintTarget }[] = [];
     // Full (pre-cap) list of scanned images, cached for the scroll hot path.
     const nextCache: { id: string; src: string; zone: string; img: HTMLImageElement }[] = [];
 
@@ -59,6 +60,7 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
           src: imageEl.src,
           rect,
           zone: zoneType,
+          target: resolveInpaintElementTarget(imageEl),
         });
       });
     });
@@ -158,6 +160,9 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
       {clones.map((clone) => (
         <div
           key={clone.id}
+          role="button"
+          tabIndex={0}
+          aria-label={`继续修改${inpaintTargetLabel(clone.target)}`}
           ref={(el) => (el ? cloneDivsRef.current.set(clone.id, el) : cloneDivsRef.current.delete(clone.id))}
           data-inpaint-portal={clone.id}
           className={`absolute rounded-xl overflow-hidden ${clone.id === hoveredId ? 'inpaint-portal-clone-hovered' : ''}`}
@@ -180,11 +185,17 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
               zIndex: 110,
             } : {}),
           }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onSelect(clone.target);
+            }
+          }}
           onMouseEnter={() => setHoveredId(clone.id)}
           onMouseLeave={() => setHoveredId(null)}
           onClick={(e) => {
             e.stopPropagation();
-            onSelect({ url: clone.src, type: clone.zone });
+            onSelect(clone.target);
           }}
         >
           <img
@@ -226,8 +237,8 @@ export const InpaintTargetSelector = memo(function InpaintTargetSelector({ child
   const setIsSelecting = useInpaintStore((s) => s.setIsSelecting);
   const openWorkspace = useInpaintStore((s) => s.openWorkspace);
   const handleSelect = useCallback(
-    (selection: { url: string; type: string }) => {
-      openWorkspace(resolveInpaintTarget(selection.url, selection.type));
+    (selection: InpaintTarget) => {
+      openWorkspace(selection);
     },
     [openWorkspace],
   );
@@ -256,11 +267,7 @@ export const InpaintTargetSelector = memo(function InpaintTargetSelector({ child
       e.preventDefault();
       e.stopPropagation();
 
-      const zoneType = zone.getAttribute('data-inpaint-zone') || 'unknown';
-      const src = img.src || '';
-      if (src) {
-        handleSelect({ url: src, type: zoneType });
-      }
+      if (img.src) handleSelect(resolveInpaintElementTarget(img));
     };
 
     document.addEventListener('click', handleClick, true);

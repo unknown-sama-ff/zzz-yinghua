@@ -1,11 +1,11 @@
-import { useCallback, useState, memo } from 'react';
+import { useCallback, useRef, useState, memo } from 'react';
 import { useInpaintStore } from '../../store/useInpaintStore';
 import { useToast } from '../../store/useToast';
 import { ToolPanel } from './ToolPanel';
 import { CanvasEditor } from './CanvasEditor';
 import { PromptBar } from './PromptBar';
 import { ZoomButton } from '../ImageLightbox';
-import { canReplaceInpaintTarget, inpaintTargetLabel, replaceInpaintTarget } from '../../lib/inpaintTarget';
+import { canReplaceInpaintTarget, inpaintTargetLabel, replaceInpaintTarget, sameImageSource } from '../../lib/inpaintTarget';
 
 export const InpaintWorkspace = memo(function InpaintWorkspace() {
   const isWorkspaceOpen = useInpaintStore((s) => s.isWorkspaceOpen);
@@ -21,23 +21,34 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
 
   const showError = useToast((s) => s.show);
   const [isApplying, setIsApplying] = useState(false);
+  const isYinghuaTarget = targetImage?.type === 'yinghua';
+  const applyInProgress = useRef(false);
+  const alreadyApplied = sameImageSource(targetImage?.url, currentVersionUrl ?? '');
 
   const applyCurrentVersion = async () => {
-    if (!targetImage || !currentVersionUrl || isApplying) return;
+    if (!targetImage || !currentVersionUrl || applyInProgress.current || isGenerating || alreadyApplied) return;
     if (!canReplaceInpaintTarget(targetImage)) {
       showError('此图片仅可预览编辑结果，无法替换到可写模块');
       return;
     }
+    applyInProgress.current = true;
     setIsApplying(true);
     try {
       const replaced = await replaceInpaintTarget(targetImage, currentVersionUrl);
       if (!replaced) {
-        showError('当前模块图片已更新，未覆盖较新的结果');
+        showError('原模块正在生成或图片已更新，未覆盖较新的结果；当前编辑版本仍已保留');
         return;
       }
-      setTargetImage({ ...targetImage, url: currentVersionUrl });
-      showError(`✓ 已应用到${inpaintTargetLabel(targetImage)}`);
+      if (useInpaintStore.getState().versions[0]?.id === versions[0]?.id) {
+        setTargetImage({ ...targetImage, url: currentVersionUrl });
+      }
+      showError(isYinghuaTarget
+        ? `✓ 已替换 04 原图：${inpaintTargetLabel(targetImage)}`
+        : `✓ 已应用到${inpaintTargetLabel(targetImage)}`);
+    } catch (error) {
+      showError(error instanceof Error ? `替换失败：${error.message}` : '替换失败，当前编辑版本仍已保留');
     } finally {
+      applyInProgress.current = false;
       setIsApplying(false);
     }
   };
@@ -67,6 +78,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
           </div>
           <p className="mt-1 font-mono text-[10px] text-[var(--zzz-text)]/45">
             当前版本会成为下一轮修改的图片上下文；未应用前不会覆盖页面原图。
+            {isYinghuaTarget && ' 替换后只更新 04 对应图片，不会自动重新生成。'}
           </p>
         </div>
 
@@ -74,11 +86,11 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
           <button
             type="button"
             onClick={() => void applyCurrentVersion()}
-            disabled={isApplying || isGenerating || !canReplaceInpaintTarget(targetImage)}
-            title={canReplaceInpaintTarget(targetImage) ? '将当前草稿应用到原模块' : '预览图片无法替换到模块'}
+            disabled={isApplying || isGenerating || alreadyApplied || !canReplaceInpaintTarget(targetImage)}
+            title={canReplaceInpaintTarget(targetImage) ? (isYinghuaTarget ? '将当前版本替换到 04 影画动作设计' : '将当前草稿应用到原模块') : '预览图片无法替换到模块'}
             className="glass-btn px-3 py-1.5 font-mono text-xs text-[var(--zzz-primary)] disabled:opacity-40"
           >
-            {isApplying ? '应用中…' : '应用当前版本'}
+            {isApplying ? (isYinghuaTarget ? '替换中…' : '应用中…') : (isYinghuaTarget ? '替换 04 原图' : '应用当前版本')}
           </button>
           <button
             onClick={closeWorkspace}

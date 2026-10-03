@@ -51,13 +51,15 @@ export const ResultView = memo(function ResultView({ slot, downloadPrefix, onPic
             key={imageKey ? `${imageKey}-${i}` : i}
             src={src}
             alt={`${downloadPrefix}-${i + 1}`}
+            data-inpaint-type={inpaintMeta?.type}
+            data-inpaint-slot-id={inpaintMeta?.slotId}
+            data-inpaint-index={inpaintMeta ? inpaintMeta.index ?? i : undefined}
             loading={i === 0 ? 'eager' : 'lazy'}
-            fetchPriority={i === 0 ? 'high' : 'auto'}
             decoding="async"
             className={`w-full object-contain${imageClassName ? ` ${imageClassName}` : ''}`}
           />
           <ZoomButton src={src} alt={`${downloadPrefix}-${i + 1}`} />
-          <figcaption className="absolute bottom-0 right-0 flex gap-2 p-2 opacity-0 transition-opacity group-hover:opacity-100">
+          <figcaption className="absolute bottom-0 right-0 flex gap-2 p-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             {saveInfo && <GallerySaveButton key={saveInfo.imageUrl} saveInfo={saveInfo} />}
             {onPick && (
               <button

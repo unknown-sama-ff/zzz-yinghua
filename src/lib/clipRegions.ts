@@ -4,6 +4,13 @@ export interface ClipRegions {
   r2: string;
 }
 
+/** Shared by the on-screen layers and the original-resolution PNG exporter. */
+export const DEFAULT_CLIP_REGIONS: ClipRegions = {
+  r0: 'polygon(0 28%, 100% 14%, 100% 42%, 0 56%)',
+  r1: 'polygon(0 0, 100% 0, 100% 14%, 0 28%)',
+  r2: 'polygon(0 56%, 100% 42%, 100% 100%, 0 100%)',
+};
+
 function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
