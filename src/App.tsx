@@ -15,6 +15,7 @@ import { InpaintTargetSelector } from './components/InpaintTargetSelector';
 import { Toast } from './components/Toast';
 import { ImageLightbox } from './components/ImageLightbox';
 import { CursorEffects } from './components/CursorEffects';
+import { AmbientPetals } from './components/AmbientPetals';
 import { lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -23,7 +24,9 @@ export default function App() {
   const { message, clear } = useToast();
 
   return (
-    <div className="min-h-full">
+    <div className="ambient-scene">
+      <AmbientPetals />
+      <div className="ambient-scene__content">
       <CursorEffects />
 
       {/* Header */}
@@ -92,6 +95,7 @@ export default function App() {
       <ImageLightbox />
 
       {message && <Toast message={message} onClose={clear} />}
+      </div>
     </div>
   );
 }

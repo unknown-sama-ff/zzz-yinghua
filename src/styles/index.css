@@ -432,3 +432,79 @@ body.inpaint-select-active [data-inpaint-zone="costume"] .group {
 body.inpaint-select-active [data-inpaint-zone="costume"] .group > div:last-child {
   display: none !important;
 }
+
+/* ====== Global ambient petals ====== */
+
+/* A fixed, sparse background layer keeps the effect present across the whole
+   app without competing with panels, dialogs, or pointer interactions. */
+.ambient-scene {
+  position: relative;
+  min-height: 100%;
+  isolation: isolate;
+}
+
+.ambient-scene__content {
+  position: relative;
+  z-index: 1;
+}
+
+.ambient-petals {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ambient-petal {
+  position: absolute;
+  top: -12vh;
+  left: var(--petal-left);
+  width: var(--petal-size);
+  aspect-ratio: 1.45;
+  border-radius: 68% 32% 68% 32%;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--zzz-primary) 78%, transparent),
+    color-mix(in srgb, var(--zzz-accent) 66%, transparent)
+  );
+  box-shadow: 0 0 9px color-mix(in srgb, var(--zzz-primary) 24%, transparent);
+  opacity: 0;
+  transform: rotate(var(--petal-rotation));
+  animation: ambient-petal-fall var(--petal-duration) linear var(--petal-delay) infinite;
+  will-change: transform, opacity;
+}
+
+.ambient-petal:nth-child(3n) {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--zzz-accent) 78%, transparent),
+    color-mix(in srgb, var(--zzz-primary) 60%, transparent)
+  );
+}
+
+@keyframes ambient-petal-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -8vh, 0) rotate(var(--petal-rotation));
+  }
+  10% {
+    opacity: var(--petal-opacity);
+  }
+  50% {
+    opacity: var(--petal-opacity);
+    transform: translate3d(var(--petal-drift-mid), 55vh, 0)
+      rotate(calc(var(--petal-rotation) + 160deg));
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--petal-drift-end), 118vh, 0)
+      rotate(calc(var(--petal-rotation) + 340deg));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-petals {
+    display: none;
+  }
+}
