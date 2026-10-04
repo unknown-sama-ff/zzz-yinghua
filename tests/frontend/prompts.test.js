@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadFrontend } from './loadFrontend.js';
 
-const { YINGHUA_STYLES, fillName, splitName, SIX_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
+const { YINGHUA_STYLES, fillName, splitName, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
 const variants = [
   [1, '零命', 'promptTemplate', 'promptTemplateEn'],
   [2, '三命', 'promptTemplate', 'promptTemplateEn'],
@@ -44,6 +44,23 @@ test('zero-fate original Chinese view, pose, crop, occupancy and alignment requi
   assert.ok(prompt(1, 'promptTemplate').includes(original));
   assert.match(prompt(1, 'promptTemplateEn', 'en'), /prioritize dramatic low-angle, high-angle, and extreme diagonal perspectives/);
   assert.match(prompt(1, 'promptTemplateEn', 'en'), /Crop aggressively with limbs extending to frame borders/);
+});
+
+test('zero-fate anatomy guard protects waist and legs without changing the original camera design', () => {
+  const zh = prompt(1, 'promptTemplate');
+  const en = prompt(1, 'promptTemplateEn', 'en');
+  assert.ok(zh.startsWith(ZERO_FATE_ANATOMY_PRIORITY_PREFIX));
+  assert.match(zh, /两条腿、两只手、每手五根/);
+  assert.match(zh, /髋—大腿—膝—小腿—踝—脚/);
+  assert.match(zh, /腰部与骨盆连接自然/);
+  assert.match(zh, /第三条腿、重复膝盖、腿部粘连/);
+  assert.match(zh, /不得用换镜头、换姿势、拉远、改裁切或改变透视/);
+  assert.match(en, /TWO legs|two legs/i);
+  assert.match(en, /hip–thigh–knee–calf–ankle–foot/);
+  assert.match(en, /third leg|duplicate knees/i);
+  assert.match(en, /never change the camera, pose, framing or perspective/);
+  assert.ok(prompt(2, 'promptTemplate').startsWith('【角色保真】'));
+  assert.ok(prompt(3, 'promptTemplateFront').startsWith(SIX_FATE_ANATOMY_PRIORITY_PREFIX));
 });
 
 test('three-fate remains color-only, with canonical legwear and original language-specific accent boost', () => {
