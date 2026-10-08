@@ -1,4 +1,42 @@
-import type { ProviderName } from '../types';
+import type { GptImageQuality, ProviderName } from '../types';
+import { API_BASE } from './apiBase';
+
+export const GPT_IMAGE_QUALITY_LABELS: Record<GptImageQuality, string> = {
+  auto: '自动', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高',
+};
+const BASE_QUALITIES: readonly GptImageQuality[] = ['auto', 'low', 'medium', 'high'];
+const EXTENDED_QUALITIES: readonly GptImageQuality[] = [...BASE_QUALITIES, 'xhigh', 'max'];
+const EXTENDED_QUALITY_MODELS = new Set(['gpt-image-2.5', 'gpt-image-2.5-sunburst', 'gpt-image-2.5-flare']);
+
+export function gptImageQualityOptionsForModel(model?: string): readonly GptImageQuality[] {
+  return EXTENDED_QUALITY_MODELS.has(normalizeModel(model)) ? EXTENDED_QUALITIES : BASE_QUALITIES;
+}
+
+export function isGptImageQuality(value: unknown): value is GptImageQuality {
+  return typeof value === 'string' && EXTENDED_QUALITIES.some((quality) => quality === value);
+}
+
+/** Only public quality options are fetched; credentials never leave the server. */
+export async function fetchPresetImageQualityOptions(): Promise<GptImageQuality[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(
+      `${API_BASE}/image-capabilities`,
+      { signal: controller.signal, cache: 'no-store' },
+    );
+    if (!response.ok) throw new Error('无法读取服务器精细度选项');
+    const data: unknown = await response.json();
+    if (!data || typeof data !== 'object' || !('ok' in data) || data.ok !== true
+      || !('presetQualityOptions' in data) || !Array.isArray(data.presetQualityOptions)
+      || !data.presetQualityOptions.every(isGptImageQuality) || !data.presetQualityOptions.includes('auto')) {
+      throw new Error('服务器精细度选项格式无效');
+    }
+    return [...new Set<GptImageQuality>(data.presetQualityOptions)];
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const MAX_INPUT_IMAGES_BY_MODEL: Record<string, number> = {
   'gpt-image-2.5-sunburst': 16,

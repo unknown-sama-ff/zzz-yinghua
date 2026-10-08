@@ -6,7 +6,7 @@ import { fileToDataUrl, validateImageFile } from '../lib/validation';
 import { activeSession, useFreeCreateStore } from '../store/useFreeCreateStore';
 import { useIdentityStore } from '../store/useIdentityStore';
 import { useInpaintStore } from '../store/useInpaintStore';
-import { useProviderStore } from '../store/useProviderStore';
+import { gptImageQualityForRequest, useProviderStore } from '../store/useProviderStore';
 import { useToast } from '../store/useToast';
 import { useViewerStore } from '../store/useViewerStore';
 import { GallerySaveButton } from './GallerySaveButton';
@@ -31,6 +31,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
   const beginGeneration = useFreeCreateStore((state) => state.beginGeneration);
   const completeGeneration = useFreeCreateStore((state) => state.completeGeneration);
   const failGeneration = useFreeCreateStore((state) => state.failGeneration);
+  const quality = useProviderStore(gptImageQualityForRequest);
   const gptCredentials = useProviderStore((state) => state.creds['gpt-image']);
   const freeloadEnabled = useProviderStore((state) => state.freeloadEnabled);
   const characterName = useIdentityStore((state) => state.characterName);
@@ -116,6 +117,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
         contextImageUrl,
         references: draftReferences,
         credentials: gptCredentials,
+        quality,
         useServerPreset: freeloadEnabled,
         imageCount,
         aspectRatio,
@@ -136,7 +138,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
       failGeneration(generation, message);
       showError(message);
     }
-  }, [beginGeneration, completeGeneration, contextImageUrl, draft, draftReferences, failGeneration, freeloadEnabled, gptCredentials, imageCount, showError]);
+  }, [beginGeneration, completeGeneration, contextImageUrl, draft, draftReferences, failGeneration, freeloadEnabled, gptCredentials, imageCount, aspectRatio, quality, showError]);
 
   if (!isOpen || shouldAvoidFullscreen) return null;
 

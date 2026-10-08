@@ -1,3 +1,4 @@
+import { resolveGptImageModel, validateGptImageQuality } from './lib/gptImageCapabilities.js';
 import {
   fetchWithTimeout,
   fetchBufferLimited,
@@ -243,7 +244,17 @@ async function pollSeedreamTask(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
 // an input image is present so the upload actually conditions the result;
 // falls back to text-only generations when no image was provided.
 // ---------------------------------------------------------------------------
+function qualityRejected(req, response, text) {
+  return req.quality !== undefined && [400, 422].includes(response.status) && /\bquality\b/i.test(text);
+}
+
+function qualityRejectionError(status) {
+  return new UpstreamError('INVALID_INPUT', '上游不支持当前生成精细度，请更换档位或检查模型与中转站配置', status);
+}
+
 async function gptImage(req) {
+  const qualityError = validateGptImageQuality({ ...req, provider: 'gpt-image' });
+  if (qualityError) throw new UpstreamError('INVALID_INPUT', qualityError, 400);
   const useServerPreset = req.useServerPreset === true;
   const key = useServerPreset
     ? process.env.GPT_IMAGE_API_KEY
@@ -263,9 +274,7 @@ async function gptImage(req) {
   }
   // Client-supplied base URL is attacker-controlled — validate before use.
   if (!useServerPreset) await assertSafeUrl(base);
-  const model = useServerPreset
-    ? (process.env.GPT_IMAGE_MODEL || 'gpt-image-2')
-    : req.model;
+  const model = resolveGptImageModel(req);
   if (!model) {
     throw new UpstreamError('UNAUTHORIZED', useServerPreset
       ? 'gpt-image 服务端预设缺少模型名称'
@@ -395,6 +404,7 @@ async function gptImage(req) {
         form.append('size', size || '1024x1024');
       }
       form.append('n', String(n));
+      if (req.quality !== undefined) form.append('quality', req.quality);
       for (const [index, image] of images.entries()) {
         form.append('image', new Blob([image.buffer], { type: image.mime }), `image-${index}.${image.ext}`);
       }
@@ -411,6 +421,7 @@ async function gptImage(req) {
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
       console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
+      if (qualityRejected(req, res, bodyText)) throw qualityRejectionError(res.status);
       // Cheap relays may still reject. Retry with smaller size if this was a large image.
       if (res.status === 400 && (
         inputImages.some((image) => image.buffer.length > RETRY_SIZE_KB_THRESHOLD * 1024)
@@ -432,6 +443,7 @@ async function gptImage(req) {
           res = await tryEdits(buildEditForm(reducedInputs, reducedMask));
           if (!res.ok) {
             const retryText = await res.text().catch(() => '');
+            if (qualityRejected(req, res, retryText)) throw qualityRejectionError(res.status);
             console.warn(`[gpt-image] reduced retry also failed ${res.status}: ${retryText.slice(0, 200)}`);
             throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status} (已尝试原图+降级)`, res.status);
           }
@@ -450,6 +462,7 @@ async function gptImage(req) {
 
   // No image → text-only generations.
   const body = { model, prompt: req.prompt, n };
+  if (req.quality !== undefined) body.quality = req.quality;
   if (req.aspectRatio) {
     body.aspect_ratio = req.aspectRatio;
   } else {
@@ -462,6 +475,8 @@ async function gptImage(req) {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
+      const errorText = await res.text().catch(() => '');
+      if (qualityRejected(req, res, errorText)) throw qualityRejectionError(res.status);
       throw new UpstreamError(codeFromStatus(res.status), `gpt-image 返回 ${res.status}`, res.status);
     }
     return parseJsonSafe(res);

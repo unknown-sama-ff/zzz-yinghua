@@ -1,4 +1,4 @@
-import { useProviderStore } from '../store/useProviderStore';
+import { gptImageQualityForRequest, useProviderStore } from '../store/useProviderStore';
 import { useUploadStore } from '../store/useUploadStore';
 import { gptImageSizeForAspectRatio } from '../lib/gptImageCapabilities';
 import { parseDataUrl } from '../lib/validation';
@@ -27,6 +27,7 @@ export function parseHeaders(raw: string): Record<string, string> {
  * - custom-url: passes both size and aspectRatio (provider decides)
  */
 export function useBuildRequest() {
+  const quality = useProviderStore(gptImageQualityForRequest);
   const provider = useProviderStore((s) => s.provider);
   const uploadedImage = useUploadStore((s) => s.uploadedImage);
   const custom = useProviderStore((s) => s.custom);
@@ -62,6 +63,7 @@ export function useBuildRequest() {
       size,
       aspectRatio,
       n: 1,
+      ...(provider === 'gpt-image' && quality !== undefined ? { quality } : {}),
       refImages: opts?.refImages,
       inputImageMaxDimension: opts?.inputImageMaxDimension,
       ...(freeloadEnabled ? { useServerPreset: true } : {}),

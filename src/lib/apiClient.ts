@@ -1,4 +1,4 @@
-import type { ApiResponse, GenRequest } from '../types';
+import type { ApiResponse, GenRequest, GptImageQuality } from '../types';
 import { API_BASE } from './apiBase';
 import { GENERATE_TIMEOUT_MS, JSON_WORKER_TIMEOUT_MS, POLL_DEADLINE_MS, POLL_INTERVAL_MS } from './constants';
 
@@ -97,6 +97,10 @@ async function fetchJson(
   clear();
 
   if (!res.ok) {
+    const error = await res.json().catch(() => null) as ApiResponse | null;
+    if (error?.ok === false && typeof error.message === 'string') {
+      throw new ApiError(error.code, error.message);
+    }
     throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`);
   }
 
@@ -157,6 +161,7 @@ export async function inpaint(params: {
   maskDataUrl?: string;
   prompt: string;
   provider?: string;
+  quality?: GptImageQuality;
   model?: string;
   apiKey?: string;
   baseUrl?: string;
@@ -169,6 +174,7 @@ export async function inpaint(params: {
     maskDataUrl,
     prompt,
     provider = 'gpt-image',
+    quality,
     model,
     apiKey,
     baseUrl,
@@ -206,6 +212,7 @@ export async function inpaint(params: {
 
   form.append('prompt', prompt);
   form.append('provider', provider);
+  if (quality !== undefined) form.append('quality', quality);
   form.append('editMode', editMode);
   if (model) form.append('model', model);
   if (apiKey) form.append('apiKey', apiKey);

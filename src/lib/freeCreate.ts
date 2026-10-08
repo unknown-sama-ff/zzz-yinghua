@@ -1,6 +1,6 @@
 import { gptImageSizeForAspectRatio } from './gptImageCapabilities';
 import { parseDataUrl } from './validation';
-import type { FreeCreateReference, GenRequest } from '../types';
+import type { FreeCreateReference, GenRequest, GptImageQuality } from '../types';
 
 interface GptImageCredentials {
   apiKey: string;
@@ -10,6 +10,7 @@ interface GptImageCredentials {
 
 interface BuildFreeCreateRequestInput {
   prompt: string;
+  quality?: GptImageQuality;
   contextImageUrl: string | null;
   references: FreeCreateReference[];
   credentials: GptImageCredentials;
@@ -36,6 +37,7 @@ export const DEFAULT_FREE_CREATE_ASPECT_RATIO = '1:1';
 
 export function buildFreeCreateRequest({
   prompt,
+  quality,
   contextImageUrl,
   references,
   credentials,
@@ -54,6 +56,7 @@ export function buildFreeCreateRequest({
 
   return {
     provider: 'gpt-image',
+    ...(quality !== undefined ? { quality } : {}),
     prompt,
     n: clampedCount,
     // Send only `size`, never `aspectRatio`: the server forwards aspect_ratio and

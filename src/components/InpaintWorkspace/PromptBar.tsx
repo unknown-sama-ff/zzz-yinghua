@@ -3,7 +3,7 @@ import { useInpaintStore } from '../../store/useInpaintStore';
 import { inpaint, ApiError } from '../../lib/apiClient';
 import { buildContextualEditPrompt } from '../../lib/inpaintPrompt';
 import { useToast } from '../../store/useToast';
-import { useProviderStore } from '../../store/useProviderStore';
+import { gptImageQualityForRequest, useProviderStore } from '../../store/useProviderStore';
 import { ModeSwitch } from './ModeSwitch';
 
 export const PromptBar = memo(function PromptBar() {
@@ -22,6 +22,7 @@ export const PromptBar = memo(function PromptBar() {
   const brushSize = useInpaintStore((s) => s.brushSize);
   const setBrushSize = useInpaintStore((s) => s.setBrushSize);
   const setFeatherRadius = useInpaintStore((s) => s.setFeatherRadius);
+  const quality = useProviderStore(gptImageQualityForRequest);
   const gptCredentials = useProviderStore((s) => s.creds['gpt-image']);
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
 
@@ -70,6 +71,7 @@ export const PromptBar = memo(function PromptBar() {
         maskDataUrl: currentMaskDataUrl,
         prompt: buildContextualEditPrompt(instruction, mode),
         provider: 'gpt-image',
+        quality,
         apiKey: gptCredentials.apiKey.trim() || undefined,
         baseUrl: gptCredentials.baseUrl.trim() || undefined,
         model: gptCredentials.model.trim() || undefined,
@@ -85,7 +87,7 @@ export const PromptBar = memo(function PromptBar() {
     } finally {
       setIsGenerating(false);
     }
-  }, [targetImage, currentVersionId, currentVersionUrl, localPrompt, mode, maskDataUrl, gptCredentials, freeloadEnabled, appendVersion, setIsGenerating, showError]);
+  }, [targetImage, currentVersionId, currentVersionUrl, localPrompt, mode, maskDataUrl, gptCredentials, freeloadEnabled, quality, appendVersion, setIsGenerating, showError]);
 
   return (
     <div className="border-t border-[var(--zzz-text)]/10 bg-[var(--zzz-ink)]/80 p-3 backdrop-blur-md">

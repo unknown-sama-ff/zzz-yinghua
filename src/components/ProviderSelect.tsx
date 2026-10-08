@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { useIdentityStore } from '../store/useIdentityStore';
-import { useProviderStore } from '../store/useProviderStore';
+import { gptImageQualityOptions, useProviderStore } from '../store/useProviderStore';
+import { GPT_IMAGE_QUALITY_LABELS, isGptImageQuality } from '../lib/gptImageCapabilities';
 import type { ProviderName } from '../types';
 import { SectionHeader } from './SectionHeader';
 
@@ -23,6 +24,12 @@ export const ProviderSelect = memo(function ProviderSelect() {
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
   const visionCred = useProviderStore((s) => s.visionCred);
   const setVisionCred = useProviderStore((s) => s.setVisionCred);
+
+  const quality = useProviderStore((s) => s.gptImageQuality);
+  const setQuality = useProviderStore((s) => s.setGptImageQuality);
+  const qualityOptions = useProviderStore(gptImageQualityOptions);
+  const presetQualityStatus = useProviderStore((s) => s.presetQualityStatus);
+  const reloadQualityOptions = useProviderStore((s) => s.loadPresetQualityOptions);
 
   const isKeyed = provider === 'seedream' || provider === 'gpt-image' || provider === 'custom-url';
   const baseUrlPlaceholder =
@@ -59,6 +66,40 @@ export const ProviderSelect = memo(function ProviderSelect() {
           </button>
         ))}
       </div>
+
+      {provider === 'gpt-image' && (
+        <div className="mt-4 space-y-2 border-t border-zzz-text/10 pt-4">
+          <label htmlFor="gpt-image-quality" className="block font-mono text-xs text-zzz-text/60">
+            生成精细度
+          </label>
+          <select
+            id="gpt-image-quality"
+            value={qualityOptions?.includes(quality) ? quality : 'auto'}
+            onChange={(event) => {
+              if (isGptImageQuality(event.target.value)) setQuality(event.target.value);
+            }}
+            disabled={qualityOptions === null}
+            aria-describedby="gpt-image-quality-help"
+            className="glass-input w-full px-3 py-2 font-mono text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {(qualityOptions ?? ['auto'] as const).map((option) => (
+              <option key={option} value={option}>{GPT_IMAGE_QUALITY_LABELS[option]}</option>
+            ))}
+          </select>
+          <p id="gpt-image-quality-help" className="font-mono text-xs text-zzz-text/50">
+            更高精细度可能增加生成耗时和费用。
+          </p>
+          {freeloadEnabled && presetQualityStatus === 'loading' && (
+            <p role="status" className="font-mono text-xs text-zzz-text/50">正在读取服务器可用档位，暂时使用服务器默认。</p>
+          )}
+          {freeloadEnabled && presetQualityStatus === 'error' && (
+            <div role="status" className="flex flex-wrap items-center gap-2 font-mono text-xs text-zzz-text/60">
+              <span>无法读取可用档位，仍可按服务器默认生成。</span>
+              <button type="button" onClick={() => void reloadQualityOptions()} className="glass-btn px-2 py-1">重试</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {isKeyed && !freeloadEnabled && (
         <div className="mt-4 space-y-3 border-t border-zzz-text/10 pt-4">

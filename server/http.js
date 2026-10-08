@@ -143,7 +143,7 @@ export async function withRetry(fn, retries = UPSTREAM_RETRIES) {
       // network / 5xx upstream failures.
       if (
         err instanceof UpstreamError &&
-        ([400, 401, 403].includes(err.status) || err.code === 'UPSTREAM_TIMEOUT')
+        ([400, 401, 403].includes(err.status) || err.code === 'INVALID_INPUT' || err.code === 'UPSTREAM_TIMEOUT')
       ) {
         throw err;
       }

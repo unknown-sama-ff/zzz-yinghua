@@ -5,6 +5,7 @@
 ## 功能
 
 - **图片上传**：拖拽 / 点击，本地预览，类型与大小校验（PNG/JPEG/WEBP，≤10MB）。
+- **生成精细度**：在「接口与角色」选择全局 GPT 图片精细度；默认自动。GPT Image 2.5（含 Sunburst、Flare）支持自动、低、中、高、超高、最高，旧模型及未知模型显示前四档。影画、三视图、海报、自由创作和图片编辑共用；刷新恢复自动。白嫖模式根据服务器实际模型提供档位，读取失败时仍可使用服务器默认生成。
 - **三 Provider**：`seedream`、`gpt-image`、`custom-url`（自定义端点 + 鉴权头），统一经后端代理调用。
 - **三视图 + 特写**（可开关）：内置 prompt 模板，可微调。
 - **影画三风格**：重墨黑白 / 半赛璐珞 / 全彩高饱和，背景嵌入角色英文名。
@@ -56,7 +57,9 @@ npm start              # Node 代理同时托管 dist/ 静态资源
 
 ## API 契约
 
-- `POST /api/generate` — body `{ provider, prompt, imageBase64?, size?, n?, customEndpoint?, customHeaders?, customBodyTemplate? }`
+- `POST /api/generate` — body `{ provider, prompt, imageBase64?, size?, quality?, n?, customEndpoint?, customHeaders?, customBodyTemplate? }`
+- `GET /api/image-capabilities` — 返回 `{ ok: true, presetQualityOptions: [...] }`，只公开服务器预设可用精细度，不包含模型、密钥或接口地址。
+- `quality` 可选：`auto | low | medium | high | xhigh | max`，以实际模型能力校验；未提供时不向上游添加此参数。它与图片尺寸、参考图压缩及局部重绘范围无关。白嫖模式仍沿用 `GPT_IMAGE_MODEL`（默认 `gpt-image-2`）和现有额度规则，更高精细度可能增加耗时与费用。
 - 响应：`{ ok: true, images: string[] }` 或 `{ ok: false, code, message }`
 - 错误码：`INVALID_INPUT` `UNAUTHORIZED` `UPSTREAM_TIMEOUT` `UPSTREAM_ERROR` `RATE_LIMITED` `SSRF_BLOCKED`
 - 代理特性：错误归一化、120s 超时（超时不重试）、瞬时错误最多 2 次指数退避重试、seedream 长任务轮询、上游非 JSON 响应容错。

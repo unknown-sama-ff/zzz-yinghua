@@ -2,6 +2,8 @@
 
 export type ProviderName = 'seedream' | 'gpt-image' | 'custom-url';
 
+export type GptImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 /** Request payload the frontend sends to POST /api/generate. */
 export interface GenRequest {
   provider: ProviderName;
@@ -12,6 +14,8 @@ export interface GenRequest {
   refImages?: { base64: string; mime: string }[];
   /** Maximum long edge for all image-edit inputs; the server clamps this to safe presets. */
   inputImageMaxDimension?: number;
+  /** Generation detail level, independent of dimensions and input-image compression. */
+  quality?: GptImageQuality;
   size?: string;
   aspectRatio?: string;
   n?: number;

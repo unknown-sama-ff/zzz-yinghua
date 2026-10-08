@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { providers, registerTaskStore, capN } from './providers.js';
 import { compositeEmbed, compositeStitch } from './lib/composite.js';
-import { maxInputImagesForGptModel } from './lib/gptImageCapabilities.js';
+import { gptImageQualityOptionsForModel, resolveGptImageModel, validateGptImageQuality, maxInputImagesForGptModel } from './lib/gptImageCapabilities.js';
 import {
   UpstreamError,
   fetchWithTimeout,
@@ -688,6 +688,11 @@ async function executeGeneration(body, idempotencyKey) {
     return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: '缺少 prompt' } };
   }
 
+  const qualityError = validateGptImageQuality(body);
+  if (qualityError) {
+    return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: qualityError } };
+  }
+
   if (body.refImages !== undefined) {
     if (!Array.isArray(body.refImages)) {
       return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: 'refImages 必须是图片数组' } };
@@ -810,7 +815,7 @@ app.post('/api/inpaint', rateLimit, upload.fields([
     }
   }
 
-  const { prompt, provider, model, apiKey, baseUrl } = bodyFields;
+  const { prompt, provider, model, apiKey, baseUrl, quality } = bodyFields;
   const editMode = bodyFields.editMode === undefined ? 'smart' : bodyFields.editMode;
   if (editMode !== 'smart' && editMode !== 'precise') {
     return fail(res, 400, 'INVALID_INPUT', '无效的重绘模式');
@@ -835,6 +840,7 @@ app.post('/api/inpaint', rateLimit, upload.fields([
   const body = {
     provider: targetProvider,
     prompt,
+    ...(quality !== undefined ? { quality } : {}),
     imageBase64,
     imageMime: imageFile?.mimetype,
     maskBase64,
@@ -848,6 +854,8 @@ app.post('/api/inpaint', rateLimit, upload.fields([
 
   const started = Date.now();
   try {
+    const qualityError = validateGptImageQuality(body);
+    if (qualityError) return fail(res, 400, 'INVALID_INPUT', qualityError);
     if (useServerPreset && !consumePresetBudget()) {
       return fail(res, 429, 'RATE_LIMITED', '服务端免费额度今日已用尽，请明日再来或自行填写 API Key');
     }
@@ -1005,6 +1013,11 @@ app.get('/api/proxy-image', imageRateLimit, async (req, res) => {
     console.warn('[proxy-image] failed:', error?.message || error);
     return fail(res, 502, 'UPSTREAM_ERROR', '图片获取失败');
   }
+});
+
+app.get('/api/image-capabilities', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, presetQualityOptions: gptImageQualityOptionsForModel(resolveGptImageModel({ useServerPreset: true })) });
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, port: PORT }));
