@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, memo } from 'react';
-import { useCursorEffectsPref } from '../lib/useCursorEffectsPref';
 import { useProviderStore } from '../store/useProviderStore';
 import { useViewerStore } from '../store/useViewerStore';
 import { useInpaintStore } from '../store/useInpaintStore';
@@ -117,8 +116,11 @@ function createThemeColorCache() {
  * no canvas) when the user's saved preference is off or the OS has
  * prefers-reduced-motion set.
  */
-export const CursorEffects = memo(function CursorEffects() {
-  const { enabled, reduced, setEnabled } = useCursorEffectsPref();
+export const CursorEffects = memo(function CursorEffects({ enabled, reduced, setEnabled }: {
+  enabled: boolean;
+  reduced: boolean;
+  setEnabled: (value: boolean) => void;
+}) {
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
   const setFreeloadEnabled = useProviderStore((s) => s.setFreeloadEnabled);
   const viewerFullscreen = useViewerStore((s) => s.viewerFullscreen);
@@ -542,7 +544,7 @@ export const CursorEffects = memo(function CursorEffects() {
             onClick={() => setEnabled(!enabled)}
             aria-pressed={enabled}
             data-active={enabled}
-            aria-label={enabled ? '关闭鼠标特效' : '开启鼠标特效'}
+            aria-label={enabled ? '关闭鼠标和背景落樱特效' : '开启鼠标和背景落樱特效'}
             className="glass-btn fixed bottom-4 right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
           >
             特效 {enabled ? 'ON' : 'OFF'}

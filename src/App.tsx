@@ -16,18 +16,20 @@ import { Toast } from './components/Toast';
 import { ImageLightbox } from './components/ImageLightbox';
 import { CursorEffects } from './components/CursorEffects';
 import { AmbientPetals } from './components/AmbientPetals';
+import { useCursorEffectsPref } from './lib/useCursorEffectsPref';
 import { lazy, Suspense } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   const palette = useUploadStore((s) => s.palette);
   const { message, clear } = useToast();
+  const { enabled, reduced, setEnabled } = useCursorEffectsPref();
 
   return (
     <div className="ambient-scene">
-      <AmbientPetals />
+      {enabled && <AmbientPetals />}
       <div className="ambient-scene__content">
-      <CursorEffects />
+      <CursorEffects enabled={enabled} reduced={reduced} setEnabled={setEnabled} />
 
       {/* Header */}
       <header className="relative overflow-hidden px-6 py-8">

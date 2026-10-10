@@ -18,7 +18,7 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
- * User's saved cursor-effects preference, combined with the OS-level
+ * User's saved cursor and background effects preference, combined with the OS-level
  * reduced-motion setting. `reduced` is exposed separately so callers can
  * decide whether to hide the toggle entirely rather than just disable it.
  */
