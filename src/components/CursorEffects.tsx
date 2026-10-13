@@ -511,6 +511,23 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced, set
           <img src="/bilibili.ico" alt="" className="h-5 w-5 object-contain invert brightness-0 transition-[filter] group-hover:invert-0 group-hover:brightness-100" draggable={false} />
         </a>
         <a
+          href="https://www.douyin.com/user/MS4wLjABAAAA6zJjn2X4oSR1B8c7Py_GH0MtbZcBw9ge4Ka_wgOQDF6h8qaqe3OBTA3SDTlwJT24?from_tab_name=main"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="glass-btn group flex h-10 w-10 items-center justify-center rounded-full p-0 text-zzz-text transition-colors hover:text-zzz-primary"
+          aria-label="抖音"
+          title="作者抖音主页"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M14.5 3.2c.3 1.8 1.35 3.2 3.1 4.05.65.32 1.35.5 2.15.52v3.03a8.9 8.9 0 0 1-5.22-1.73v6.12a5.63 5.63 0 1 1-4.84-5.57v3.17a2.55 2.55 0 1 0 1.77 2.4V3.2h3.04Z" />
+          </svg>
+        </a>
+        <a
           href="https://github.com/unknown-sama-ff/zzz-yinghua"
           target="_blank"
           rel="noopener noreferrer"
