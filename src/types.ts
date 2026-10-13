@@ -63,19 +63,44 @@ export interface FreeCreateReference {
   name: string;
 }
 
+export type FreeCreateMode = 'conversation' | 'fixed-character' | 'fixed-scene';
+export type FreeCreateCostumeMode = 'character' | 'target';
+export type FreeCreateTaskStatus = 'queued' | 'sending' | 'complete' | 'error' | 'uncertain';
+
+/** Inputs as they were when the user submitted a task, independent of later edits. */
+export interface FreeCreateInputSnapshot {
+  mode: FreeCreateMode;
+  sharedReference: FreeCreateReference | null;
+  contextImageUrl: string | null;
+  imageCount: number;
+  aspectRatio: string;
+  costumeMode: FreeCreateCostumeMode;
+  contextRevision: number;
+}
+
 export interface FreeCreateUserMessage {
   id: string;
   role: 'user';
   prompt: string;
   references: FreeCreateReference[];
-  status: 'sending' | 'complete' | 'error';
+  status: FreeCreateTaskStatus;
+  attemptId: string;
+  /** Full request including credentials stays in memory and is never persisted. */
+  requestSnapshot?: GenRequest;
+  inputSnapshot: FreeCreateInputSnapshot;
+  targetReference?: FreeCreateReference;
+  batchId?: string;
+  batchIndex?: number;
   error?: string;
+  errorCode?: string;
+  httpStatus?: number;
   createdAt: number;
 }
 
 export interface FreeCreateAssistantMessage {
   id: string;
   role: 'assistant';
+  userMessageId: string;
   images: string[];
   /** The user instruction that produced these images — carried for gallery saves. */
   prompt: string;
@@ -90,6 +115,13 @@ export interface FreeCreateSession {
   messages: FreeCreateMessage[];
   draft: string;
   draftReferences: FreeCreateReference[];
+  batchReferences: FreeCreateReference[];
+  sharedReference: FreeCreateReference | null;
+  mode: FreeCreateMode;
+  costumeMode: FreeCreateCostumeMode;
+  /** Manual context choices invalidate auto-selection by older requests. */
+  contextRevision: number;
+  pausedReason?: string;
   contextImageUrl: string | null;
   /** How many images the next turn should generate (1–5). Sticky across turns. */
   imageCount: number;

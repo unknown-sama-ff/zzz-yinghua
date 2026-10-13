@@ -3,6 +3,7 @@ import { API_BASE } from './apiBase';
 import { GENERATE_TIMEOUT_MS, JSON_WORKER_TIMEOUT_MS, POLL_DEADLINE_MS, POLL_INTERVAL_MS } from './constants';
 
 let jsonWorker: Worker | null = null;
+let jsonParseRequestId = 0;
 
 function getJsonWorker(): Worker | null {
   if (!jsonWorker) {
@@ -24,25 +25,50 @@ async function parseJsonOffThread(response: Response): Promise<ApiResponse> {
   }
 
   const buffer = await response.arrayBuffer();
+  const requestId = `json-${++jsonParseRequestId}`;
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    function cleanup(): boolean {
+      if (settled) return false;
+      settled = true;
+      clearTimeout(timer);
+      worker!.removeEventListener('message', handler);
+      worker!.removeEventListener('error', handleWorkerError);
+      worker!.removeEventListener('messageerror', handleWorkerError);
+      return true;
+    }
     const timer = setTimeout(
-      () => reject(new Error('json worker timed out')),
+      () => {
+        if (cleanup()) reject(new Error('json worker timed out'));
+      },
       JSON_WORKER_TIMEOUT_MS,
     );
     const handler = (e: MessageEvent) => {
-      const data = e.data as { type: string; data?: ApiResponse; message?: string };
-      if (!data || typeof data !== 'object') return;
-      clearTimeout(timer);
-      worker.removeEventListener('message', handler);
+      const data = e.data as { requestId?: string; type: string; data?: ApiResponse; message?: string };
+      if (!data || typeof data !== 'object' || data.requestId !== requestId) return;
+      if (!cleanup()) return;
       if (data.type === 'result' && data.data) {
         resolve(data.data);
       } else {
         reject(new Error(data.message ?? 'json worker error'));
       }
     };
+    const handleWorkerError = () => {
+      if (jsonWorker === worker) {
+        jsonWorker = null;
+        worker.terminate();
+      }
+      if (cleanup()) reject(new Error('json worker unavailable'));
+    };
     worker.addEventListener('message', handler);
-    worker.postMessage(buffer, [buffer]);
+    worker.addEventListener('error', handleWorkerError);
+    worker.addEventListener('messageerror', handleWorkerError);
+    try {
+      worker.postMessage({ requestId, buffer }, [buffer]);
+    } catch {
+      if (cleanup()) reject(new Error('json worker request failed'));
+    }
   });
 }
 
@@ -52,6 +78,8 @@ export class ApiError extends Error {
   constructor(
     public code: string,
     message: string,
+    public status?: number,
+    public requestId?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -84,6 +112,7 @@ function withAbortTimeout<T>(
 async function fetchJson(
   url: string,
   init: RequestInit & { timeout?: number },
+  requestId?: string,
 ): Promise<ApiResponse> {
   const useWorker = init.timeout !== 0;
   const timeoutMs = init.timeout ?? GENERATE_TIMEOUT_MS;
@@ -95,19 +124,20 @@ async function fetchJson(
   );
 
   clear();
+  const responseRequestId = res.headers.get('x-request-id') || requestId;
 
   if (!res.ok) {
     const error = await res.json().catch(() => null) as ApiResponse | null;
     if (error?.ok === false && typeof error.message === 'string') {
-      throw new ApiError(error.code, error.message);
+      throw new ApiError(error.code, error.message, res.status, responseRequestId);
     }
-    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`);
+    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`, res.status, responseRequestId);
   }
 
   try {
     return useWorker ? await parseJsonOffThread(res) : (await res.json()) as ApiResponse;
   } catch {
-    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`);
+    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`, res.status, responseRequestId);
   }
 }
 
@@ -115,14 +145,21 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function pollTask(taskId: string): Promise<string[]> {
+async function pollTask(taskId: string, requestId?: string): Promise<string[]> {
   const deadline = Date.now() + POLL_DEADLINE_MS;
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL_MS);
     const res = await fetch(`${API_BASE}/task/${encodeURIComponent(taskId)}`);
-    if (!res.ok) continue;
+    if (res.status === 202) continue;
+    if (!res.ok) {
+      const error = await res.json().catch(() => null) as ApiResponse | null;
+      if (error?.ok === false) {
+        throw new ApiError(error.code, error.message, res.status, requestId);
+      }
+      throw new ApiError('UPSTREAM_ERROR', `任务查询失败 (${res.status})`, res.status, requestId);
+    }
     const data = (await res.json()) as ApiResponse;
-    if (!data.ok) throw new ApiError(data.code, data.message);
+    if (!data.ok) throw new ApiError(data.code, data.message, res.status, requestId);
     if (data.images && data.images.length > 0) return data.images;
     if (data.taskId && data.images?.length === 0) continue; // still processing
   }
@@ -138,21 +175,23 @@ export async function generate(req: GenRequest): Promise<string[]> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req),
       timeout: GENERATE_TIMEOUT_MS,
-    });
+    }, req.idempotencyKey);
 
     if (!data.ok) {
-      throw new ApiError(data.code, data.message);
+      throw new ApiError(data.code, data.message, undefined, req.idempotencyKey);
     }
 
     if (data.taskId) {
-      return pollTask(data.taskId);
+      return pollTask(data.taskId, req.idempotencyKey);
     }
 
     return data.images;
   } catch (err) {
     if (err instanceof ApiError) throw err;
-    if (err instanceof DOMException && err.name === 'AbortError') throw TIMEOUT_ERROR;
-    throw NETWORK_ERROR;
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError(TIMEOUT_ERROR.code, TIMEOUT_ERROR.message, undefined, req.idempotencyKey);
+    }
+    throw new ApiError(NETWORK_ERROR.code, NETWORK_ERROR.message, undefined, req.idempotencyKey);
   }
 }
 

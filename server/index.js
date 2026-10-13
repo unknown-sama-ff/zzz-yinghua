@@ -488,6 +488,18 @@ function cleanupGenerationFlight(idempotencyKey) {
   generationFlights.delete(idempotencyKey);
 }
 
+/** Keep a logical generation deduplicated while it runs, then cache its outcome. */
+function registerGenerationFlight(idempotencyKey, outcome, completion = outcome) {
+  const entry = { outcome, timer: null };
+  generationFlights.set(idempotencyKey, entry);
+  const retainCompletedFlight = () => {
+    if (generationFlights.get(idempotencyKey) !== entry) return;
+    entry.timer = setTimeout(() => cleanupGenerationFlight(idempotencyKey), TASK_TTL_MS);
+    entry.timer.unref?.();
+  };
+  completion.then(retainCompletedFlight, retainCompletedFlight);
+}
+
 function cleanupTask(id) {
   const entry = taskStore.get(id);
   if (entry?.timer) clearTimeout(entry.timer);
@@ -603,23 +615,20 @@ app.post('/api/generate', rateLimit, upload.fields([
     // Long-running generation can exceed wx.request's timeout, so run it in the
     // background and return a taskId immediately for the mini program to poll.
     const taskId = createTaskId();
-    const outcome = (async () => {
+    taskStore.set(taskId, { status: 'running', timer: null });
+    const completion = (async () => {
       const result = await executeGeneration(body, idempotencyKey);
       finalizeAsyncTask(taskId, result);
-      return { status: 200, body: { ok: true, taskId } };
     })();
     if (idempotencyKey) {
-      const timer = setTimeout(() => cleanupGenerationFlight(idempotencyKey), TASK_TTL_MS);
-      generationFlights.set(idempotencyKey, { outcome, timer });
+      registerGenerationFlight(idempotencyKey, Promise.resolve({ status: 200, body: { ok: true, taskId } }), completion);
     }
-    taskStore.set(taskId, { status: 'running', timer: setTimeout(() => cleanupTask(taskId), TASK_TTL_MS) });
     return res.json({ ok: true, taskId });
   }
 
   const outcome = executeGeneration(body, idempotencyKey);
   if (idempotencyKey) {
-    const timer = setTimeout(() => cleanupGenerationFlight(idempotencyKey), TASK_TTL_MS);
-    generationFlights.set(idempotencyKey, { outcome, timer });
+    registerGenerationFlight(idempotencyKey, outcome);
   }
 
   const result = await outcome;
