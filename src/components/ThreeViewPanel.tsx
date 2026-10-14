@@ -3,6 +3,7 @@ import { useUploadStore } from '../store/useUploadStore';
 import { useProviderStore } from '../store/useProviderStore';
 import { useWorkbenchStore } from '../store/useWorkbenchStore';
 import { useInpaintStore } from '../store/useInpaintStore';
+import { useIdentityStore } from '../store/useIdentityStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_SIZE } from '../lib/prompts';
@@ -85,6 +86,7 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
   const setUpload = useUploadStore((s) => s.setUpload);
   const setPalette = useUploadStore((s) => s.setPalette);
   const provider = useProviderStore((s) => s.provider);
+  const characterName = useIdentityStore((s) => s.characterName);
   const addCostumeChangeImages = useWorkbenchStore((s) => s.addCostumeChangeImages);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
@@ -175,6 +177,13 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
       <ResultView
         slot={threeViewSlot}
         downloadPrefix="three-view"
+        saveInfo={threeViewSlot.images[0] ? {
+          imageUrl: threeViewSlot.images[0],
+          style: '三视图',
+          characterName,
+          prompt: threeViewPrompt,
+          provider,
+        } : undefined}
         onPick={(src) => void useAsMain(src)}
         pickLabel="用作主立绘"
         onInpaintClick={(_src, target) => {
