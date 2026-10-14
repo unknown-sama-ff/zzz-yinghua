@@ -58,6 +58,7 @@ import {
 } from './payments/wechat.js';
 import { parseSponsorName } from './payments/sponsorName.js';
 import { GalleryStorageError, deleteGalleryItem, listGallery, saveGalleryItem } from './gallery.js';
+import { PromptGalleryError, deletePrompt, listPrompts, savePrompt } from './promptGallery.js';
 
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
 loadEnv();
@@ -113,6 +114,7 @@ app.use(express.json({ limit: '50mb' }));
 
 // Multer for multipart/form-data (inpaint endpoint).
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } });
+const promptUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 3 } });
 
 // ── Security hardening ───────────────────────────────────────────────────────
 // Baseline response headers. A stricter SPA-level CSP is deliberately NOT added
@@ -167,6 +169,21 @@ const taskRateLimit = createRateLimiter({
 // their own much looser window.
 const imageRateLimit = createRateLimiter({
   max: Number(process.env.IMAGE_RATE_LIMIT_MAX || 240),
+  windowMs: 60_000,
+  keyFn: (req) => requestKey(req) || 'unknown',
+});
+const promptReadRateLimit = createRateLimiter({
+  max: Number(process.env.PROMPT_READ_RATE_LIMIT_MAX || 120),
+  windowMs: 60_000,
+  keyFn: (req) => requestKey(req) || 'unknown',
+});
+const promptWriteRateLimit = createRateLimiter({
+  max: Number(process.env.PROMPT_WRITE_RATE_LIMIT_MAX || 5),
+  windowMs: 60_000,
+  keyFn: (req) => requestKey(req) || 'unknown',
+});
+const promptDeleteRateLimit = createRateLimiter({
+  max: Number(process.env.PROMPT_DELETE_RATE_LIMIT_MAX || 20),
   windowMs: 60_000,
   keyFn: (req) => requestKey(req) || 'unknown',
 });
@@ -1091,6 +1108,57 @@ app.get('/api/gallery', rateLimit, async (req, res) => {
     if (error instanceof GalleryStorageError) return fail(res, 503, 'PAYMENT_NOT_CONFIGURED', error.message);
     console.error('[gallery/list] unexpected error:', error?.message || error);
     return fail(res, 500, 'UNKNOWN', '无法获取画廊');
+  }
+});
+
+// ── Prompt gallery ──────────────────────────────────────────────────────────
+app.post('/api/prompts', promptWriteRateLimit, promptUpload.array('referenceImages', 3), async (req, res) => {
+  try {
+    const row = await savePrompt({
+      title: req.body?.title,
+      prompt: req.body?.prompt,
+      category: req.body?.category,
+      deleteToken: req.body?.deleteToken,
+      files: req.files || [],
+    });
+    return res.json({ ok: true, row });
+  } catch (error) {
+    if (error instanceof PromptGalleryError) return fail(res, 400, 'INVALID_INPUT', error.message);
+    console.error('[prompts/save] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '保存提示词失败');
+  }
+});
+
+app.get('/api/prompts', promptReadRateLimit, async (req, res) => {
+  const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 24));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  try {
+    const rows = await listPrompts({
+      limit,
+      offset,
+      query: typeof req.query.q === 'string' ? req.query.q : '',
+      category: typeof req.query.category === 'string' ? req.query.category : '',
+    });
+    return res.json({ ok: true, rows, hasMore: rows.length === limit });
+  } catch (error) {
+    if (error instanceof PromptGalleryError) return fail(res, 503, 'STORAGE_NOT_CONFIGURED', error.message);
+    console.error('[prompts/list] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '无法获取提示词画廊');
+  }
+});
+
+app.delete('/api/prompts/:id', promptDeleteRateLimit, async (req, res) => {
+  const deleteToken = typeof req.body?.deleteToken === 'string'
+    ? req.body.deleteToken
+    : typeof req.headers['x-delete-token'] === 'string' ? req.headers['x-delete-token'] : '';
+  try {
+    const result = await deletePrompt({ id: req.params.id, deleteToken });
+    if (!result.ok) return fail(res, result.reason === 'forbidden' ? 403 : 404, result.reason === 'forbidden' ? 'FORBIDDEN' : 'NOT_FOUND', result.reason === 'forbidden' ? '无权删除该提示词' : '提示词不存在或已删除');
+    return res.json({ ok: true });
+  } catch (error) {
+    if (error instanceof PromptGalleryError) return fail(res, 400, 'INVALID_INPUT', error.message);
+    console.error('[prompts/delete] unexpected error:', error?.message || error);
+    return fail(res, 500, 'UNKNOWN', '删除提示词失败');
   }
 });
 

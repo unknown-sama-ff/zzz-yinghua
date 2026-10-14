@@ -135,6 +135,33 @@ ALTER TABLE payment_notify_events
 - `gallery.image_url` should store the Supabase Storage public URL, not a `data:image/...` base64 string.
 - Uploads and object deletes are done by the Express server (service-role key). **Do not** add anonymous upload/delete policies to `storage.objects` — the anon key must be read-only for the bucket.
 
+## Prompt gallery
+
+Run this SQL in the Supabase Dashboard to add the public prompt gallery. It
+reuses the existing `gallery-images` bucket; prompt reference images are stored
+under the `prompt-gallery/` path and are uploaded only by the Express server.
+
+```sql
+CREATE TABLE prompt_gallery (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  title TEXT NOT NULL CHECK (char_length(title) BETWEEN 1 AND 80),
+  prompt TEXT NOT NULL CHECK (char_length(prompt) BETWEEN 1 AND 2000),
+  category TEXT NOT NULL CHECK (category IN ('场景', '角色', '风格', '构图', '其他')),
+  reference_image_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+  delete_token_hash TEXT NOT NULL
+);
+
+CREATE INDEX prompt_gallery_created_idx ON prompt_gallery (created_at DESC);
+CREATE INDEX prompt_gallery_category_idx ON prompt_gallery (category, created_at DESC);
+ALTER TABLE prompt_gallery ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON prompt_gallery FROM anon;
+```
+
+The service-role server performs all prompt inserts and deletes. Do not add
+anonymous policies or Storage upload/delete policies. Public reads are also
+proxied by the Express service, so the browser does not need direct table access.
+
 ## Server prerequisites
 
 Gallery saves/deletes and sponsorship payments need the Express server env vars:

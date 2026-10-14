@@ -80,6 +80,7 @@ export default function App() {
               </div>
             }>
               <LazyGalleryPanel />
+              <LazyPromptGalleryPanel />
             </Suspense>
           </InpaintTargetSelector>
         </ErrorBoundary>
@@ -104,4 +105,8 @@ export default function App() {
 
 const LazyGalleryPanel = lazy(() =>
   import('./components/GalleryPanel').then(m => ({ default: m.GalleryPanel }))
+);
+
+const LazyPromptGalleryPanel = lazy(() =>
+  import('./components/PromptGalleryPanel').then(m => ({ default: m.PromptGalleryPanel }))
 );
