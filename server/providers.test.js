@@ -251,7 +251,7 @@ test('gpt-image resizes the precise mask again for the reduced-payload retry', a
       sharp(Buffer.from(await mask.arrayBuffer())).metadata(),
     ]);
     received.push({ imageMeta, maskMeta });
-    if (received.length === 1) return new Response('payload too large', { status: 400 });
+    if (received.length === 1) return new Response(JSON.stringify({ error: { message: 'payload too large', safety_violations: [] } }), { status: 400 });
     return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -287,6 +287,40 @@ test('gpt-image resizes the precise mask again for the reduced-payload retry', a
     else process.env.GPT_IMAGE_BASE_URL = originalBase;
     if (originalModel === undefined) delete process.env.GPT_IMAGE_MODEL;
     else process.env.GPT_IMAGE_MODEL = originalModel;
+  }
+});
+
+test('gpt-image preserves a safety rejection and never resizes or retries the rejected image', async () => {
+  const pixels = randomFillSync(Buffer.alloc(1200 * 1200 * 3));
+  const imageBase64 = (await sharp(pixels, { raw: { width: 1200, height: 1200, channels: 3 } }).png().toBuffer()).toString('base64');
+  const originalFetch = globalThis.fetch;
+  const originalEnv = Object.fromEntries(['GPT_IMAGE_API_KEY', 'GPT_IMAGE_BASE_URL', 'GPT_IMAGE_MODEL'].map((key) => [key, process.env[key]]));
+  process.env.GPT_IMAGE_API_KEY = 'test-key';
+  process.env.GPT_IMAGE_BASE_URL = 'https://openlux.invalid/v1';
+  process.env.GPT_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response(JSON.stringify({ error: { message: 'Your request was rejected by the safety system. safety_violations=[sexual].', request_id: 'req-local-safety-test' } }), { status: 400 });
+  };
+  try {
+    await assert.rejects(providers['gpt-image']({
+      useServerPreset: true,
+      prompt: 'a fully clothed game character action study', imageBase64, imageMime: 'image/png',
+    }), (error) => {
+      assert.equal(error.code, 'CONTENT_REJECTED');
+      assert.match(error.message, /内容审核/);
+      assert.match(error.message, /sexual/);
+      assert.match(error.message, /req-local-safety-test/);
+      return true;
+    });
+    assert.equal(calls, 1, 'a safety rejection must not trigger reduced-image resubmission');
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });
 

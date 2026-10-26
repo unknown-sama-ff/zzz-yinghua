@@ -23,11 +23,14 @@ import { useInpaintStore } from '../store/useInpaintStore';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
 import { ZeroFateControls } from './ZeroFateControls';
+import { GenerationErrorNotice } from './GenerationErrorNotice';
+import { YinghuaStagePreview } from './YinghuaStagePreview';
+import '../styles/yinghua-workflow.css';
 import type { GallerySaveInfo } from './GallerySaveButton';
 import type { GenSlot, InpaintTarget, YinghuaStyleId, ZeroFateMode } from '../types';
 
 // ---------------------------------------------------------------------------
-// Per-style card — memoized so changes to one style don't re-render the others
+// One current stage keeps generation controls beside its preview.
 // ---------------------------------------------------------------------------
 const StyleCard = memo(function StyleCard({
   style,
@@ -45,6 +48,11 @@ const StyleCard = memo(function StyleCard({
   zeroFateMode,
   draftReady,
   onGenerateDraft,
+  showDraft,
+  onConfirmDraft,
+  onResetDraftPrompt,
+  onGoToDraft,
+  onNextStep,
 }: {
   style: { id: YinghuaStyleId; label: string; description: string };
   prompt: string;
@@ -61,6 +69,11 @@ const StyleCard = memo(function StyleCard({
   zeroFateMode: ZeroFateMode;
   draftReady: boolean;
   onGenerateDraft: () => void;
+  showDraft: boolean;
+  onConfirmDraft: () => void;
+  onResetDraftPrompt: () => void;
+  onGoToDraft: () => void;
+  onNextStep: () => void;
 }) {
   const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
   const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
@@ -78,10 +91,6 @@ const StyleCard = memo(function StyleCard({
 
   // 反面模式：背景与标题/报错颜色互换
   const isBack = style.id === 3 && style3Face === 'back';
-  const cardBg = isBack ? 'bg-zzz-magenta/[0.08]' : 'bg-zzz-text/[0.03]';
-  const cardBorder = isBack ? 'border-zzz-magenta/20' : 'border-zzz-text/10';
-  const titleColor = 'text-zzz-magenta';
-  const errorColor = isBack ? 'text-zzz-text/70' : 'text-red-400';
   const displayedSixImage = style.id === 3
     ? resolveYinghuaFaceImage(slot.images, style3Face)
     : undefined;
@@ -95,6 +104,7 @@ const StyleCard = memo(function StyleCard({
     : slot;
   const displayedImage = style.id === 3 ? displayedSixImage?.src : slot.images[0];
   const isActiveGeneration = activeGeneration?.id === style.id;
+  const needsDraft = style.id === 1 && zeroFateMode === 'two-stage' && !draftReady;
   const generateLabel = backNeedsFront
     ? '需先生成六命阳'
     : needsBase
@@ -102,8 +112,8 @@ const StyleCard = memo(function StyleCard({
       : isActiveGeneration
         ? (activeGeneration.phase === 'draft' ? '生成动作底稿中…' : '生成中…')
         : style.id === 1 && zeroFateMode === 'two-stage'
-          ? (draftReady ? (slot.status === 'error' ? '重试零命转换（沿用底稿）' : '确认结构并生成零命') : '生成动作底稿')
-          : '生成';
+          ? (draftReady ? (slot.status === 'error' ? '重试零命转换（沿用底稿）' : '生成零命剪影') : '需先确认动作底稿')
+          : style.id === 1 ? '生成零命' : style.id === 2 ? '生成三命' : style3Face === 'front' ? '生成六命阳' : '生成六命阴';
 
   // --- Card flip animation for style 3 (六命) ---
   const prevFaceRef = useRef(style3Face);
@@ -125,68 +135,42 @@ const StyleCard = memo(function StyleCard({
     }
   }, [style3Face, style.id]);
 
+  if (showDraft) return <ZeroFateControls isCurrent={draftReady} onGenerateDraft={onGenerateDraft} onConfirmDraft={onConfirmDraft} onResetPrompt={onResetDraftPrompt} onInpaintClick={onInpaintClick} />;
+  const title = style.id === 1 ? '零命剪影' : style.id === 2 ? '三命灰阶' : style3Face === 'front' ? '六命全彩 · 阳' : '六命全彩 · 阴';
+  const description = style.id === 1
+    ? '沿用确认的动作与镜头，转为深色剪影，再添加角色文字。'
+    : style.id === 2 ? '在零命构图上转换中性灰阶与点缀色，保持动作和文字位置。'
+      : style3Face === 'front' ? '从三命恢复原角色的完整配色，保持镜头、衣装与图层对齐。' : '基于已完成的六命阳调整衣装表现，保持原有镜头与动作。';
+  const resultSlot = displayedImage ? { ...displayedSlot, status: 'done' as const, images: [displayedImage] } : displayedSlot;
   return (
-    <div
-      className={`flex flex-col rounded-xl border ${cardBorder} ${cardBg} p-3${
-        style.id === 3 && cardFlipping ? ' fx-face-flip' : ''
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <h3 className={`font-mono text-sm font-bold ${titleColor}`}>{style.label}</h3>
-        {style.id === 3 && (
-          <button
-            onClick={onFlipStyle3}
-            className="glass-btn px-2 py-0.5 font-mono text-[10px] tracking-widest text-zzz-text"
-            aria-label={style3Face === 'front' ? '切换到六命阴' : '切换到六命阳'}
-            aria-pressed={style3Face === 'back'}
-            title={style3Face === 'front' ? '切换到阴' : '切换到阳'}
-          >
-            {style3Face === 'front' ? '↻ 阳' : '↻ 阴'}
-          </button>
-        )}
+    <div className={`yinghua-stage${isBack ? ' yinghua-stage-yin' : ''}${style.id === 3 && cardFlipping ? ' fx-face-flip' : ''}`} data-yinghua-stage={style.id}>
+      <div className="yinghua-stage-controls">
+        <p className="yinghua-stage-eyebrow">{style.id === 1 ? '剪影与文字 / SILHOUETTE' : style.id === 2 ? '灰阶与点缀 / GRAYSCALE' : '原色与细节 / FULL COLOR'}</p>
+        <div className="yinghua-stage-title">
+          <h3>{title}</h3>
+          {style.id === 3 && <button type="button" onClick={onFlipStyle3} className="glass-btn" aria-label={style3Face === 'front' ? '切换到六命阴' : '切换到六命阳'} aria-pressed={style3Face === 'back'}>{style3Face === 'front' ? '↻ 阳' : '↻ 阴'}</button>}
+        </div>
+        <p className="yinghua-stage-description">{description}</p>
+        <details className="yinghua-prompt-editor">
+          <summary>编辑{style.id === 1 ? '零命' : style.id === 2 ? '三命' : '六命'}提示词 <span aria-hidden="true">＋</span></summary>
+          <textarea aria-label={`${style.label}提示词`} value={prompt} onChange={(e) => onPromptChange(style.id, e.target.value)} rows={10} className="glass-input" />
+        </details>
+        <GenerationErrorNotice message={slot.error} />
+        {needsDraft && <p className="yinghua-stage-note">先完成动作底稿并检查结构，再进入零命转换。</p>}
+        <div className="yinghua-stage-actions">
+          <button type="button" onClick={() => onRun(style.id)} disabled={Boolean(activeGeneration) || needsBase || backNeedsFront || needsDraft} className="yinghua-primary-action">{generateLabel}<span aria-hidden="true">↗</span></button>
+          {style.id === 1 && zeroFateMode === 'two-stage' && <button type="button" onClick={onGoToDraft} className="yinghua-text-button">返回动作底稿</button>}
+          {displayedImage && style.id < 3 && <button type="button" onClick={onNextStep} className="yinghua-text-button">下一步：{style.id === 1 ? '三命灰阶' : '六命全彩'} →</button>}
+          <p>{style.id === 1 ? '转换失败时会保留动作底稿，可单独重试本步。' : style.id === 2 ? '需要已完成的零命图片作为底图。' : '阳面完成后，可切换到阴面继续创作。'}</p>
+        </div>
       </div>
-      <p className="mb-2 mt-1 text-xs leading-relaxed text-zzz-text/55">{style.description}</p>
-      {style.id === 1 && <ZeroFateControls isCurrent={draftReady} onGenerateDraft={onGenerateDraft} onInpaintClick={onInpaintClick} />}
-      {style.id === 1 && zeroFateMode === 'two-stage' && <p className="mb-1 text-xs font-bold text-zzz-primary">第二阶段 · 零命剪影提示词</p>}
-      <textarea
-        aria-label={`${style.label}提示词`}
-        value={prompt}
-        onChange={(e) => onPromptChange(style.id, e.target.value)}
-        rows={5}
-        className="glass-input w-full flex-1 resize-y px-2 py-2 text-xs leading-relaxed"
-      />
-      <button
-        onClick={() => onRun(style.id)}
-        disabled={Boolean(activeGeneration) || needsBase || backNeedsFront}
-        className="glass-btn mt-2 py-2 font-mono text-xs uppercase tracking-widest text-zzz-text disabled:opacity-40"
-      >
-        {generateLabel}
-      </button>
-      {slot.error && (
-        <p className={`mt-1 font-mono text-[11px] ${errorColor}`}>{slot.error}</p>
-      )}
-      <ResultView
-        slot={displayedSlot}
-        downloadPrefix={`yinghua-style${style.id}`}
-        saveInfo={
-          displayedImage
-            ? ({
-                imageUrl: displayedImage,
-                style: style.label,
-                characterName,
-                prompt,
-                provider,
-              } satisfies GallerySaveInfo)
-            : undefined
-        }
-        imageClassName={style.id === 3 && displayedSixImage ? 'fx-face-flip' : undefined}
-        onInpaintClick={onInpaintClick}
-        inpaintMeta={{
-          type: 'yinghua',
-          slotId: style.id,
-          ...(style.id === 3 ? { index: displayedSixImage?.index } : {}),
-        }}
-      />
+      <YinghuaStagePreview slot={displayedSlot} title={title} hint="预览、下载或继续修改当前结果；切换步骤会保留已生成的图片。">
+        <ResultView slot={resultSlot} downloadPrefix={`yinghua-style${style.id}`}
+          saveInfo={displayedImage ? ({ imageUrl: displayedImage, style: style.label, characterName, prompt, provider } satisfies GallerySaveInfo) : undefined}
+          imageClassName={style.id === 3 && displayedSixImage ? 'fx-face-flip' : undefined}
+          onInpaintClick={onInpaintClick}
+          inpaintMeta={{ type: 'yinghua', slotId: style.id, ...(style.id === 3 ? { index: displayedSixImage?.index } : {}) }} />
+      </YinghuaStagePreview>
     </div>
   );
 });
@@ -205,6 +189,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const beginYinghuaGeneration = useYinghuaStore((s) => s.beginYinghuaGeneration);
   const endYinghuaGeneration = useYinghuaStore((s) => s.endYinghuaGeneration);
   const zeroFateMode = useYinghuaStore((s) => s.zeroFateMode);
+  const setZeroFateMode = useYinghuaStore((s) => s.setZeroFateMode);
+  const [activeStep, setActiveStep] = useState<'draft' | YinghuaStyleId>(() => zeroFateMode === 'two-stage' ? 'draft' : 1);
   const zeroFateDraft = useYinghuaStore((s) => s.zeroFateDraft);
   const zeroFateDraftPrompt = useYinghuaStore((s) => s.zeroFateDraftPrompt);
   const setZeroFateDraft = useYinghuaStore((s) => s.setZeroFateDraft);
@@ -564,132 +550,74 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     openWorkspace({ ...target, url: src });
   }, []);
 
+  const steps: { id: 'draft' | YinghuaStyleId; title: string; detail: string }[] = [
+    ...(zeroFateMode === 'two-stage' ? [{ id: 'draft' as const, title: '动作底稿', detail: '检查结构' }] : []),
+    { id: 1, title: '零命剪影', detail: '明暗与文字' },
+    { id: 2, title: '三命灰阶', detail: '灰阶与点缀' },
+    { id: 3, title: '六命全彩', detail: '原色与细节' },
+  ];
+  const selectedStyle = YINGHUA_STYLES.find((style) => style.id === (activeStep === 'draft' ? 1 : activeStep))!;
+
   return (
-    <section className="glass p-6" data-inpaint-zone="yinghua">
-      <div className="flex items-center justify-between">
-        <SectionHeader title="影画动作设计 · 三种风格" />
-        <button
-          onClick={() => setYinghuaLang(yinghuaLang === 'zh' ? 'en' : 'zh')}
-          className="glass-btn px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
-        >
-          {yinghuaLang === 'zh' ? '中 → EN' : 'EN → 中'}
-        </button>
-      </div>
-      <div className="-mt-2 mb-4 rounded-lg border border-zzz-text/10 bg-zzz-text/[0.02] p-3 font-mono text-[11px] leading-relaxed text-zzz-text/55">
-        <p className="mb-1.5 text-zzz-primary/80">
-          ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁原镜头/透视/动作/配色）。六命可切换「阳/阴」：阳为全彩高饱和赛璐珞；阴为服装精简版（自然精简服装、顺势露肤），需先出阳再生成阴；配色统一以三视图原色为准。
-        </p>
-        <p className="mb-2">零命默认先生成动作底稿，确认结构后转绘；新零命完成后需重新生成三命、六命以保持图层对齐。</p>
-        <button
-          onClick={() => setYinghuaShowText(!yinghuaShowText)}
-          className={`glass-btn py-1.5 px-3 font-mono text-xs uppercase tracking-widest ${
-            yinghuaShowText ? 'text-zzz-primary' : 'text-zzz-text/50'
-          }`}
-        >
-          {yinghuaShowText ? '文字：开' : '文字：关'}
-        </button>
-        <p className="mt-1 text-zzz-text/50">
-          {yinghuaShowText
-            ? 'prompt 中会生成角色名英文文字，AI 根据角色动作自动分配到最空旷的角落'
-            : 'prompt 替换为"画面整洁不含任何文字"'}
-        </p>
-
-        {/* Character dynamic input */}
-        <div className="mt-3 flex items-center gap-2">
-          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">角色动态</span>
-          <input
-            type="text"
-            aria-label="角色动态"
-            value={yinghuaCharacterDynamic}
-            onChange={(e) => setYinghuaCharacterDynamic(e.target.value)}
-            className="glass-input min-w-0 flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90"
-          />
-        </div>
-
-        {/* Micro-dynamic input */}
-        <div className="mt-2 flex items-center gap-2">
-          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">微动态细节</span>
-          <input
-            type="text"
-            aria-label="微动态细节"
-            value={yinghuaMicroDynamic}
-            onChange={(e) => setYinghuaMicroDynamic(e.target.value)}
-            className="glass-input min-w-0 flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90"
-          />
-        </div>
-
-        {/* Character traits input */}
-        <div className="mt-2 flex items-center gap-2">
-          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">角色特点</span>
-          <input
-            type="text"
-            aria-label="角色特点"
-            value={yinghuaCharacterTraits}
-            onChange={(e) => setYinghuaCharacterTraits(e.target.value)}
-            placeholder="性格、特性等（留空不注入）"
-            className="glass-input min-w-0 flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90 placeholder:text-zzz-text/30"
-          />
-        </div>
-
-        {/* Addon element image */}
-        <div className="mt-2 flex items-center gap-2">
-          <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">附加元素</span>
-          {yinghuaAddonImage ? (
-            <div className="relative flex-1 overflow-hidden rounded-lg border border-zzz-text/10 bg-zzz-text/[0.03]">
-              <img src={yinghuaAddonImage} alt="附加元素" className="h-12 w-full object-contain" />
-              <button
-                onClick={() => setYinghuaAddonImage(null)}
-                className="glass-btn absolute right-1 top-1 px-2 py-0 text-[10px] text-zzz-text/70"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <label className="glass-input flex-1 cursor-pointer rounded px-2 py-2 font-mono text-[11px] text-zzz-text/45 hover:border-zzz-primary/45">
-              上传元素图（武器/道具等）
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const check = validateImageFile(file);
-                  if (!check.ok) {
-                    showError(check.message ?? '文件校验失败');
-                    return;
-                  }
-                  const dataUrl = await fileToDataUrl(file);
-                  setYinghuaAddonImage(dataUrl);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-          )}
+    <section className="glass p-6 yinghua-workflow" data-inpaint-zone="yinghua">
+      <div className="yinghua-workflow-heading">
+        <div><SectionHeader title="影画动作设计" /><p>从动作结构开始，逐步完成角色影画。</p></div>
+        <div className="yinghua-toolbar">
+          <button type="button" onClick={() => setYinghuaShowText(!yinghuaShowText)} aria-pressed={yinghuaShowText} className="glass-btn">{yinghuaShowText ? '文字：开' : '文字：关'}</button>
+          <button type="button" onClick={() => setYinghuaLang(yinghuaLang === 'zh' ? 'en' : 'zh')} className="glass-btn">{yinghuaLang === 'zh' ? '中 → EN' : 'EN → 中'}</button>
         </div>
       </div>
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-        {YINGHUA_STYLES.map((style) => (
-          <StyleCard
-            key={style.id}
-            style={style}
-            prompt={yinghuaPrompts[style.id]}
-            slot={yinghuaSlots[style.id]}
-            characterName={characterName}
-            provider={provider}
-            yinghuaSlots={yinghuaSlots}
-            activeGeneration={activeGeneration}
-            style3Face={style3Face}
-            onRun={run}
-            onPromptChange={handlePromptChange}
-            onInpaintClick={handleInpaintClick}
-            onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
-            zeroFateMode={zeroFateMode}
-            draftReady={draftReady}
-            onGenerateDraft={() => void run(1, true)}
-          />
-        ))}
+      <details className="yinghua-settings">
+        <summary>动作与角色设置 <span>动作、表情、角色特点与附加参考</span><b aria-hidden="true">＋</b></summary>
+        <div className="yinghua-settings-grid">
+          <label>角色动态<input type="text" aria-label="角色动态" value={yinghuaCharacterDynamic} onChange={(e) => setYinghuaCharacterDynamic(e.target.value)} className="glass-input" /></label>
+          <label>微动态细节<input type="text" aria-label="微动态细节" value={yinghuaMicroDynamic} onChange={(e) => setYinghuaMicroDynamic(e.target.value)} className="glass-input" /></label>
+          <label>角色特点<input type="text" aria-label="角色特点" value={yinghuaCharacterTraits} onChange={(e) => setYinghuaCharacterTraits(e.target.value)} placeholder="性格、特性等（可选）" className="glass-input" /></label>
+          <div className="yinghua-addon">
+            <span>附加参考</span>
+            {yinghuaAddonImage ? <div className="yinghua-addon-preview">
+              <img src={yinghuaAddonImage} alt="附加元素" />
+              <button type="button" onClick={() => setYinghuaAddonImage(null)} className="glass-btn">移除参考图</button>
+            </div> : <label className="glass-input">上传武器或道具参考
+              <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const check = validateImageFile(file);
+                if (!check.ok) { showError(check.message ?? '文件校验失败'); return; }
+                setYinghuaAddonImage(await fileToDataUrl(file));
+                e.target.value = '';
+              }} />
+            </label>}
+          </div>
+        </div>
+      </details>
+      <div className="yinghua-mode-row">
+        <div role="group" aria-label="零命生成模式" className="yinghua-mode-switch">
+          {(['two-stage', 'direct'] as const).map((mode) => <button type="button" key={mode} disabled={Boolean(activeGeneration)} aria-pressed={zeroFateMode === mode} onClick={() => { setZeroFateMode(mode); setActiveStep(mode === 'two-stage' ? 'draft' : 1); }}>{mode === 'two-stage' ? '两阶段生成' : '直接生成'}</button>)}
+        </div>
+        <p>{zeroFateMode === 'two-stage' ? '底稿确认后再转换，每一步可单独重试。' : '直接生成零命剪影，沿用原有生成方式。'}</p>
       </div>
+      <nav className="yinghua-step-navigation" aria-label="影画制作步骤">
+        {steps.map((step, index) => {
+          const done = step.id === 'draft' ? draftReady : Boolean(yinghuaSlots[step.id].images[0]);
+          const loading = activeGeneration && (step.id === 'draft' ? activeGeneration.phase === 'draft' : activeGeneration.id === step.id && activeGeneration.phase !== 'draft');
+          return <button type="button" key={step.id} aria-current={activeStep === step.id ? 'step' : undefined} aria-controls="yinghua-current-stage" onClick={() => setActiveStep(step.id)}>
+            <span className="yinghua-step-number">{String(index + 1).padStart(2, '0')}</span>
+            <span className="yinghua-step-copy"><strong>{step.title}</strong><small>{step.detail}</small></span>
+            <span className="yinghua-step-state">{loading ? '生成中' : done ? '已就绪' : '待生成'}</span>
+          </button>;
+        })}
+      </nav>
+      <div id="yinghua-current-stage">
+        <StyleCard key={activeStep} style={selectedStyle} prompt={yinghuaPrompts[selectedStyle.id]} slot={yinghuaSlots[selectedStyle.id]}
+          characterName={characterName} provider={provider} yinghuaSlots={yinghuaSlots} activeGeneration={activeGeneration} style3Face={style3Face}
+          onRun={run} onPromptChange={handlePromptChange} onInpaintClick={handleInpaintClick} onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
+          zeroFateMode={zeroFateMode} draftReady={draftReady} showDraft={activeStep === 'draft'}
+          onGenerateDraft={() => void run(1, true)} onConfirmDraft={() => { setActiveStep(1); void run(1); }}
+          onResetDraftPrompt={() => useYinghuaStore.getState().setZeroFateDraftPrompt(computedDraftPrompt)}
+          onGoToDraft={() => setActiveStep('draft')} onNextStep={() => setActiveStep(selectedStyle.id === 1 ? 2 : 3)} />
+      </div>
+      <p className="yinghua-workflow-footnote">新零命生成后，需重新生成三命和六命，确保查看器中的图层对齐。</p>
     </section>
   );
 });

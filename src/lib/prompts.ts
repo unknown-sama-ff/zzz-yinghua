@@ -248,22 +248,27 @@ interface ZeroFatePromptOptions {
 export function buildZeroFateDraftPrompt(options: ZeroFatePromptOptions): string {
   const en = options.lang === 'en';
   const template = en ? join(
-    '[ACTION DRAFT — STAGE 1] Create one clean, normally lit full-color action draft of the character in input 1. Optional reference is a prop only. Preserve original costume design, skin/hair/garment colors and body proportions.',
-    ZERO_COMPOSITION_EN.replace('Character and text together occupy', 'The character occupies'),
-    '[READABLE STRUCTURE] Use natural midtones and clear contours on a plain light background. Make the visible hip–thigh–knee–calf connections and front/back leg ownership readable, with plausible knee bends for this camera and action. Preserve foreshortening, support contact and occlusion; do not force hidden/off-frame body parts into view. No dark silhouette treatment or crushed-black skin.',
+    '[ACTION DRAFT — STAGE 1] Create one clean, normally lit full-color game-character action study from input 1. Optional reference is a prop only. Keep the complete original costume, all garment layers, original coverage, colors and body proportions. Keep clothing securely in place throughout the action. Use a natural expression and present the overall action and costume silhouette.',
+    ZERO_COMPOSITION_EN
+      .replace('The overall mood is defenseless and non-combat — relaxed, languid, completely unguarded.', 'Use a natural, stable non-combat game-character pose with clear body support and balanced weight.')
+      .replace('Character and text together occupy', 'The character occupies'),
+    '[READABLE STRUCTURE] Use natural midtones and clear contours on a plain light background. Keep exactly two legs, each with a continuous hip–thigh–knee–calf–ankle–foot chain. Make visible joints and front/back leg ownership readable, with plausible knee bends for this camera and action. Preserve foreshortening, support contact and occlusion; do not force hidden/off-frame body parts into view. No dark silhouette treatment or crushed-black skin.',
     LIGHTING_EN,
     '{ZERO_TEXT}',
     'Character dynamic: {ACTION_POSE}. {CHARACTER_TRAITS}',
   ) : join(
-    '【动作底稿·第一阶段】按第1张原角色图生成一张正常明暗的全彩动作底稿，可选参考只作道具。保留原衣装设计、肤色、发色、服装固有色与身体比例。',
-    ZERO_COMPOSITION_ZH.replace('角色主体和文字共占', '角色主体占'),
-    '【结构可读】使用正常中间调和清晰轮廓，背景为浅色纯色。清楚表达可见的髋—大腿—膝—小腿连接与两腿前后归属，膝盖弯曲符合当前镜头和动作；保留透视缩短、支撑接触与遮挡，不强行画出遮挡或出框部位。此阶段不用深色剪影，不将皮肤压成纯黑。',
+    '【动作底稿·第一阶段】按第1张原角色图生成正常明暗的全彩游戏角色动作设定，可选参考只作道具。保持原衣装完整、全部衣物层次、原有覆盖范围、固有配色与身体比例；动作中衣物穿着稳固。表情自然，画面重点为整体动作与服装轮廓。',
+    ZERO_COMPOSITION_ZH
+      .replace('整体为卸防感的非战斗姿态，放松、慵懒、毫无戒备。', '整体为自然稳定的游戏角色日常动作，身体支撑与重心关系清楚。')
+      .replace('角色主体和文字共占', '角色主体占'),
+    '【结构可读】使用正常中间调和清晰轮廓，背景为浅色纯色。角色只有两条腿，各自的髋—大腿—膝—小腿—踝—脚连接连续；清楚表达可见关节与两腿前后归属，膝盖弯曲符合当前镜头和动作。保留透视缩短、支撑接触与遮挡，不强行画出遮挡或出框部位。此阶段不用深色剪影，不将皮肤压成纯黑。',
     LIGHTING_ZH,
     '{ZERO_TEXT}',
     '角色动态：{ACTION_POSE}。{CHARACTER_TRAITS}',
   );
   return fillName(template, options.name, options.palette, false,
-    options.characterDynamic, options.microDynamic, options.characterTraits, options.lang, 1);
+    options.characterDynamic || (en ? 'a stable low-center-of-gravity game-character pose' : '自然稳定的低重心角色动作'),
+    options.microDynamic, options.characterTraits, options.lang);
 }
 
 /** Edit the approved draft; the generator must not choose a new camera or pose. */

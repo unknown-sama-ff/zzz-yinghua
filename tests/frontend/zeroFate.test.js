@@ -28,6 +28,9 @@ for (const lang of ['zh', 'en']) {
     assert.match(prompt, lang === 'zh' ? /正常中间调和清晰轮廓/ : /natural midtones and clear contours/);
     assert.match(prompt, lang === 'zh' ? /【文字关闭】/ : /\[TYPOGRAPHY OFF\]/);
     assert.doesNotMatch(prompt, /QA|HERO|\{[A-Z_]+\}|【角色明暗与配色】|\[CHARACTER VALUES\/COLORS\]|【文字】|\[TYPOGRAPHY\]/);
+    assert.doesNotMatch(prompt, /卸防感|毫无戒备|慵懒|defenseless|unguarded|languid/i);
+    assert.match(prompt, lang === 'zh' ? /衣装完整/ : /complete original costume/);
+    assert.match(prompt, lang === 'zh' ? /只有两条腿/ : /exactly two legs/);
   });
   test(`zero conversion/${lang} freezes the draft instead of choosing the pose again`, () => {
     const prompt = buildZeroFateRenderPrompt({ ...options, lang });

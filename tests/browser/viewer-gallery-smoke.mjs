@@ -147,7 +147,8 @@ try {
   assert.equal(writes.length, 3);
 
   // Exercise the existing single-image button through the same extracted uploader.
-  await page.getByRole('button', { name: '保存到画廊', exact: true }).first().click();
+  await page.getByRole('navigation', { name: '影画制作步骤' }).getByRole('button', { name: /零命剪影/ }).click();
+  await page.locator('[data-yinghua-stage="1"]').getByRole('button', { name: '保存到画廊', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('figcaption')?.textContent?.includes('已保存'));
   assert.equal(writes.length, 4);
   assert.notEqual(writes[3].provider, 'viewer-composite');

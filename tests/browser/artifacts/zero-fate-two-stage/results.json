@@ -5,6 +5,7 @@
     "conversion edits the approved draft; failure retries only conversion; success clears outdated dependent tiers",
     "failed draft regeneration preserves the previous matching draft and finished zero-fate",
     "changed inputs invalidate a draft, including when the change happens during generation",
+    "content rejection shows actionable guidance, preserves inputs and never automatically retries",
     "original direct mode remains a single explicit generation",
     "390px layout is usable; single-image conversion preserves the draft canvas and embeds references"
   ],

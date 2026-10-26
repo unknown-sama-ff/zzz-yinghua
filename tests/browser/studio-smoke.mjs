@@ -145,6 +145,8 @@ try {
   await page.getByRole('button', { name: '全屏', exact: true }).click();
   await page.getByRole('button', { name: '退出全屏', exact: true }).waitFor();
   await page.getByRole('button', { name: '退出全屏', exact: true }).click();
+  await page.getByRole('navigation', { name: '影画制作步骤' }).getByRole('button', { name: /零命剪影/ }).click();
+  await page.locator('[data-yinghua-stage="1"] img').first().scrollIntoViewIfNeeded();
   await page.getByRole('button', { name: '编辑图片', exact: true }).click();
   await page.locator('[data-inpaint-portal]').first().waitFor();
   const selectedZones = await page.locator('[data-inpaint-portal]').evaluateAll((items) => items.map((item) => item.getAttribute('data-inpaint-portal')));
