@@ -42,6 +42,16 @@ const LIGHTING_EN = '[LIGHTING] Global soft 45-degree top light. Light direction
 
 const ZERO_TEXT_ZH = '【文字】超大、水平正置的做旧印刷体「{NAME_TOP}」「{NAME_BOTTOM}」，贴角落边缘；双角配对四选一：左上+左下、右上+右下、左上+右下、右上+左下，不可沿顶边或底边横向并排。基线平行画幅上下边缘，不随人物倾斜，禁止旋转、斜切、弧排或透视变形。「{NAME_TOP}」为最大最宽文字层，宽近左右边缘、高约画面四分之一强，位于角色后方；「{NAME_BOTTOM}」为其50%~60%大小，压于角色前方。必须与角色重叠遮挡，不得缩小或移到空白处回避；前景可遮肩/发/手臂，不挡脸。两层100%不透明实心，颜色分别严格为「{TEXT_TOP}」「{TEXT_BOTTOM}」。';
 const ZERO_TEXT_EN = '[TYPOGRAPHY] Oversized horizontal, upright distressed letterpress 「{NAME_TOP}」 and 「{NAME_BOTTOM}」 against corner edges. Choose only top-left+bottom-left, top-right+bottom-right, top-left+bottom-right or top-right+bottom-left; never pair side-by-side along the top/bottom edge. Baselines stay parallel to frame edges regardless of the reclining character; no rotation, skew, arc or perspective deformation. 「{NAME_TOP}」 is the largest/widest layer, spanning near both side edges and slightly over a quarter of frame height, BEHIND the character. 「{NAME_BOTTOM}」 is 50%-60% of its size, IN FRONT. Both must overlap/occlude the character, never shrink or move to empty space to avoid overlap. Foreground may cover shoulders/hair/arms, not the face. Both are solid, 100% opaque; exact colors respectively 「{TEXT_TOP}」 and 「{TEXT_BOTTOM}」.';
+const ZERO_RENDER_ZH = join(
+  '【角色明暗与配色】主体统一为「{DOMINANT_COLOR}」单一色相的低饱和灰调，暗部占绝大部分，接近深色剪影。全部裸露皮肤为最暗近纯黑，五官极隐约；头发、衣装、护甲和配饰也以深暗为主，仅受光面、结构线和褶皱高光提亮，不大面积铺亮色/白色，不把皮肤画亮。通过明度差保留材质和原衣装/花纹细节。双色调主色为低饱和「{DOMINANT_COLOR}」；仅虹膜和极少数标志配饰保留主图原色，不换主题色、不额外提亮，除此无其他色相。',
+  LIGHTING_ZH,
+  '【背景】「{DOMINANT_COLOR}」的高饱和高亮版纯色平涂，非低饱和灰调；深沉主体与鲜亮背景形成撞色、明暗和饱和度双重对比。主体背景明确分离，仅允许极少量染边，不让主体大块面融进背景。保持强烈留白、斜向冲击和登场张力；不要求全身入画。',
+);
+const ZERO_RENDER_EN = join(
+  '[CHARACTER VALUES/COLORS] Unify the subject to a muted/desaturated 「{DOMINANT_COLOR}」 hue with deep shadows over most of its area, nearly a dark silhouette. All bare skin is darkest near-black with barely visible facial features. Hair, clothing, armor and accessories are predominantly dark too: lift only lit surfaces, structural lines and fold highlights; no large bright/white fills and no bright skin. Distinguish materials and preserve original garments/patterns with value differences. Duotone dominant is muted 「{DOMINANT_COLOR}」; only irises and very few signature accessories retain input 1\'s original colors, never theme-recolored or artificially brightened. No other hues.',
+  LIGHTING_EN,
+  '[BACKGROUND] Flat vivid, high-saturation/high-brightness 「{DOMINANT_COLOR}」, not muted grayscale. Strong light/dark and saturation contrast against the deep muted subject. Clearly separate subject/background, allowing only tiny edge bleeding; never merge large subject masses into the background. Strong negative space, diagonal impact and entrance tension; full-body framing is not required.',
+);
 const THREE_TEXT_ZH = '【文字】仅「{NAME_TOP}」「{NAME_BOTTOM}」，位置、大小、字形与零命完全一致；两层均严格用「{TEXT_BOTTOM}」高饱和实心字体，100%不透明，禁止去饱和或透出后方角色。';
 const THREE_TEXT_EN = '[TYPOGRAPHY] Only 「{NAME_TOP}」 and 「{NAME_BOTTOM}」. Preserve zero-fate placement, size and letterforms. Both must be 「{TEXT_BOTTOM}」, highly saturated, solid and 100% opaque; never desaturate or reveal the character through them.';
 const SIX_TEXT_ZH = '【文字】仅「{NAME_TOP}」「{NAME_BOTTOM}」，位置、大小、字形和前后层级沿用底图；分别严格使用「{TEXT_TOP_BRIGHT}」「{TEXT_BOTTOM}」，100%不透明实心。直接叠加在完整画面之上，文字背后的角色和背景仍完整渲染，不挖空、不留白、不填纯色块。';
@@ -117,18 +127,14 @@ export const YINGHUA_STYLES: YinghuaStyle[] = [
       '《绝区零》Mindscape Cinema单色调深色剪影海报风。第1张主图锁定身份与衣装；可选附加元素只作道具参考；其余3张风格样张只参考构图方向、人物风格、色彩关系和角落文字，不借用角色、衣装、道具、名字或背景配色。',
       ZERO_COMPOSITION_ZH,
       '{ZERO_TEXT}',
-      '【角色明暗与配色】主体统一为「{DOMINANT_COLOR}」单一色相的低饱和灰调，暗部占绝大部分，接近深色剪影。全部裸露皮肤为最暗近纯黑，五官极隐约；头发、衣装、护甲和配饰也以深暗为主，仅受光面、结构线和褶皱高光提亮，不大面积铺亮色/白色，不把皮肤画亮。通过明度差保留材质和原衣装/花纹细节。双色调主色为低饱和「{DOMINANT_COLOR}」；仅虹膜和极少数标志配饰保留主图原色，不换主题色、不额外提亮，除此无其他色相。',
-      LIGHTING_ZH,
-      '【背景】「{DOMINANT_COLOR}」的高饱和高亮版纯色平涂，非低饱和灰调；深沉主体与鲜亮背景形成撞色、明暗和饱和度双重对比。主体背景明确分离，仅允许极少量染边，不让主体大块面融进背景。保持强烈留白、斜向冲击和登场张力；不要求全身入画。',
+      ZERO_RENDER_ZH,
       '角色动态：{ACTION_POSE}。{CHARACTER_TRAITS}',
     ),
     promptTemplateEn: join(
       'ZZZ Mindscape Cinema Monochrome Dark Silhouette Poster. Input 1 locks identity/costume; optional addon is prop reference only; the final three style samples supply composition, character treatment, color relationships and corner typography only. Never borrow their characters, garments, props, names or background palettes.',
       ZERO_COMPOSITION_EN,
       '{ZERO_TEXT}',
-      '[CHARACTER VALUES/COLORS] Unify the subject to a muted/desaturated 「{DOMINANT_COLOR}」 hue with deep shadows over most of its area, nearly a dark silhouette. All bare skin is darkest near-black with barely visible facial features. Hair, clothing, armor and accessories are predominantly dark too: lift only lit surfaces, structural lines and fold highlights; no large bright/white fills and no bright skin. Distinguish materials and preserve original garments/patterns with value differences. Duotone dominant is muted 「{DOMINANT_COLOR}」; only irises and very few signature accessories retain input 1\'s original colors, never theme-recolored or artificially brightened. No other hues.',
-      LIGHTING_EN,
-      '[BACKGROUND] Flat vivid, high-saturation/high-brightness 「{DOMINANT_COLOR}」, not muted grayscale. Strong light/dark and saturation contrast against the deep muted subject. Clearly separate subject/background, allowing only tiny edge bleeding; never merge large subject masses into the background. Strong negative space, diagonal impact and entrance tension; full-body framing is not required.',
+      ZERO_RENDER_EN,
       'Character dynamic: {ACTION_POSE}. {CHARACTER_TRAITS}',
     ),
   },
@@ -226,4 +232,60 @@ export function fillName(
       ? (english ? SIX_FATE_ANATOMY_PRIORITY_PREFIX_EN : SIX_FATE_ANATOMY_PRIORITY_PREFIX)
       : '';
   return join(...[priority, fidelity, filled].filter(Boolean));
+}
+
+interface ZeroFatePromptOptions {
+  name: string;
+  palette?: Palette;
+  showText: boolean;
+  characterDynamic: string;
+  microDynamic: string;
+  characterTraits: string;
+  lang: 'zh' | 'en';
+}
+
+/** Establish readable anatomy before introducing silhouette and typography. */
+export function buildZeroFateDraftPrompt(options: ZeroFatePromptOptions): string {
+  const en = options.lang === 'en';
+  const template = en ? join(
+    '[ACTION DRAFT — STAGE 1] Create one clean, normally lit full-color action draft of the character in input 1. Optional reference is a prop only. Preserve original costume design, skin/hair/garment colors and body proportions.',
+    ZERO_COMPOSITION_EN.replace('Character and text together occupy', 'The character occupies'),
+    '[READABLE STRUCTURE] Use natural midtones and clear contours on a plain light background. Make the visible hip–thigh–knee–calf connections and front/back leg ownership readable, with plausible knee bends for this camera and action. Preserve foreshortening, support contact and occlusion; do not force hidden/off-frame body parts into view. No dark silhouette treatment or crushed-black skin.',
+    LIGHTING_EN,
+    '{ZERO_TEXT}',
+    'Character dynamic: {ACTION_POSE}. {CHARACTER_TRAITS}',
+  ) : join(
+    '【动作底稿·第一阶段】按第1张原角色图生成一张正常明暗的全彩动作底稿，可选参考只作道具。保留原衣装设计、肤色、发色、服装固有色与身体比例。',
+    ZERO_COMPOSITION_ZH.replace('角色主体和文字共占', '角色主体占'),
+    '【结构可读】使用正常中间调和清晰轮廓，背景为浅色纯色。清楚表达可见的髋—大腿—膝—小腿连接与两腿前后归属，膝盖弯曲符合当前镜头和动作；保留透视缩短、支撑接触与遮挡，不强行画出遮挡或出框部位。此阶段不用深色剪影，不将皮肤压成纯黑。',
+    LIGHTING_ZH,
+    '{ZERO_TEXT}',
+    '角色动态：{ACTION_POSE}。{CHARACTER_TRAITS}',
+  );
+  return fillName(template, options.name, options.palette, false,
+    options.characterDynamic, options.microDynamic, options.characterTraits, options.lang, 1);
+}
+
+/** Edit the approved draft; the generator must not choose a new camera or pose. */
+export function buildZeroFateRenderPrompt(options: ZeroFatePromptOptions): string {
+  const en = options.lang === 'en';
+  const template = en ? join(
+    '[ZERO-FATE RENDER — STAGE 2] Input 1 is the approved full-color action draft, the sole authority for view, camera, perspective, crop, pose, subject position/scale, silhouette, joint connections and front/back occlusion. Freeze these exactly. Only change value/color treatment, background and requested typography. Never choose a new pose or repair anatomy by moving limbs.',
+    '[REFERENCES] The following canonical character reference supplies identity, original colors and costume design only. Any prop reference is optional. The final three style samples supply dark-silhouette treatment, color relationships and typography only; never copy their poses, characters, garments or names. References may be separate inputs or embedded thumbnails; remove all thumbnails from the final image and fully render the underlying scene.',
+    ZERO_FATE_ANATOMY_PRIORITY_PREFIX_EN,
+    '[COSTUME] Keep every original garment layer, component, pattern and accessory from the canonical character reference in the approved draft pose. No costume redesign or streamlining.',
+    ZERO_RENDER_EN,
+    '{ZERO_TEXT}',
+  ) : join(
+    '【零命转绘·第二阶段】第1张为已确认的全彩动作底稿，是视角、机位、透视、裁切、动作、角色位置大小、身体轮廓、关节连接与前后遮挡的唯一权威，必须原样锁定。只改变明暗配色、背景及指定文字，不重新选姿势，不移动肢体来修复结构。',
+    '【参考分工】其后的原角色参考仅提供身份、原始配色和衣装设计；可选道具参考仅提供道具。最后3张风格样张只提供深色剪影处理、色彩关系与文字风格，不借用其姿势、角色、衣装或名字。参考可独立输入或嵌为缩略图，最终去除全部参考缩略图并完整恢复其下方画面。',
+    ZERO_FATE_ANATOMY_PRIORITY_PREFIX,
+    '【衣装锁定】按原角色参考保留全部衣装内外层、部件、花纹与饰品，并沿用动作底稿的穿着和遮挡关系；不重设计、不精简衣装。',
+    ZERO_RENDER_ZH,
+    '{ZERO_TEXT}',
+  );
+  // No styleId=1: its direct-generation prefix declares input 1 the costume
+  // authority. Here input 1 owns pose, while the canonical reference owns costume.
+  return fillName(template, options.name, options.palette, options.showText,
+    options.characterDynamic, options.microDynamic, options.characterTraits, options.lang);
 }

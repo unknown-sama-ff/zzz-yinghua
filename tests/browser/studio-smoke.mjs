@@ -221,6 +221,9 @@ try {
   await settings.locator('#gpt-image-quality option[value="high"]').waitFor({ state: 'attached' });
   await settings.locator('#gpt-image-quality').selectOption('high');
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  // matchMedia dispatches its change event asynchronously; wait for the
+  // rendered control instead of racing the preference update.
+  await effectsToggle.and(settings.locator('input:disabled')).waitFor();
   assert.equal(await effectsToggle.isDisabled(), true);
   await page.keyboard.press('Escape');
   checked('preferences: effects survive reload, reduced motion is respected, preset model quality remains available');

@@ -64,6 +64,23 @@
 .hero-art-inset > span { display: block; font: 9px 'Oswald', sans-serif; letter-spacing: 2px; padding-top: 8px; }
 .hero-art-caption { position: absolute; bottom: 22px; right: 5px; display: flex; gap: 42px; align-items: center; font-size: 10px; color: var(--studio-secondary); }
 .hero-art-caption > span:last-child { font-size: 23px; color: var(--studio-highlight); }
+.exhibition-capabilities { padding: 35px 0 45px; border-top: 1px solid var(--studio-rule); margin-top: 5px; }
+.capabilities-description { max-width: 660px; margin-top: 16px; color: var(--studio-secondary); font-size: 13px; line-height: 1.9; }
+.mindscape-examples { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; margin-top: 28px; }
+.mindscape-example { min-width: 0; margin: 0; }
+.mindscape-image { position: relative; display: block; width: 100%; background: var(--zzz-panel); }
+.mindscape-image > img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: contain; }
+.mindscape-image:hover .exhibit-zoom, .mindscape-image:focus-visible .exhibit-zoom { background: var(--zzz-primary); color: var(--zzz-text-on); }
+.mindscape-example figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 10px 16px; padding-top: 16px; }
+.mindscape-example h3 { font-size: 15px; font-weight: 700; }
+.mindscape-example h3 > span { margin-left: 10px; font-size: 10px; font-weight: 400; color: var(--studio-secondary); }
+.mindscape-example figcaption > p { color: var(--studio-secondary); font-size: 10px; }
+.character-study { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: center; margin-top: 38px; padding-top: 32px; border-top: 1px solid var(--studio-rule); }
+.character-study-copy { padding: 20px clamp(0px, 3vw, 48px); }
+.character-study-copy h3 { margin-top: 18px; font-size: clamp(24px, 2.5vw, 35px); line-height: 1.45; font-weight: 800; letter-spacing: -0.5px; }
+.character-study-copy h3 + p { max-width: 360px; margin-top: 18px; font-size: 13px; line-height: 1.95; color: var(--studio-secondary); }
+.character-study-copy .studio-text-link { display: inline-block; margin-top: 25px; font-size: 12px; }
+.capabilities-note { margin-top: 22px; color: var(--studio-secondary); font-size: 10px; line-height: 1.8; }
 .exhibition-examples { padding: 35px 0 0; border-top: 1px solid var(--studio-rule); margin-top: 5px; }
 .exhibition-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
 .exhibition-section-heading h2 { font-size: 31px; font-weight: 800; letter-spacing: -1px; margin-top: 12px; }
@@ -219,6 +236,14 @@ body:has(.studio-dialog[open]) { overflow: hidden; }
   .hero-art-inset { width: 94px; bottom: 30px; left: 3px; }
   .hero-art-caption { bottom: 10px; right: 0; }
   .hero-art-label { padding: 7px 10px; font-size: 9px; }
+  .exhibition-capabilities { margin-top: 30px; padding-top: 27px; padding-bottom: 32px; }
+  .exhibition-capabilities .exhibition-section-heading .studio-text-link { display: inline-block; margin-top: 18px; font-size: 12px; }
+  .capabilities-description { font-size: 12px; }
+  .mindscape-examples { grid-template-columns: minmax(0, 1fr); gap: 26px; margin-top: 24px; }
+  .character-study { grid-template-columns: minmax(0, 1fr); gap: 24px; margin-top: 28px; padding-top: 26px; }
+  .character-study-copy { padding: 0; }
+  .character-study-copy h3 { font-size: 25px; }
+  .character-study-copy h3 + p { max-width: none; font-size: 12px; }
   .exhibition-examples { margin-top: 30px; padding-top: 27px; }
   .exhibition-section-heading { display: block; }
   .exhibition-section-heading h2 { font-size: 26px; }

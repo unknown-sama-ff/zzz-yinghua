@@ -22,6 +22,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
   const showError = useToast((s) => s.show);
   const [isApplying, setIsApplying] = useState(false);
   const isYinghuaTarget = targetImage?.type === 'yinghua';
+  const isDraftTarget = targetImage?.type === 'yinghua-draft';
   const applyInProgress = useRef(false);
   const alreadyApplied = sameImageSource(targetImage?.url, currentVersionUrl ?? '');
 
@@ -42,7 +43,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
       if (useInpaintStore.getState().versions[0]?.id === versions[0]?.id) {
         setTargetImage({ ...targetImage, url: currentVersionUrl });
       }
-      showError(isYinghuaTarget
+      showError(isDraftTarget ? '✓ 已替换零命动作底稿，可继续确认结构并生成零命' : isYinghuaTarget
         ? `✓ 已替换影画原图：${inpaintTargetLabel(targetImage)}`
         : `✓ 已应用到${inpaintTargetLabel(targetImage)}`);
     } catch (error) {
@@ -90,7 +91,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
             title={canReplaceInpaintTarget(targetImage) ? (isYinghuaTarget ? '将当前版本替换到 04 影画动作设计' : '将当前草稿应用到原模块') : '预览图片无法替换到模块'}
             className="glass-btn px-3 py-1.5 font-mono text-xs text-[var(--zzz-primary)] disabled:opacity-40"
           >
-            {isApplying ? (isYinghuaTarget ? '替换中…' : '应用中…') : (isYinghuaTarget ? '替换影画原图' : '应用当前版本')}
+            {isApplying ? (isYinghuaTarget || isDraftTarget ? '替换中…' : '应用中…') : (isDraftTarget ? '替换动作底稿' : isYinghuaTarget ? '替换影画原图' : '应用当前版本')}
           </button>
           <button
             onClick={closeWorkspace}

@@ -14,6 +14,7 @@ export function sameImageSource(left: string | undefined, right: string): boolea
 
 export function canReplaceInpaintTarget(target: InpaintTarget): boolean {
   if (target.type === 'upload') return true;
+  if (target.type === 'yinghua-draft') return target.index === 0;
   const validIndex = target.index !== undefined && Number.isInteger(target.index) && target.index >= 0;
   if (target.type === 'yinghua') {
     return validIndex && [1, 2, 3].includes(target.slotId ?? 0)
@@ -25,6 +26,7 @@ export function canReplaceInpaintTarget(target: InpaintTarget): boolean {
 function currentTargetSource(target: InpaintTarget): string | undefined {
   if (!canReplaceInpaintTarget(target)) return undefined;
   switch (target.type) {
+    case 'yinghua-draft': return useYinghuaStore.getState().zeroFateDraft.images[target.index!];
     case 'yinghua': return useYinghuaStore.getState().yinghuaSlots[target.slotId!].images[target.index!];
     case 'poster': return useWorkbenchStore.getState().posterSlot.images[target.index!];
     case 'costume': return useWorkbenchStore.getState().costumeChangeSlot.images[target.index!];
@@ -72,7 +74,7 @@ export function resolveInpaintElementTarget(image: HTMLImageElement): InpaintTar
   const type = image.getAttribute('data-inpaint-type');
   const index = image.getAttribute('data-inpaint-index');
   const slot = image.getAttribute('data-inpaint-slot-id');
-  if (type === 'yinghua' || type === 'three-view' || type === 'poster' || type === 'costume' || type === 'upload') {
+  if (type === 'yinghua' || type === 'yinghua-draft' || type === 'three-view' || type === 'poster' || type === 'costume' || type === 'upload') {
     return resolveInpaintTarget(image.src, zone, {
       type,
       ...(index !== null ? { index: Number(index) } : {}),
@@ -86,6 +88,7 @@ export function resolveInpaintElementTarget(image: HTMLImageElement): InpaintTar
 
 export function inpaintTargetLabel(target: InpaintTarget): string {
   switch (target.type) {
+    case 'yinghua-draft': return '零命动作底稿';
     case 'yinghua':
       if (target.slotId === 1) return '零命图片';
       if (target.slotId === 2) return '三命图片';
@@ -101,6 +104,12 @@ export function inpaintTargetLabel(target: InpaintTarget): string {
 /** Atomic, local write-back: never generate, charge, or overwrite a newer slot. */
 export async function replaceInpaintTarget(target: InpaintTarget, replacement: string): Promise<boolean> {
   if (!replacement || !sameImageSource(currentTargetSource(target), target.url)) return false;
+  if (target.type === 'yinghua-draft') {
+    const store = useYinghuaStore.getState();
+    if (store.activeGeneration?.id === 1) return false;
+    store.setZeroFateDraft({ status: 'done', images: [replacement], error: undefined });
+    return true;
+  }
   if (target.type === 'yinghua') {
     const store = useYinghuaStore.getState();
     const slotId = target.slotId!;

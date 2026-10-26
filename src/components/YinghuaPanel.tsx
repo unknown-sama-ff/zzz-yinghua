@@ -6,13 +6,15 @@ import { useYinghuaStore } from '../store/useYinghuaStore';
 import { useViewerStore } from '../store/useViewerStore';
 import { useToast } from '../store/useToast';
 import { generate, ApiError } from '../lib/apiClient';
-import { YINGHUA_STYLES, YINGHUA_SIZE, fillName } from '../lib/prompts';
+import { YINGHUA_STYLES, YINGHUA_SIZE, fillName, buildZeroFateDraftPrompt, buildZeroFateRenderPrompt } from '../lib/prompts';
 import { stitchImages, embedThumbnails, extractFrontViewStructureAnchor } from '../lib/imageWorkerPool';
 import type { ThumbEntry } from '../lib/imageWorkerPool';
 import { loadStyleReferenceImages, preloadStyleReferenceImages } from '../lib/styleReferences';
 import { maxReferenceImagesForModel, supportsMultipleImageInputs } from '../lib/gptImageCapabilities';
 import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
-import { SIX_FATE_EDIT_MAX_DIM } from '../lib/constants';
+import { SIX_FATE_EDIT_MAX_DIM, ZERO_FATE_INPUT_MAX_DIM } from '../lib/constants';
+import { isCurrentZeroFateDraft } from '../lib/zeroFate';
+import { prepareZeroFateInputs } from '../lib/zeroFateInputs';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { resolveYinghuaFaceImage } from '../lib/yinghuaFace';
@@ -20,8 +22,9 @@ import { useBuildRequest } from './useBuildRequest';
 import { useInpaintStore } from '../store/useInpaintStore';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
+import { ZeroFateControls } from './ZeroFateControls';
 import type { GallerySaveInfo } from './GallerySaveButton';
-import type { GenSlot, InpaintTarget, YinghuaStyleId } from '../types';
+import type { GenSlot, InpaintTarget, YinghuaStyleId, ZeroFateMode } from '../types';
 
 // ---------------------------------------------------------------------------
 // Per-style card — memoized so changes to one style don't re-render the others
@@ -39,6 +42,9 @@ const StyleCard = memo(function StyleCard({
   onPromptChange,
   onInpaintClick,
   onFlipStyle3,
+  zeroFateMode,
+  draftReady,
+  onGenerateDraft,
 }: {
   style: { id: YinghuaStyleId; label: string; description: string };
   prompt: string;
@@ -46,12 +52,15 @@ const StyleCard = memo(function StyleCard({
   characterName: string;
   provider: string;
   yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
-  activeGeneration: { id: YinghuaStyleId } | null;
+  activeGeneration: { id: YinghuaStyleId; phase?: 'draft' | 'render' } | null;
   style3Face: 'front' | 'back';
   onRun: (id: YinghuaStyleId) => void;
   onPromptChange: (styleId: YinghuaStyleId, value: string) => void;
   onInpaintClick: (src: string, target: InpaintTarget) => void;
   onFlipStyle3: () => void;
+  zeroFateMode: ZeroFateMode;
+  draftReady: boolean;
+  onGenerateDraft: () => void;
 }) {
   const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
   const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
@@ -91,8 +100,10 @@ const StyleCard = memo(function StyleCard({
     : needsBase
       ? (style.id === 2 ? '需先生成零命' : '需先生成三命')
       : isActiveGeneration
-        ? '生成中…'
-        : '生成';
+        ? (activeGeneration.phase === 'draft' ? '生成动作底稿中…' : '生成中…')
+        : style.id === 1 && zeroFateMode === 'two-stage'
+          ? (draftReady ? (slot.status === 'error' ? '重试零命转换（沿用底稿）' : '确认结构并生成零命') : '生成动作底稿')
+          : '生成';
 
   // --- Card flip animation for style 3 (六命) ---
   const prevFaceRef = useRef(style3Face);
@@ -135,7 +146,10 @@ const StyleCard = memo(function StyleCard({
         )}
       </div>
       <p className="mb-2 mt-1 text-xs leading-relaxed text-zzz-text/55">{style.description}</p>
+      {style.id === 1 && <ZeroFateControls isCurrent={draftReady} onGenerateDraft={onGenerateDraft} onInpaintClick={onInpaintClick} />}
+      {style.id === 1 && zeroFateMode === 'two-stage' && <p className="mb-1 text-xs font-bold text-zzz-primary">第二阶段 · 零命剪影提示词</p>}
       <textarea
+        aria-label={`${style.label}提示词`}
         value={prompt}
         onChange={(e) => onPromptChange(style.id, e.target.value)}
         rows={5}
@@ -190,6 +204,10 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const activeGeneration = useYinghuaStore((s) => s.activeGeneration);
   const beginYinghuaGeneration = useYinghuaStore((s) => s.beginYinghuaGeneration);
   const endYinghuaGeneration = useYinghuaStore((s) => s.endYinghuaGeneration);
+  const zeroFateMode = useYinghuaStore((s) => s.zeroFateMode);
+  const zeroFateDraft = useYinghuaStore((s) => s.zeroFateDraft);
+  const zeroFateDraftPrompt = useYinghuaStore((s) => s.zeroFateDraftPrompt);
+  const setZeroFateDraft = useYinghuaStore((s) => s.setZeroFateDraft);
   const yinghuaShowText = useYinghuaStore((s) => s.yinghuaShowText);
   const setYinghuaShowText = useYinghuaStore((s) => s.setYinghuaShowText);
   const yinghuaCharacterDynamic = useYinghuaStore((s) => s.yinghuaCharacterDynamic);
@@ -216,11 +234,25 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
 
+  const zeroPromptOptions = useMemo(() => ({
+    name: characterName, palette: palette ?? undefined, showText: yinghuaShowText,
+    characterDynamic: yinghuaCharacterDynamic, microDynamic: yinghuaMicroDynamic,
+    characterTraits: yinghuaCharacterTraits, lang: yinghuaLang,
+  }), [characterName, palette, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang]);
+  const computedDraftPrompt = useMemo(() => buildZeroFateDraftPrompt(zeroPromptOptions), [zeroPromptOptions]);
+  useEffect(() => {
+    useYinghuaStore.getState().setZeroFateDraftPrompt(computedDraftPrompt);
+  }, [computedDraftPrompt]);
+  const draftContext = { sourceImage: uploadedImage ?? '', addonImage: yinghuaAddonImage, prompt: zeroFateDraftPrompt };
+  const draftReady = isCurrentZeroFateDraft(zeroFateDraft, draftContext);
+
   // Compute prompts once from all inputs, then write to store in one effect.
   const computedPrompts = useMemo(() => {
     const prompts: Record<number, string> = {};
     for (const style of YINGHUA_STYLES) {
-      if (style.id === 3 && style.promptTemplateFront && style.promptTemplateBack) {
+      if (style.id === 1 && zeroFateMode === 'two-stage') {
+        prompts[1] = buildZeroFateRenderPrompt(zeroPromptOptions);
+      } else if (style.id === 3 && style.promptTemplateFront && style.promptTemplateBack) {
         const tmpl =
           style3Face === 'front'
             ? (yinghuaLang === 'en' && style.promptTemplateFrontEn
@@ -246,7 +278,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     }
     return prompts;
   }, [characterName, palette, yinghuaShowText, yinghuaCharacterDynamic,
-      yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang, style3Face]);
+      yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang, style3Face, zeroFateMode, zeroPromptOptions]);
 
   useEffect(() => {
     for (const [id, prompt] of Object.entries(computedPrompts)) {
@@ -288,7 +320,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     }
   };
 
-  const run = async (id: YinghuaStyleId) => {
+  const run = async (id: YinghuaStyleId, regenerateDraft = false) => {
     if (!uploadedImage) {
       showError('请先上传角色正面图片');
       return;
@@ -309,12 +341,15 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       showError('请先生成六命阳，再生成六命阴');
       return;
     }
-    const generation = beginYinghuaGeneration(id);
+    const phase = id === 1 && zeroFateMode === 'two-stage'
+      ? (regenerateDraft || !draftReady ? 'draft' : 'render')
+      : undefined;
+    const generation = beginYinghuaGeneration(id, phase);
     if (!generation) return;
 
     const { idempotencyKey } = generation;
     const selectedFace = style3Face;
-    const prompt = yinghuaPrompts[id];
+    const prompt = phase === 'draft' ? zeroFateDraftPrompt : yinghuaPrompts[id];
     const sourceImage = uploadedImage;
     const addonImage = yinghuaAddonImage;
     const sourceSlots = yinghuaSlots;
@@ -322,12 +357,25 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     // 模块 01 的“用作主立绘”，也可由用户直接上传。不要使用服装改造历史。
     const identityReference = sourceImage;
     const selectedProvider = provider;
-    setYinghuaSlot(id, { status: 'loading', error: undefined });
+    const selectedDraftImage = zeroFateDraft.images[0];
+    const selectedDraftContext = { sourceImage, addonImage, prompt: zeroFateDraftPrompt };
+
+    const setGenerationError = (message: string) => {
+      if (phase === 'draft') setZeroFateDraft({ status: 'error', error: message });
+      else setYinghuaSlot(id, { status: 'error', error: message });
+    };
 
     let imageOverride: string | undefined;
     let refImages: { base64: string; mime: string }[] | undefined;
     try {
-      if (id === 1) {
+      if (phase) {
+        const inputs = await prepareZeroFateInputs({
+          phase, sourceImage, addonImage, draftImage: selectedDraftImage,
+          provider: selectedProvider, model: creds[selectedProvider].model,
+        });
+        imageOverride = inputs.imageOverride;
+        refImages = inputs.refImages;
+      } else if (id === 1) {
         const styleReferences = await loadStyleReferenceImages(id);
         const selectedModel = creds[selectedProvider].model;
         if (supportsMultipleImageInputs(selectedProvider, selectedModel)) {
@@ -411,7 +459,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         }
       }
 
-      if (selectedProvider === 'gpt-image' && imageOverride) {
+      if (selectedProvider === 'gpt-image' && imageOverride && !phase) {
         let src = imageOverride;
         if (src.startsWith('http://') || src.startsWith('https://')) {
           const res = await fetch(src);
@@ -430,7 +478,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '风格参考图准备失败';
-      setYinghuaSlot(id, { status: 'error', error: msg });
+      setGenerationError(msg);
       showError(msg);
       endYinghuaGeneration(idempotencyKey);
       return;
@@ -444,12 +492,37 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             size: YINGHUA_SIZE,
             imageOverride,
             refImages,
-            ...(isSixFateFront ? { inputImageMaxDimension: SIX_FATE_EDIT_MAX_DIM } : {}),
+            ...(phase ? { inputImageMaxDimension: ZERO_FATE_INPUT_MAX_DIM }
+              : isSixFateFront ? { inputImageMaxDimension: SIX_FATE_EDIT_MAX_DIM } : {}),
           };
       const images = await generate({
         ...buildRequest(prompt, sizeOpts),
         idempotencyKey,
       });
+
+      if (!images[0]) throw new Error('生成未返回图片，请重试');
+      if (phase) {
+        const current = useYinghuaStore.getState();
+        const contextNow = {
+          sourceImage: useUploadStore.getState().uploadedImage ?? '',
+          addonImage: current.yinghuaAddonImage,
+          prompt: current.zeroFateDraftPrompt,
+        };
+        const draftToCheck = phase === 'draft'
+          ? { status: 'done' as const, images, context: selectedDraftContext }
+          : current.zeroFateDraft;
+        if (!isCurrentZeroFateDraft(draftToCheck, contextNow)
+          || (phase === 'render' && current.zeroFateDraft.images[0] !== selectedDraftImage)) {
+          // Keep an outdated draft available for inspection, but never
+          // silently promote an old character/pose to the current workflow.
+          if (phase === 'draft') setZeroFateDraft({ images, context: selectedDraftContext });
+          throw new Error('生成期间角色或动作输入已更新，请检查结果并重新生成当前底稿');
+        }
+        if (phase === 'draft') {
+          setZeroFateDraft({ status: 'done', images: [images[0]], context: selectedDraftContext, error: undefined });
+          return;
+        }
+      }
 
       // 六命：正面存 images[0]，反面存 images[1]，不互相覆盖
       if (id === 3) {
@@ -457,6 +530,10 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         const newImages = [...existing];
         newImages[selectedFace === 'front' ? 0 : 1] = images[0];
         setYinghuaSlot(id, { status: 'done', images: newImages });
+      } else if (id === 1) {
+        useYinghuaStore.getState().completeZeroFate(images);
+        setViewerClipRegions(null);
+        setFaceBounds(null);
       } else {
         setYinghuaSlot(id, { status: 'done', images });
       }
@@ -470,8 +547,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         }
       }, 0);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : '生成失败';
-      setYinghuaSlot(id, { status: 'error', error: msg });
+      const msg = err instanceof ApiError || err instanceof Error ? err.message : '生成失败';
+      setGenerationError(msg);
       showError(msg);
     } finally {
       endYinghuaGeneration(idempotencyKey);
@@ -502,6 +579,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         <p className="mb-1.5 text-zzz-primary/80">
           ⛓ 生成顺序：零命 → 三命（编辑零命，锁姿态/文字，去饱和灰阶）→ 六命（编辑三命，锁原镜头/透视/动作/配色）。六命可切换「阳/阴」：阳为全彩高饱和赛璐珞；阴为服装精简版（自然精简服装、顺势露肤），需先出阳再生成阴；配色统一以三视图原色为准。
         </p>
+        <p className="mb-2">零命默认先生成动作底稿，确认结构后转绘；新零命完成后需重新生成三命、六命以保持图层对齐。</p>
         <button
           onClick={() => setYinghuaShowText(!yinghuaShowText)}
           className={`glass-btn py-1.5 px-3 font-mono text-xs uppercase tracking-widest ${
@@ -521,9 +599,10 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">角色动态</span>
           <input
             type="text"
+            aria-label="角色动态"
             value={yinghuaCharacterDynamic}
             onChange={(e) => setYinghuaCharacterDynamic(e.target.value)}
-            className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90"
+            className="glass-input min-w-0 flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90"
           />
         </div>
 
@@ -532,9 +611,10 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">微动态细节</span>
           <input
             type="text"
+            aria-label="微动态细节"
             value={yinghuaMicroDynamic}
             onChange={(e) => setYinghuaMicroDynamic(e.target.value)}
-            className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90"
+            className="glass-input min-w-0 flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90"
           />
         </div>
 
@@ -543,10 +623,11 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           <span className="font-mono text-[11px] text-zzz-text/45 whitespace-nowrap">角色特点</span>
           <input
             type="text"
+            aria-label="角色特点"
             value={yinghuaCharacterTraits}
             onChange={(e) => setYinghuaCharacterTraits(e.target.value)}
             placeholder="性格、特性等（留空不注入）"
-            className="glass-input flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90 placeholder:text-zzz-text/30"
+            className="glass-input min-w-0 flex-1 rounded px-2 py-1 font-mono text-xs text-zzz-text/90 placeholder:text-zzz-text/30"
           />
         </div>
 
@@ -587,7 +668,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           )}
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
         {YINGHUA_STYLES.map((style) => (
           <StyleCard
             key={style.id}
@@ -603,6 +684,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             onPromptChange={handlePromptChange}
             onInpaintClick={handleInpaintClick}
             onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
+            zeroFateMode={zeroFateMode}
+            draftReady={draftReady}
+            onGenerateDraft={() => void run(1, true)}
           />
         ))}
       </div>

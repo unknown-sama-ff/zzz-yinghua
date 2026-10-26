@@ -12,6 +12,7 @@ import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
 import { ZoomButton } from './ImageLightbox';
 import { useLightboxStore } from '../store/useLightboxStore';
+import type { GallerySaveInfo } from './GallerySaveButton';
 
 interface PosterVariant {
   id: string;
@@ -72,6 +73,8 @@ export const PosterPanel = memo(function PosterPanel() {
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [variant, setVariant] = useState<string>(POSTER_VARIANTS[1].id);
+  const [promptDrafts, setPromptDrafts] = useState<Record<string, string>>({});
+  const [resultInfo, setResultInfo] = useState<Omit<GallerySaveInfo, 'imageUrl'> | null>(null);
 
   const openLightbox = useLightboxStore((s) => s.open);
 
@@ -80,9 +83,23 @@ export const PosterPanel = memo(function PosterPanel() {
   const referenceThumbSrc = `/作者推荐/${current.label}_thumb.webp`;
   const dominant = palette?.dominant ?? '#b026ff';
   const accent = palette?.accent ?? '#ff2d9b';
-  const prompt = fillPoster(current.template, characterName, dominant, accent, palette?.textTop, palette?.textTopBright, palette?.textBottom);
+  const defaultPrompt = fillPoster(current.template, characterName, dominant, accent, palette?.textTop, palette?.textTopBright, palette?.textBottom);
+  const prompt = promptDrafts[current.id] ?? defaultPrompt;
+
+  const resetPrompt = () => {
+    setPromptDrafts((drafts) => {
+      const next = { ...drafts };
+      delete next[current.id];
+      return next;
+    });
+  };
 
   const run = async () => {
+    if (!prompt.trim()) {
+      showError('请输入海报提示词');
+      return;
+    }
+
     // 所有变体统一：优先使用三视图，没有则回退到主立绘
     const tv = threeViewSlot.images[0] ?? undefined;
     const main = uploadedImage ?? undefined;
@@ -97,6 +114,7 @@ export const PosterPanel = memo(function PosterPanel() {
       const images = await generate(
         buildRequest(prompt, { size: YINGHUA_SIZE, imageOverride }),
       );
+      setResultInfo({ style: current.label, characterName, prompt, provider });
       setPosterSlot({ status: 'done', images });
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
@@ -109,7 +127,7 @@ export const PosterPanel = memo(function PosterPanel() {
     <section className="glass p-6" data-inpaint-zone="poster">
       <SectionHeader title="角色海报 · 作者推荐风格" />
 
-      <div className="-mt-2 mb-3 flex items-center gap-2">
+      <div className="-mt-2 mb-3 flex flex-wrap items-center gap-2">
         {POSTER_VARIANTS.map((v) => (
           <button
             key={v.id}
@@ -157,9 +175,25 @@ export const PosterPanel = memo(function PosterPanel() {
         )}
       </div>
 
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <label htmlFor="poster-prompt" className="font-mono text-xs text-zzz-text/70">海报提示词</label>
+        <button
+          type="button"
+          onClick={resetPrompt}
+          disabled={promptDrafts[current.id] === undefined}
+          className="glass-btn px-3 py-1 text-xs text-zzz-text/60 disabled:opacity-40"
+        >
+          恢复默认
+        </button>
+      </div>
+      <p id="poster-prompt-help" className="mb-2 text-xs text-zzz-text/50">
+        可自由修改，生成时使用下方内容；各风格分别保留本次编辑。
+      </p>
       <textarea
+        id="poster-prompt"
+        aria-describedby="poster-prompt-help"
         value={prompt}
-        readOnly
+        onChange={(event) => setPromptDrafts((drafts) => ({ ...drafts, [current.id]: event.target.value }))}
         rows={5}
         className="glass-input mb-3 w-full resize-y px-3 py-2 font-mono text-xs leading-relaxed text-zzz-text/80"
       />
@@ -177,10 +211,7 @@ export const PosterPanel = memo(function PosterPanel() {
         downloadPrefix="zzz-poster"
         saveInfo={posterSlot.images[0] ? {
           imageUrl: posterSlot.images[0],
-          style: current.label,
-          characterName,
-          prompt,
-          provider,
+          ...(resultInfo ?? { style: current.label, characterName, prompt, provider }),
         } : undefined}
         onInpaintClick={(_src, target) => {
           const openWorkspace = useInpaintStore.getState().openWorkspace;

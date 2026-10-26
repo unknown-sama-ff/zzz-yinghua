@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { YinghuaStyleId } from '../types';
+import type { YinghuaStyleId, ZeroFateDraft, ZeroFateMode } from '../types';
 
 type ActiveGeneration = {
   id: YinghuaStyleId;
   idempotencyKey: string;
+  phase?: 'draft' | 'render';
 };
 
 interface YinghuaState {
@@ -13,8 +14,16 @@ interface YinghuaState {
   setYinghuaSlot: (id: YinghuaStyleId, patch: Partial<GenSlotLike>) => void;
   setSlotManual: (id: YinghuaStyleId, dataUrl: string) => void;
   activeGeneration: ActiveGeneration | null;
-  beginYinghuaGeneration: (id: YinghuaStyleId) => ActiveGeneration | null;
+  beginYinghuaGeneration: (id: YinghuaStyleId, phase?: 'draft' | 'render') => ActiveGeneration | null;
   endYinghuaGeneration: (idempotencyKey: string) => void;
+
+  zeroFateMode: ZeroFateMode;
+  setZeroFateMode: (mode: ZeroFateMode) => void;
+  zeroFateDraftPrompt: string;
+  setZeroFateDraftPrompt: (prompt: string) => void;
+  zeroFateDraft: ZeroFateDraft;
+  setZeroFateDraft: (patch: Partial<ZeroFateDraft>) => void;
+  completeZeroFate: (images: string[]) => void;
 
   yinghuaShowText: boolean;
   setYinghuaShowText: (show: boolean) => void;
@@ -52,17 +61,19 @@ export const useYinghuaStore = create<YinghuaState>((set) => ({
       yinghuaSlots: { ...s.yinghuaSlots, [id]: { status: 'done', images: [dataUrl] } },
     })),
   activeGeneration: null,
-  beginYinghuaGeneration: (id) => {
+  beginYinghuaGeneration: (id, phase) => {
     let generation: ActiveGeneration | null = null;
     set((s) => {
       if (s.activeGeneration) return s;
-      generation = { id, idempotencyKey: crypto.randomUUID() };
+      generation = { id, idempotencyKey: crypto.randomUUID(), phase };
       return {
         activeGeneration: generation,
-        yinghuaSlots: {
+        ...(phase === 'draft' ? {
+          zeroFateDraft: { ...s.zeroFateDraft, status: 'loading' as const, error: undefined },
+        } : { yinghuaSlots: {
           ...s.yinghuaSlots,
           [id]: { ...s.yinghuaSlots[id], status: 'loading', error: undefined },
-        },
+        } }),
       };
     });
     return generation;
@@ -73,6 +84,20 @@ export const useYinghuaStore = create<YinghuaState>((set) => ({
         ? { activeGeneration: null }
         : s
     )),
+
+  zeroFateMode: 'two-stage',
+  setZeroFateMode: (zeroFateMode) => set({ zeroFateMode }),
+  zeroFateDraftPrompt: '',
+  setZeroFateDraftPrompt: (zeroFateDraftPrompt) => set({ zeroFateDraftPrompt }),
+  zeroFateDraft: { status: 'idle', images: [], context: null },
+  setZeroFateDraft: (patch) => set((s) => ({ zeroFateDraft: { ...s.zeroFateDraft, ...patch } })),
+  completeZeroFate: (images) => set({
+    yinghuaSlots: {
+      1: { status: 'done', images },
+      2: { status: 'idle', images: [] },
+      3: { status: 'idle', images: [] },
+    },
+  }),
 
   yinghuaShowText: true,
   setYinghuaShowText: (show) => set({ yinghuaShowText: show }),

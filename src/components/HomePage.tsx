@@ -9,6 +9,11 @@ const examples = [
   { title: '换一种光，看见角色。', kind: '剪影版', image: '/作者推荐/剪影版.webp', caption: '明暗切片 / 角色轮廓', className: 'exhibit-offset' },
 ];
 
+const mindscapeExamples = [
+  { name: '卡芙卡', image: '/作品示例/kafka-mindscape-cut.webp', preview: '/作品示例/kafka-mindscape-cut-preview.webp', caption: '玫红撞色 / 斜向明暗切片' },
+  { name: '流萤', image: '/作品示例/firefly-mindscape-cut.webp', preview: '/作品示例/firefly-mindscape-cut-preview.webp', caption: '黑白对比 / 角色大字排版' },
+];
+
 export function HomePage() {
   const openCreate = useFreeCreateStore((s) => s.open);
   const openImage = useLightboxStore((s) => s.open);
@@ -20,7 +25,7 @@ export function HomePage() {
         <p className="studio-eyebrow"><span /> CHARACTER ART STUDIO</p>
         <h1 id="home-title">影画<span>工坊<span className="hero-period">.</span></span></h1>
         <p className="hero-tagline">让你的角色，有戏可演。</p>
-        <p className="hero-description">从一张立绘出发。创作影画、设计海报，<br className="hidden sm:block" />或把脑海中的下一幕，变成画面。</p>
+        <p className="hero-description">从一张立绘出发。创作影画命座切割图、设计海报，<br className="hidden sm:block" />或把脑海中的下一幕，变成画面。</p>
         <div className="hero-actions">
           <button type="button" onClick={openCreate} className="studio-action studio-action-primary">自由创作 <span aria-hidden="true">↗</span></button>
           <a href={ROUTE_HASHES.assets} className="studio-action studio-action-secondary">进入角色工坊 <span aria-hidden="true">→</span></a>
@@ -44,6 +49,36 @@ export function HomePage() {
         </button>
         <div className="hero-art-caption"><span>一张立绘，无限种出场方式。</span><span aria-hidden="true">↗</span></div>
       </div>
+    </section>
+
+    <section className="exhibition-capabilities" aria-labelledby="capabilities-title">
+      <div className="exhibition-section-heading">
+        <div><p className="studio-eyebrow">MINDSCAPE / CHARACTER STUDIES</p><h2 id="capabilities-title">影画命座切割，也能做<span>.</span></h2></div>
+        <a href={ROUTE_HASHES.yinghua} className="studio-text-link">开始影画创作 <span aria-hidden="true">↗</span></a>
+      </div>
+      <p className="capabilities-description">斜向切片、明暗分层、角色大字排版，让你的角色也拥有影画命座般的登场画面。</p>
+      <div className="mindscape-examples">
+        {mindscapeExamples.map((example) => <figure className="mindscape-example" key={example.name}>
+          <button type="button" className="mindscape-image" onClick={() => openImage(example.image, `${example.name} · 影画命座切割示例`)} aria-label={`放大${example.name}影画命座切割示例`}>
+            <img src={example.preview} srcSet={`${example.preview} 768w, ${example.image} 1536w`} sizes="(max-width: 600px) calc(100vw - 40px), (max-width: 1400px) calc((100vw - 108px) / 2), 646px" alt={`${example.name}影画命座切割示例，${example.caption.replace(' / ', '、')}`} width="1536" height="1024" loading="lazy" decoding="async" />
+            <span className="exhibit-zoom" aria-hidden="true">↗</span>
+          </button>
+          <figcaption><h3>{example.name} <span>影画命座切割</span></h3><p>{example.caption}</p></figcaption>
+        </figure>)}
+      </div>
+      <div className="character-study">
+        <button type="button" className="mindscape-image" onClick={() => openImage('/作品示例/character-three-view.webp', '角色三视图与表情设定示例')} aria-label="放大角色三视图与表情设定示例">
+          <img src="/作品示例/character-three-view-preview.webp" srcSet="/作品示例/character-three-view-preview.webp 768w, /作品示例/character-three-view.webp 1536w" sizes="(max-width: 600px) calc(100vw - 40px), (max-width: 1400px) calc((100vw - 108px) / 2), 646px" alt="猫耳角色的正面、侧面、背面三视图，以及面部特写与六种表情设定" width="1536" height="1024" loading="lazy" decoding="async" />
+          <span className="exhibit-zoom" aria-hidden="true">↗</span>
+        </button>
+        <div className="character-study-copy">
+          <p className="studio-eyebrow">CHARACTER REFERENCE</p>
+          <h3>先认识角色，<br />再让角色登场。</h3>
+          <p>正面、侧面、背面，配上面部特写与表情设定。从角色素材到影画创作，为不同画面准备统一的角色参考。</p>
+          <a href={ROUTE_HASHES.assets} className="studio-text-link">准备角色素材 <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+      <p className="capabilities-note">以上为创作效果示例 · 点击图片可放大查看细节</p>
     </section>
 
     <section className="exhibition-examples" aria-labelledby="examples-title">

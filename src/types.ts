@@ -151,8 +151,21 @@ export type NamePlacement = 'auto' | 'top-left+bottom-right' | 'top-right+bottom
 /** One of the three ZZZ yinghua art styles. */
 export type YinghuaStyleId = 1 | 2 | 3;
 
+export type ZeroFateMode = 'two-stage' | 'direct';
+
+/** Inputs that determine whether an action draft still belongs to this character/pose. */
+export interface ZeroFateDraftContext {
+  sourceImage: string;
+  addonImage: string | null;
+  prompt: string;
+}
+
+export interface ZeroFateDraft extends GenSlot {
+  context: ZeroFateDraftContext | null;
+}
+
 /** A displayed image that can be opened in the local continuous editing workspace. */
-export type InpaintTargetType = 'yinghua' | 'poster' | 'costume' | 'three-view' | 'upload' | 'preview';
+export type InpaintTargetType = 'yinghua' | 'yinghua-draft' | 'poster' | 'costume' | 'three-view' | 'upload' | 'preview';
 
 /** One image version in the current browser-only editing session. */
 export interface ImageEditVersion {

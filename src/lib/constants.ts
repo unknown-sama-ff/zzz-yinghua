@@ -43,6 +43,9 @@ export const MAX_COMPRESS_DIM = 1024;
 /** Higher-fidelity primary/reference dimension used only by 六命阳 edits. */
 export const SIX_FATE_EDIT_MAX_DIM = 1536;
 
+/** Preserve readable anatomy when generating and converting zero-fate drafts. */
+export const ZERO_FATE_INPUT_MAX_DIM = 1536;
+
 /** JPEG quality for compression (0–1). */
 export const JPEG_QUALITY = 0.80;
 
