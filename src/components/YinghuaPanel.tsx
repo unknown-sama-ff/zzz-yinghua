@@ -296,11 +296,11 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     if (!freeloadEnabled) {
       const cred = creds[provider];
       if (!cred.apiKey.trim()) {
-        showError('请先在「接口与角色」模块填写 API Key');
+        showError('请先在「工坊设置 → 接口与模型」填写 API Key');
         return;
       }
       if (!cred.baseUrl.trim()) {
-        showError('请先在「接口与角色」模块填写 Base URL');
+        showError('请先在「工坊设置 → 接口与模型」填写 Base URL');
         return;
       }
     }
@@ -322,7 +322,6 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     // 模块 01 的“用作主立绘”，也可由用户直接上传。不要使用服装改造历史。
     const identityReference = sourceImage;
     const selectedProvider = provider;
-    const capturedPalette = palette;
     setYinghuaSlot(id, { status: 'loading', error: undefined });
 
     let imageOverride: string | undefined;
@@ -358,7 +357,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         }
         const threeView = identityReference;
         if (id === 3 && selectedFace === 'front' && !threeView) {
-          showError('请先在模块 01 生成三视图，或在模块 02 上传三视图后再生成六命阳');
+          showError('请先在「角色素材」生成或上传三视图，再生成六命阳');
           return;
         }
         // A conventional horizontal three-view has the full front view at the
@@ -469,12 +468,6 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         if (shouldAutoDetectFace && capturedImages[0]) {
           void runFaceDetect(capturedImages[0]);
         }
-        if (capturedPalette) {
-          const root = document.documentElement.style;
-          root.setProperty('--zzz-primary', capturedPalette.textTopBright);
-          root.setProperty('--zzz-magenta', capturedPalette.textBottom);
-          root.setProperty('--zzz-accent', capturedPalette.textBottom);
-        }
       }, 0);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
@@ -497,7 +490,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   return (
     <section className="glass p-6" data-inpaint-zone="yinghua">
       <div className="flex items-center justify-between">
-        <SectionHeader step="04" title="影画动作设计 · 三风格（生图时间可能较长，结果可能不理想，多抽几次卡）" />
+        <SectionHeader title="影画动作设计 · 三种风格" />
         <button
           onClick={() => setYinghuaLang(yinghuaLang === 'zh' ? 'en' : 'zh')}
           className="glass-btn px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"

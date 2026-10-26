@@ -41,6 +41,7 @@ export interface GalleryPage {
 
 /** Rows fetched per gallery page. */
 export const GALLERY_PAGE_SIZE = 60;
+export const GALLERY_SAVED_EVENT = 'yinghua:gallery-saved';
 
 /**
  * Read a page of the gallery through our own backend.

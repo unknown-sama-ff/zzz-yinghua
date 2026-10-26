@@ -1,6 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, memo } from 'react';
-import { useProviderStore } from '../store/useProviderStore';
-import { useViewerStore } from '../store/useViewerStore';
 import { useInpaintStore } from '../store/useInpaintStore';
 
 const THEME_VARS = ['--zzz-primary', '--zzz-magenta', '--zzz-cyan'] as const;
@@ -116,14 +114,10 @@ function createThemeColorCache() {
  * no canvas) when the user's saved preference is off or the OS has
  * prefers-reduced-motion set.
  */
-export const CursorEffects = memo(function CursorEffects({ enabled, reduced, setEnabled }: {
+export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
   enabled: boolean;
   reduced: boolean;
-  setEnabled: (value: boolean) => void;
 }) {
-  const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
-  const setFreeloadEnabled = useProviderStore((s) => s.setFreeloadEnabled);
-  const viewerFullscreen = useViewerStore((s) => s.viewerFullscreen);
   const isWorkspaceOpen = useInpaintStore((s) => s.isWorkspaceOpen);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pulseRef = useRef<HTMLDivElement>(null);
@@ -497,77 +491,6 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced, set
         aria-hidden="true"
       />
 
-      {/* Social link buttons */}
-      {!isWorkspaceOpen && !viewerFullscreen && (
-        <div className="fixed left-4 top-4 z-[10001] flex items-center gap-3">
-        <a
-          href="https://www.bilibili.com/video/BV1r23V6BENS/?vd_source=a22597e544a6473348b3f4a24da47497"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="glass-btn group flex h-10 w-10 items-center justify-center rounded-full p-0 text-zzz-text transition-colors hover:text-zzz-primary"
-          aria-label="Bilibili"
-          title="作者 Bilibili 主页"
-        >
-          <img src="/bilibili.ico" alt="" className="h-5 w-5 object-contain invert brightness-0 transition-[filter] group-hover:invert-0 group-hover:brightness-100" draggable={false} />
-        </a>
-        <a
-          href="https://www.douyin.com/user/MS4wLjABAAAA6zJjn2X4oSR1B8c7Py_GH0MtbZcBw9ge4Ka_wgOQDF6h8qaqe3OBTA3SDTlwJT24?from_tab_name=main"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="glass-btn group flex h-10 w-10 items-center justify-center rounded-full p-0 text-zzz-text transition-colors hover:text-zzz-primary"
-          aria-label="抖音"
-          title="作者抖音主页"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M14.5 3.2c.3 1.8 1.35 3.2 3.1 4.05.65.32 1.35.5 2.15.52v3.03a8.9 8.9 0 0 1-5.22-1.73v6.12a5.63 5.63 0 1 1-4.84-5.57v3.17a2.55 2.55 0 1 0 1.77 2.4V3.2h3.04Z" />
-          </svg>
-        </a>
-        <a
-          href="https://github.com/unknown-sama-ff/zzz-yinghua"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="glass-btn flex h-10 w-10 items-center justify-center rounded-full p-0 text-zzz-text transition-colors hover:text-zzz-primary"
-          aria-label="GitHub"
-          title="GitHub 项目主页"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-          </svg>
-        </a>
-      </div>
-        )}
-
-      {!isWorkspaceOpen && !viewerFullscreen && (
-        <>
-          <button
-            onClick={() => setFreeloadEnabled(!freeloadEnabled)}
-            aria-pressed={freeloadEnabled}
-            data-active={freeloadEnabled}
-            className="glass-btn fixed bottom-[3.5rem] right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
-          >
-            白嫖作者 {freeloadEnabled ? '😋' : '😐'}
-          </button>
-          <button
-            onClick={() => setEnabled(!enabled)}
-            aria-pressed={enabled}
-            data-active={enabled}
-            aria-label={enabled ? '关闭鼠标和背景落樱特效' : '开启鼠标和背景落樱特效'}
-            className="glass-btn fixed bottom-4 right-4 z-[10001] px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text"
-          >
-            特效 {enabled ? 'ON' : 'OFF'}
-          </button>
-        </>
-      )}
     </>
   );
 });

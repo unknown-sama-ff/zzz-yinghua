@@ -1,9 +1,10 @@
-import { useEffect, useState, memo } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 import {
   deleteFromGallery,
   galleryImageProxyUrl,
   listGalleryPage,
   GALLERY_PAGE_SIZE,
+  GALLERY_SAVED_EVENT,
   type GalleryRow,
 } from '../lib/galleryClient';
 import { formatTime } from '../lib/formatTime';
@@ -56,36 +57,45 @@ export const GalleryPanel = memo(function GalleryPanel() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<number | string | null>(null);
+  const loadRequest = useRef(0);
   // Tokens are read fresh from localStorage on every render, so a work saved
   // after this panel already mounted is still deletable without a reload.
   const tokens = readTokens();
 
   const loadGallery = async (mode: 'initial' | 'refresh' = 'initial') => {
+    const request = ++loadRequest.current;
     if (mode === 'initial') setLoading(true);
     else setRefreshing(true);
     setError(null);
     try {
       const page = await listGalleryPage({ offset: 0 });
+      if (request !== loadRequest.current) return;
       setRows(page.rows);
       setHasMore(page.hasMore);
     } catch (err) {
+      if (request !== loadRequest.current) return;
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
-      if (mode === 'initial') setLoading(false);
-      else setRefreshing(false);
+      if (request === loadRequest.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
   const loadMore = async () => {
+    const request = loadRequest.current;
     setLoadingMore(true);
     setError(null);
     try {
       const page = await listGalleryPage({ offset: rows.length });
+      if (request !== loadRequest.current) return;
       // Append rather than replace; a concurrent save could shift rows, but a
       // duplicate thumbnail is a far better failure than losing the page.
       setRows((prev) => [...prev, ...page.rows]);
       setHasMore(page.hasMore);
     } catch (err) {
+      if (request !== loadRequest.current) return;
       setError(err instanceof Error ? err.message : '加载更多失败');
     } finally {
       setLoadingMore(false);
@@ -115,13 +125,19 @@ export const GalleryPanel = memo(function GalleryPanel() {
 
   useEffect(() => {
     void loadGallery();
+    const refresh = () => { void loadGallery('refresh'); };
+    window.addEventListener(GALLERY_SAVED_EVENT, refresh);
+    return () => {
+      ++loadRequest.current;
+      window.removeEventListener(GALLERY_SAVED_EVENT, refresh);
+    };
   }, []);
 
   return (
     <section className="glass p-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <SectionHeader step="07" title="画廊 · 生成作品" />
+          <SectionHeader title="画廊 · 生成作品" />
           <p className="mt-1 font-mono text-[10px] text-zzz-text/40">（共预计可存800张，一般来说不用删除，上传你认为好看的，值得大家一起欣赏的作品吧！）</p>
         </div>
         <button
@@ -169,7 +185,7 @@ export const GalleryPanel = memo(function GalleryPanel() {
               <div className="p-2 font-mono text-[10px] text-zzz-text/55 leading-relaxed">
                 <div className="text-zzz-primary/80 truncate">{row.style}</div>
                 {row.character_name && <div>角色：{row.character_name}</div>}
-                {row.provider && <div className="text-zzz-text/35">提供方：{row.provider}</div>}
+                {row.provider && <div className="text-zzz-text/35">{row.provider === 'viewer-composite' ? '来源：查看器合成' : `提供方：${row.provider}`}</div>}
                 <div className="text-zzz-text/35">{formatTime(row.created_at, 'Asia/Shanghai')}</div>
                 {tokens[String(row.id)] && (
                   <button

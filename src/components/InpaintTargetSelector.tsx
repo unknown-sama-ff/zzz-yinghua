@@ -40,6 +40,7 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
     const nextCache: { id: string; src: string; zone: string; img: HTMLImageElement }[] = [];
 
     zones.forEach((zone) => {
+      if (zone.closest('[hidden]')) return;
       const zoneType = zone.getAttribute('data-inpaint-zone') || 'unknown';
       const imgs = zone.querySelectorAll('img');
       imgs.forEach((img, i) => {
@@ -232,7 +233,7 @@ const InpaintPortal = memo(function InpaintPortal({ onSelect }: { onSelect: (t: 
   );
 });
 
-export const InpaintTargetSelector = memo(function InpaintTargetSelector({ children }: { children: React.ReactNode }) {
+export const InpaintTargetSelector = memo(function InpaintTargetSelector({ children, showEditButton = true }: { children: React.ReactNode; showEditButton?: boolean }) {
   const isSelecting = useInpaintStore((s) => s.isSelecting);
   const setIsSelecting = useInpaintStore((s) => s.setIsSelecting);
   const openWorkspace = useInpaintStore((s) => s.openWorkspace);
@@ -263,6 +264,7 @@ export const InpaintTargetSelector = memo(function InpaintTargetSelector({ child
       if ((img as HTMLElement).hasAttribute('data-no-inpaint')) return;
       const zone = img.closest('[data-inpaint-zone]') as HTMLElement | null;
       if (!zone) return;
+      if (zone.closest('[hidden]')) return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -314,7 +316,7 @@ export const InpaintTargetSelector = memo(function InpaintTargetSelector({ child
         </div>
       )}
 
-      <FloatingInpaintButton />
+      {showEditButton && <FloatingInpaintButton />}
     </div>
   );
 });

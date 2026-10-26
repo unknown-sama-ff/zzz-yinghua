@@ -56,15 +56,15 @@
    not set directly). The transition makes the swap animate (~300ms).
    =========================================================================== */
 :root {
-  --zzz-bg: #0d0a14;
-  --zzz-ink: #16121f;
-  --zzz-panel: #1c1726;
+  --zzz-bg: #0e1015;
+  --zzz-ink: #151921;
+  --zzz-panel: #191d25;
   --zzz-primary: #b026ff;
   --zzz-magenta: #ff2d9b;
   --zzz-cyan: #25f4ee;
   --zzz-accent: #ff2d9b;
   --zzz-muted: #16121f;
-  --zzz-text: #f5f0ff;
+  --zzz-text: #f3f2ee;
   --zzz-text-on: #f5f0ff;
   --zzz-radius: 4px;
   --zzz-radius-lg: 18px;
@@ -100,22 +100,22 @@ body {
   background-image:
     radial-gradient(
       60vw 60vw at 12% -10%,
-      color-mix(in srgb, var(--zzz-primary) 28%, transparent),
+      color-mix(in srgb, var(--zzz-primary) 6%, transparent),
       transparent 60%
     ),
     radial-gradient(
       55vw 55vw at 105% 8%,
-      color-mix(in srgb, var(--zzz-magenta) 24%, transparent),
+      color-mix(in srgb, var(--zzz-magenta) 4%, transparent),
       transparent 55%
     ),
     radial-gradient(
       70vw 50vw at 50% 115%,
-      color-mix(in srgb, var(--zzz-cyan) 14%, transparent),
+      transparent,
       transparent 60%
     );
   background-attachment: fixed;
   color: var(--zzz-text);
-  font-family: 'Oswald', system-ui, sans-serif;
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
@@ -135,7 +135,7 @@ body::before {
       transparent 1px,
       transparent 3px
     );
-  opacity: 0.28;
+  opacity: 0.1;
   mix-blend-mode: multiply;
 }
 

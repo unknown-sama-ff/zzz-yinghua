@@ -45,11 +45,11 @@ export const PromptBar = memo(function PromptBar() {
       return;
     }
     if (!freeloadEnabled && !gptCredentials.apiKey.trim()) {
-      showError('请先在「接口与角色」模块填写 gpt-image API Key');
+      showError('请先在「工坊设置 → 接口与模型」填写 gpt-image API Key');
       return;
     }
     if (!freeloadEnabled && !gptCredentials.baseUrl.trim()) {
-      showError('请先在「接口与角色」模块填写 gpt-image Base URL');
+      showError('请先在「工坊设置 → 接口与模型」填写 gpt-image Base URL');
       return;
     }
 

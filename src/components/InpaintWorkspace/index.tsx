@@ -43,7 +43,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
         setTargetImage({ ...targetImage, url: currentVersionUrl });
       }
       showError(isYinghuaTarget
-        ? `✓ 已替换 04 原图：${inpaintTargetLabel(targetImage)}`
+        ? `✓ 已替换影画原图：${inpaintTargetLabel(targetImage)}`
         : `✓ 已应用到${inpaintTargetLabel(targetImage)}`);
     } catch (error) {
       showError(error instanceof Error ? `替换失败：${error.message}` : '替换失败，当前编辑版本仍已保留');
@@ -90,7 +90,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
             title={canReplaceInpaintTarget(targetImage) ? (isYinghuaTarget ? '将当前版本替换到 04 影画动作设计' : '将当前草稿应用到原模块') : '预览图片无法替换到模块'}
             className="glass-btn px-3 py-1.5 font-mono text-xs text-[var(--zzz-primary)] disabled:opacity-40"
           >
-            {isApplying ? (isYinghuaTarget ? '替换中…' : '应用中…') : (isYinghuaTarget ? '替换 04 原图' : '应用当前版本')}
+            {isApplying ? (isYinghuaTarget ? '替换中…' : '应用中…') : (isYinghuaTarget ? '替换影画原图' : '应用当前版本')}
           </button>
           <button
             onClick={closeWorkspace}

@@ -9,7 +9,7 @@ import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_SIZE } from '../lib/prompts';
 import { stitchImages } from '../lib/imageWorkerPool';
 import { validateImageFile, fileToDataUrl } from '../lib/validation';
-import { extractPalette } from '../lib/colorExtract';
+import { refreshUploadPalette } from '../lib/uploadTheme';
 import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
@@ -84,7 +84,6 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
   const threeViewSlot = useWorkbenchStore((s) => s.threeViewSlot);
   const setThreeViewSlot = useWorkbenchStore((s) => s.setThreeViewSlot);
   const setUpload = useUploadStore((s) => s.setUpload);
-  const setPalette = useUploadStore((s) => s.setPalette);
   const provider = useProviderStore((s) => s.provider);
   const characterName = useIdentityStore((s) => s.characterName);
   const addCostumeChangeImages = useWorkbenchStore((s) => s.addCostumeChangeImages);
@@ -133,14 +132,12 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
 
   const useAsMain = async (src: string) => {
     setUpload(src, 'three-view.png');
-    const palette = await extractPalette(src);
-    setPalette(palette);
-    showError('✓ 已设为主立绘，主题色已更新');
+    if (await refreshUploadPalette(src)) showError('✓ 已设为主立绘，主题色已更新');
   };
 
   return (
     <section className="glass p-6" data-inpaint-zone="three-view">
-        <SectionHeader step="01" title="三视图生成工作台（有三视图直接跳到02）" />
+        <SectionHeader title="三视图生成工作台" />
 
       <p className="mb-4 font-mono text-xs text-zzz-text/55">
         上传正面（必填）+ 侧面/背面（可选），自动拼合后发给 AI 生成完整三视图。（建议上传 PNG 透明背景图；只上传正面可能效果不佳）

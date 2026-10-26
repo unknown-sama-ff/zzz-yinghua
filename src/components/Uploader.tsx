@@ -5,8 +5,7 @@ import { useWorkbenchStore } from '../store/useWorkbenchStore';
 import { useToast } from '../store/useToast';
 import { useInpaintStore } from '../store/useInpaintStore';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
-import { extractPalette } from '../lib/colorExtract';
-import { applyTheme, resetTheme } from '../lib/theme';
+import { refreshUploadPalette } from '../lib/uploadTheme';
 import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_SIZE } from '../lib/prompts';
 import { downloadImage } from '../lib/download';
@@ -21,7 +20,6 @@ export const Uploader = memo(function Uploader() {
   const uploadedImage = useUploadStore((s) => s.uploadedImage);
   const uploadedName = useUploadStore((s) => s.uploadedName);
   const setUpload = useUploadStore((s) => s.setUpload);
-  const setPalette = useUploadStore((s) => s.setPalette);
   const clearUpload = useUploadStore((s) => s.clearUpload);
   const costumeChangePrompt = useWorkbenchStore((s) => s.costumeChangePrompt);
   const setCostumeChangePrompt = useWorkbenchStore((s) => s.setCostumeChangePrompt);
@@ -50,11 +48,9 @@ export const Uploader = memo(function Uploader() {
       setUpload(dataUrl, file.name);
       addCostumeChangeImages([dataUrl]);
       // Extract palette and theme the UI to the character's art.
-      const palette = await extractPalette(dataUrl);
-      setPalette(palette);
-      applyTheme(palette);
+      await refreshUploadPalette(dataUrl);
     },
-    [setUpload, setPalette, showError],
+    [setUpload, addCostumeChangeImages, showError],
   );
 
   const onDrop = useCallback(
@@ -71,16 +67,15 @@ export const Uploader = memo(function Uploader() {
     clearUpload();
     clearCostumeChangeHistory();
     setCostumeChangeRefImage(null);
-    resetTheme();
     if (inputRef.current) inputRef.current.value = '';
     if (refInputRef.current) refInputRef.current.value = '';
   };
 
   return (
     <section className="glass flex flex-col p-6" data-inpaint-zone="upload">
-      <SectionHeader step="02" title="上传三视图立绘" />
+      <SectionHeader title="主立绘与角色换装" />
       <p className="mb-3 font-mono text-xs text-zzz-text/55">
-        建议上传三视图成品以获得最佳生成效果。没有三视图？使用上方工作台生成 ↑
+        上传立绘后，工坊会自动跟随角色取色。建议使用完整三视图；也可在三视图工作台补全。
       </p>
 
       {!uploadedImage ? (
@@ -184,9 +179,7 @@ export const Uploader = memo(function Uploader() {
                       <button
                         onClick={async () => {
                           setUpload(src, 'history-pick.png');
-                          const p = await extractPalette(src);
-                          setPalette(p);
-                          applyTheme(p);
+                          await refreshUploadPalette(src);
                         }}
                         className="glass-btn px-2 py-1 text-[10px] text-zzz-cyan"
                       >

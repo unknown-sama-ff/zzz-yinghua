@@ -3,7 +3,7 @@ import { useUploadStore } from '../store/useUploadStore';
 import { SectionHeader } from './SectionHeader';
 import { SponsorList } from './SponsorList';
 
-export function PaymentPanel() {
+export function PaymentPanel({ inlineQr = false }: { inlineQr?: boolean }) {
   const palette = useUploadStore((s) => s.palette);
   const [sponsorListOpen, setSponsorListOpen] = useState(false);
   const [qrPinned, setQrPinned] = useState(false);
@@ -26,14 +26,14 @@ export function PaymentPanel() {
         赞助用于维护模型额度与创作工具，不影响现有免费功能。请使用支付宝扫码支持。
       </p>
 
-      <div className="group relative inline-flex" onMouseLeave={() => setQrPinned(false)}>
+      <div className="sponsor-qr-anchor group relative inline-flex" onMouseLeave={() => { if (!inlineQr) setQrPinned(false); }}>
         <button
           type="button"
           aria-controls="personal-alipay-qr"
           aria-expanded={qrPinned}
-          onBlur={() => setQrPinned(false)}
-          onFocus={() => setQrPinned(true)}
-          onClick={() => setQrPinned((pinned) => !pinned)}
+          onBlur={() => { if (!inlineQr) setQrPinned(false); }}
+          onFocus={() => { if (!inlineQr) setQrPinned(true); }}
+          onClick={() => setQrPinned((pinned) => inlineQr ? !pinned : true)}
           className="glass-btn px-5 py-2.5 font-mono text-xs text-zzz-text transition-colors"
           style={{ borderColor: 'color-mix(in srgb, var(--zzz-primary) 55%, transparent)', boxShadow: '0 0 18px color-mix(in srgb, var(--zzz-primary) 20%, transparent)' }}
         >
@@ -41,6 +41,7 @@ export function PaymentPanel() {
         </button>
         <div
           id="personal-alipay-qr"
+          data-open={qrPinned}
           role="tooltip"
           className={`absolute bottom-full left-1/2 z-20 mb-3 w-64 max-w-[calc(100vw-3rem)] -translate-x-1/2 rounded-xl border border-zzz-primary/45 bg-[#0d0a14] p-3 shadow-2xl transition ${qrPinned ? 'visible opacity-100' : 'invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100'}`}
         >

@@ -88,7 +88,7 @@ export const PosterPanel = memo(function PosterPanel() {
     const main = uploadedImage ?? undefined;
     const imageOverride = tv || main;
     if (!imageOverride) {
-      showError('请先在 01 模块生成三视图，或上传角色立绘');
+      showError('请先在「角色素材」生成三视图，或上传角色立绘');
       return;
     }
 
@@ -107,7 +107,7 @@ export const PosterPanel = memo(function PosterPanel() {
 
   return (
     <section className="glass p-6" data-inpaint-zone="poster">
-      <SectionHeader step="06" title="作者推荐 · 绝区零特色提示词 · 自由 / 海报版 · 一键生成" />
+      <SectionHeader title="角色海报 · 作者推荐风格" />
 
       <div className="-mt-2 mb-3 flex items-center gap-2">
         {POSTER_VARIANTS.map((v) => (

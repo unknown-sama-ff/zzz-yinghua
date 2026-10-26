@@ -11,7 +11,10 @@ export const FloatingInpaintButton = memo(function FloatingInpaintButton() {
   return (
     <button
       onClick={() => setIsSelecting(!isSelecting)}
+      aria-pressed={isSelecting}
+      data-selecting={isSelecting}
       className={`
+        studio-edit-button
         fixed bottom-6 left-6 z-50
         flex h-10 items-center gap-2 rounded-full px-4
         font-mono text-xs font-medium tracking-wide

@@ -1,5 +1,4 @@
 import { memo } from 'react';
-import { useIdentityStore } from '../store/useIdentityStore';
 import { gptImageQualityOptions, useProviderStore } from '../store/useProviderStore';
 import { GPT_IMAGE_QUALITY_LABELS, isGptImageQuality } from '../lib/gptImageCapabilities';
 import type { ProviderName } from '../types';
@@ -11,14 +10,12 @@ const PROVIDERS: { value: ProviderName; label: string }[] = [
   { value: 'custom-url', label: '自定义URL' },
 ];
 
-/** Provider dropdown + character name; expands custom-url config when chosen. */
+/** Shared model settings; character identity belongs to the assets workspace. */
 export const ProviderSelect = memo(function ProviderSelect() {
   const provider = useProviderStore((s) => s.provider);
   const setProvider = useProviderStore((s) => s.setProvider);
   const custom = useProviderStore((s) => s.custom);
   const setCustom = useProviderStore((s) => s.setCustom);
-  const characterName = useIdentityStore((s) => s.characterName);
-  const setCharacterName = useIdentityStore((s) => s.setCharacterName);
   const creds = useProviderStore((s) => s.creds);
   const setCred = useProviderStore((s) => s.setCred);
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
@@ -41,16 +38,8 @@ export const ProviderSelect = memo(function ProviderSelect() {
 
   return (
     <section className="glass p-6">
-      <SectionHeader step="03" title="接口与角色（中转站URL后加/v1）" />
+      <SectionHeader title="接口与模型" />
       <p className="mb-4 font-mono text-xs text-red-400/80">⚠ seedream效果不好，不推荐</p>
-
-      <label className="mb-1 block font-mono text-xs text-zzz-text/60">角色英文名</label>
-      <input
-        value={characterName}
-        onChange={(e) => setCharacterName(e.target.value)}
-        placeholder="CORIN"
-        className="glass-input mb-4 w-full px-3 py-2 font-mono uppercase tracking-widest"
-      />
 
       <label className="mb-1 block font-mono text-xs text-zzz-text/60">Provider</label>
       <div className="flex gap-2">

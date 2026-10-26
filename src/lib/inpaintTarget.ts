@@ -1,5 +1,4 @@
-import { extractPalette } from './colorExtract';
-import { applyTheme } from './theme';
+import { refreshUploadPalette } from './uploadTheme';
 import { useUploadStore } from '../store/useUploadStore';
 import { useWorkbenchStore } from '../store/useWorkbenchStore';
 import { useYinghuaStore } from '../store/useYinghuaStore';
@@ -94,7 +93,7 @@ export function inpaintTargetLabel(target: InpaintTarget): string {
     case 'poster': return '海报图片';
     case 'costume': return '换装三视图';
     case 'three-view': return '三视图图片';
-    case 'upload': return '模块 02 主立绘';
+    case 'upload': return '角色主立绘';
     default: return '当前预览图片';
   }
 }
@@ -115,12 +114,7 @@ export async function replaceInpaintTarget(target: InpaintTarget, replacement: s
     const store = useUploadStore.getState();
     store.setUpload(replacement, 'inpaint-result.png');
     try {
-      const palette = await extractPalette(replacement);
-      // Palette extraction must not override a later upload's theme.
-      if (sameImageSource(useUploadStore.getState().uploadedImage ?? undefined, replacement)) {
-        store.setPalette(palette);
-        applyTheme(palette);
-      }
+      await refreshUploadPalette(replacement);
     } catch { /* A valid replacement does not depend on palette extraction. */ }
     return true;
   }

@@ -3,12 +3,14 @@ import { useProviderStore } from '../store/useProviderStore';
 import { useYinghuaStore } from '../store/useYinghuaStore';
 import { useViewerStore } from '../store/useViewerStore';
 import { useToast } from '../store/useToast';
+import { useIdentityStore } from '../store/useIdentityStore';
 import { validateImageFile, fileToDataUrl, parseDataUrl } from '../lib/validation';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { resolveYinghuaFaceImage } from '../lib/yinghuaFace';
 import { downloadBlob } from '../lib/download';
 import { renderYinghuaComposite } from '../lib/yinghuaComposite';
+import { saveGalleryImage } from '../lib/gallerySave';
 import { buildYinghuaLayers, containedImageRect, type YinghuaLayer } from '../lib/yinghuaLayers';
 import { ControlBar } from './ControlBar';
 import '../styles/viewer.css';
@@ -90,16 +92,20 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   const detectFaceError = useViewerStore((s) => s.detectFaceError);
   const setDetectFaceError = useViewerStore((s) => s.setDetectFaceError);
   const showError = useToast((s) => s.show);
+  const characterName = useIdentityStore((s) => s.characterName);
   const [sweeping, setSweeping] = useState(false);
   const [glitch, setGlitch] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [gallerySaving, setGallerySaving] = useState(false);
+  const [savedComposition, setSavedComposition] = useState<{ layers: YinghuaLayer[]; characterName: string } | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [imageAspectRatio, setImageAspectRatio] = useState<number>(16 / 9); // 默认 16:9
   const isMobile = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const sectionRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const exportInProgress = useRef(false);
+  const gallerySaveInProgress = useRef(false);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [loadedLayers, setLoadedLayers] = useState<Record<string, string>>({});
   const [failedLayers, setFailedLayers] = useState<Record<string, string>>({});
@@ -114,6 +120,10 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
     [yinghuaSlots, parts, viewerClipRegions, style3Face],
   );
   const displayedSixImage = resolveYinghuaFaceImage(yinghuaSlots[3].images, style3Face);
+  const gallerySaved = savedComposition?.characterName === characterName
+    && savedComposition.layers.length === layers.length
+    && savedComposition.layers.every((layer, index) => layer.code === layers[index].code
+      && layer.src === layers[index].src && layer.clipPath === layers[index].clipPath);
   const exportReady = hasBase && layers.every((layer) => loadedLayers[layer.code] === layer.src);
   const imageLoadFailed = layers.some((layer) => failedLayers[layer.code] === layer.src);
   const exportTitle = exportReady
@@ -272,6 +282,44 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
     }
   }, [exportReady, layers, displayedSixImage?.face, showError]);
 
+  const handleSaveToGallery = useCallback(async () => {
+    if (!exportReady || gallerySaved || gallerySaveInProgress.current || !stageRef.current) return;
+    gallerySaveInProgress.current = true;
+    setGallerySaving(true);
+    const snapshot = layers.map((layer) => ({ ...layer }));
+    const name = characterName;
+    const background = getComputedStyle(stageRef.current).backgroundColor;
+    const visibleCodes = snapshot.map((layer) => layer.code === 'base' ? '零命底图' : layer.code).join('、');
+    const hasSix = snapshot.some((layer) => Number(layer.code) >= 4);
+    const description = [
+      '影画查看器合成',
+      `可见图层：${visibleCodes}`,
+      ...(hasSix ? [`六命：${displayedSixImage?.face === 'back' ? '阴' : '阳'}`] : []),
+      ...snapshot.filter((layer) => layer.clipPath).map((layer) => `${layer.code} 裁切：${layer.clipPath}`),
+    ].join('\n');
+    try {
+      const blob = await renderYinghuaComposite(snapshot, background);
+      await saveGalleryImage(blob, { style: '影画合成', characterName: name, prompt: description, provider: 'viewer-composite' });
+      setSavedComposition({ layers: snapshot, characterName: name });
+      showError('✓ 当前影画已保存到画廊');
+    } catch (error) {
+      showError(error instanceof Error ? `保存到画廊失败：${error.message}` : '保存到画廊失败，请重试');
+    } finally {
+      gallerySaveInProgress.current = false;
+      setGallerySaving(false);
+    }
+  }, [exportReady, gallerySaved, layers, characterName, displayedSixImage?.face, showError]);
+
+  const galleryButton = <button
+    type="button"
+    onClick={() => void handleSaveToGallery()}
+    disabled={!exportReady || gallerySaving || gallerySaved}
+    aria-busy={gallerySaving}
+    aria-live="polite"
+    title={exportReady ? '将当前可见图层合成为作品并保存到画廊' : exportTitle}
+    className="glass-btn px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-text disabled:opacity-40"
+  >{gallerySaving ? '保存中…' : gallerySaved ? '已保存到画廊' : '保存到画廊'}</button>;
+
   const handleSlotUpload = useCallback(
     async (id: YinghuaStyleId, file: File) => {
       const check = validateImageFile(file);
@@ -301,10 +349,10 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   return (
     <section ref={sectionRef} className={`${fullscreen ? 'fixed inset-0 z-50 flex flex-col' : 'flex flex-col'} glass overflow-hidden`}>
       <h2 className={`zzz-heading flex flex-wrap items-center gap-3 border-b border-zzz-text/10 p-4 text-lg text-zzz-text ${fullscreen ? 'hidden' : ''}`}>
-        <span className="step-badge">05</span>
         影画查看器
         {hasBase && (
           <div className="ml-auto flex items-center gap-2">
+            {galleryButton}
             <button
               onClick={() => void handleExportPng()}
               disabled={!exportReady || exporting}
@@ -347,13 +395,16 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
           {fullscreen && (
             <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
               {hasBase && (
-                <button
-                  onClick={() => void handleExportPng()}
-                  disabled={!exportReady || exporting}
-                  className="glass-btn px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-primary disabled:opacity-40"
-                >
-                  {exporting ? '保存中…' : '保存 PNG'}
-                </button>
+                <>
+                  {galleryButton}
+                  <button
+                    onClick={() => void handleExportPng()}
+                    disabled={!exportReady || exporting}
+                    className="glass-btn px-3 py-1.5 font-mono text-[10px] tracking-widest text-zzz-primary disabled:opacity-40"
+                  >
+                    {exporting ? '保存中…' : '保存 PNG'}
+                  </button>
+                </>
               )}
               <button
                 onClick={toggleFullscreen}
@@ -368,7 +419,7 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
           {!hasBase && (
             <div className="absolute inset-0 flex items-center justify-center">
               <p className="glass px-4 py-2 text-center font-mono text-xs text-zzz-text/70">
-                尚未生成影画 // 先在上方 04 模块生成三种风格
+                尚未生成影画 // 先在上方生成角色影画
                 <br />（零命=底图，三命/六命=按钮揭示的对角区域）
               </p>
             </div>

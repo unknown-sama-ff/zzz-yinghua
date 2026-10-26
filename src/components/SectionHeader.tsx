@@ -12,7 +12,7 @@ interface SectionHeaderProps {
 export const SectionHeader = memo(function SectionHeader({ step, title, action }: SectionHeaderProps) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {step && <span className="step-badge">{step}</span>}
         <h2 className="zzz-heading text-lg text-zzz-text">{title}</h2>
       </div>
