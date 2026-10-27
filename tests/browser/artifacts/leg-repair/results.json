@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "one click starts one edit, keeps the original and provides version comparison",
+    "repeat repair uses the selected version; explicit apply updates only its draft",
+    "six-fate Yin repair preserves Yang and writes back to the exact displayed face",
+    "rejection preserves inputs and source, shows provider evidence, and retries only on another click",
+    "390px repair preview and explicit replacement remain usable without horizontal overflow"
+  ],
+  "errors": [],
+  "allModelCallsIntercepted": true
+}

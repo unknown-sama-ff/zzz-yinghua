@@ -76,6 +76,11 @@
 .yinghua-preview-empty strong { display: block; color: var(--studio-secondary); font-size: 12px; font-weight: 500; }
 .yinghua-preview-empty p { color: var(--studio-secondary); opacity: .75; font-size: 10px; line-height: 1.8; max-width: 260px; margin: 8px auto 0; }
 .yinghua-preview-hint { margin-top: 11px; color: var(--studio-secondary); font-size: 10px; line-height: 1.85; }
+.yinghua-preview-footer { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 11px; }
+.yinghua-preview-footer .yinghua-preview-hint { flex: 1; min-width: 180px; margin-top: 0; }
+.yinghua-leg-repair-action { flex-shrink: 0; text-align: right; }
+.yinghua-leg-repair-action button { padding: 7px 14px; font-size: 11px; color: var(--zzz-primary); }
+.yinghua-leg-repair-action small { display: block; margin-top: 5px; color: var(--studio-secondary); font-size: 9px; line-height: 1.7; }
 .yinghua-preview-pending { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--zzz-bg) 75%, transparent); color: var(--zzz-text); font-size: 11px; }
 .yinghua-loading-mark { display: block; width: 24px; height: 24px; margin: 0 auto 20px; border-radius: 50%; border: 2px solid var(--yinghua-rule); border-top-color: var(--zzz-primary); animation: yinghua-spin 1s linear infinite; }
 @keyframes yinghua-spin { to { transform: rotate(360deg); } }
@@ -113,6 +118,9 @@
   .yinghua-step-copy small { font-size: 9px; }
   .yinghua-stage { grid-template-columns: minmax(0, 1fr); padding-top: 22px; gap: 18px; }
   .yinghua-preview-pane { grid-row: 1; }
+  .yinghua-preview-footer { display: block; }
+  .yinghua-leg-repair-action { margin-top: 10px; text-align: center; }
+  .yinghua-leg-repair-action button { width: 100%; min-height: 44px; }
   .yinghua-preview-empty { padding: 18px; }
   .yinghua-preview-frame, .yinghua-loading-mark { margin-bottom: 12px; }
   .yinghua-stage-controls h3 { font-size: 21px; }

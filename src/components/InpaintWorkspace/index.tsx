@@ -5,6 +5,7 @@ import { ToolPanel } from './ToolPanel';
 import { CanvasEditor } from './CanvasEditor';
 import { PromptBar } from './PromptBar';
 import { ZoomButton } from '../ImageLightbox';
+import { GenerationErrorNotice } from '../GenerationErrorNotice';
 import { canReplaceInpaintTarget, inpaintTargetLabel, replaceInpaintTarget, sameImageSource } from '../../lib/inpaintTarget';
 
 export const InpaintWorkspace = memo(function InpaintWorkspace() {
@@ -18,6 +19,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
   const currentVersionUrl = useInpaintStore((s) => s.currentVersionUrl);
   const selectVersion = useInpaintStore((s) => s.selectVersion);
   const isGenerating = useInpaintStore((s) => s.isGenerating);
+  const generationError = useInpaintStore((s) => s.generationError);
 
   const showError = useToast((s) => s.show);
   const [isApplying, setIsApplying] = useState(false);
@@ -62,6 +64,9 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="连续图片编辑"
       className="fixed inset-0 z-[60] flex flex-col bg-black/90 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) closeWorkspace();
@@ -101,6 +106,10 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
           </button>
         </div>
       </div>
+
+      {generationError && (isYinghuaTarget || isDraftTarget) && <div className="max-h-[32vh] shrink-0 overflow-y-auto px-4 pb-2">
+        <GenerationErrorNotice message={generationError.message} upstreamError={generationError.upstreamError} />
+      </div>}
 
       <div className="border-b border-[var(--zzz-text)]/10 bg-[var(--zzz-ink)]/60 px-4 py-2.5">
         <div className="mb-1 flex items-center justify-between font-mono text-[10px] text-[var(--zzz-text)]/45">

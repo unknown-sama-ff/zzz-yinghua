@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react';
-import type { GenSlot } from '../types';
+import type { GenSlot, InpaintTarget } from '../types';
+import { OneClickLegRepairButton } from './OneClickLegRepairButton';
 
-export function YinghuaStagePreview({ slot, title, hint, children }: {
+export function YinghuaStagePreview({ slot, title, hint, repairTarget, children }: {
   slot: GenSlot;
   title: string;
   hint: string;
   children: ReactNode;
+  repairTarget?: InpaintTarget;
 }) {
   const loading = slot.status === 'loading';
   return (
@@ -21,7 +23,10 @@ export function YinghuaStagePreview({ slot, title, hint, children }: {
         )}
         {loading && slot.images[0] && <div className="yinghua-preview-pending">正在生成新版本 · 当前结果仍已保留</div>}
       </div>
-      <p className="yinghua-preview-hint">{hint}</p>
+      <div className="yinghua-preview-footer">
+        <p className="yinghua-preview-hint">{hint}</p>
+        {repairTarget && <OneClickLegRepairButton target={repairTarget} />}
+      </div>
     </div>
   );
 }

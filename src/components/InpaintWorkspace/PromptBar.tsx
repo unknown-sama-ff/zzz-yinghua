@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { useInpaintStore } from '../../store/useInpaintStore';
-import { inpaint, ApiError } from '../../lib/apiClient';
-import { buildContextualEditPrompt } from '../../lib/inpaintPrompt';
+import { ApiError } from '../../lib/apiClient';
+import { submitImageEdit } from '../../lib/submitImageEdit';
+import { ONE_CLICK_LEG_REPAIR_INSTRUCTION } from '../../lib/oneClickLegRepair';
 import { useToast } from '../../store/useToast';
-import { gptImageQualityForRequest, useProviderStore } from '../../store/useProviderStore';
 import { ModeSwitch } from './ModeSwitch';
 
 export const PromptBar = memo(function PromptBar() {
@@ -12,19 +12,12 @@ export const PromptBar = memo(function PromptBar() {
   const mode = useInpaintStore((s) => s.mode);
   const maskDataUrl = useInpaintStore((s) => s.maskDataUrl);
   const isGenerating = useInpaintStore((s) => s.isGenerating);
-  const setIsGenerating = useInpaintStore((s) => s.setIsGenerating);
   const targetImage = useInpaintStore((s) => s.targetImage);
-  const currentVersionId = useInpaintStore((s) => s.currentVersionId);
-  const currentVersionUrl = useInpaintStore((s) => s.currentVersionUrl);
-  const appendVersion = useInpaintStore((s) => s.appendVersion);
   const closeWorkspace = useInpaintStore((s) => s.closeWorkspace);
   const featherRadius = useInpaintStore((s) => s.featherRadius);
   const brushSize = useInpaintStore((s) => s.brushSize);
   const setBrushSize = useInpaintStore((s) => s.setBrushSize);
   const setFeatherRadius = useInpaintStore((s) => s.setFeatherRadius);
-  const quality = useProviderStore(gptImageQualityForRequest);
-  const gptCredentials = useProviderStore((s) => s.creds['gpt-image']);
-  const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
 
   const showError = useToast((s) => s.show);
   const [localPrompt, setLocalPrompt] = useState(prompt);
@@ -33,68 +26,31 @@ export const PromptBar = memo(function PromptBar() {
     setLocalPrompt(prompt);
   }, [prompt]);
 
-  const handleGenerate = useCallback(async () => {
-    if (!targetImage || !currentVersionId || !currentVersionUrl) return;
-    const instruction = localPrompt.trim();
-    if (!instruction) {
-      showError('请输入修改说明');
-      return;
-    }
-    if (mode === 'precise' && !maskDataUrl) {
-      showError('请先在画布上涂抹要编辑的区域');
-      return;
-    }
-    if (!freeloadEnabled && !gptCredentials.apiKey.trim()) {
-      showError('请先在「工坊设置 → 接口与模型」填写 gpt-image API Key');
-      return;
-    }
-    if (!freeloadEnabled && !gptCredentials.baseUrl.trim()) {
-      showError('请先在「工坊设置 → 接口与模型」填写 gpt-image Base URL');
-      return;
-    }
-
-    setIsGenerating(true);
+  const handleGenerate = useCallback(async (preset?: string) => {
+    if (useInpaintStore.getState().isGenerating) return;
+    const instruction = (preset ?? localPrompt).trim();
+    if (preset) { setPrompt(preset); setLocalPrompt(preset); }
     try {
-      const canvas = window.__inpaintCanvas;
       let currentMaskDataUrl: string | undefined;
       if (mode === 'precise') {
+        if (!maskDataUrl) { showError('请先在画布上涂抹要编辑的区域'); return; }
+        const canvas = window.__inpaintCanvas;
         canvas?.applyFeather();
         currentMaskDataUrl = canvas?.exportMask() ?? undefined;
-        if (!currentMaskDataUrl) {
-          showError('无法导出重绘蒙版，请重新涂抹后重试');
-          return;
-        }
+        if (!currentMaskDataUrl) throw new ApiError('INVALID_INPUT', '无法导出重绘蒙版，请重新涂抹后重试');
       }
-
-      const images = await inpaint({
-        imageDataUrl: currentVersionUrl,
-        maskDataUrl: currentMaskDataUrl,
-        prompt: buildContextualEditPrompt(instruction, mode),
-        provider: 'gpt-image',
-        quality,
-        apiKey: gptCredentials.apiKey.trim() || undefined,
-        baseUrl: gptCredentials.baseUrl.trim() || undefined,
-        model: gptCredentials.model.trim() || undefined,
-        useServerPreset: freeloadEnabled,
-        editMode: mode,
-      });
-      if (!images[0] || !appendVersion(images[0], instruction, currentVersionId)) {
-        showError('生成结果无法加入当前编辑会话，请重新打开图片后重试');
-      }
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.message : '生成失败';
-      showError(msg);
-    } finally {
-      setIsGenerating(false);
+      await submitImageEdit({ instruction, editMode: mode, maskDataUrl: currentMaskDataUrl });
+    } catch (error) {
+      showError(error instanceof Error ? error.message : '生成失败');
     }
-  }, [targetImage, currentVersionId, currentVersionUrl, localPrompt, mode, maskDataUrl, gptCredentials, freeloadEnabled, quality, appendVersion, setIsGenerating, showError]);
+  }, [localPrompt, maskDataUrl, mode, setPrompt, showError]);
 
   return (
     <div className="border-t border-[var(--zzz-text)]/10 bg-[var(--zzz-ink)]/80 p-3 backdrop-blur-md">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <ModeSwitch />
 
-        <div className="relative flex-1">
+        <div className="relative min-w-[180px] flex-1">
           <textarea
             value={localPrompt}
             onChange={(e) => {
@@ -142,6 +98,15 @@ export const PromptBar = memo(function PromptBar() {
               className="h-1 w-16 accent-[var(--zzz-primary)]"
             />
           </div>
+        )}
+
+        {(targetImage?.type === 'yinghua' || targetImage?.type === 'yinghua-draft') && (
+          <button type="button" onClick={() => void handleGenerate(ONE_CLICK_LEG_REPAIR_INSTRUCTION)}
+            disabled={isGenerating || (mode === 'precise' && !maskDataUrl)}
+            title="优化当前版本的多余腿与错接；优先保留连接完整的上方腿，精确模式遵守当前选区"
+            className="glass-btn px-3 py-2.5 font-mono text-xs text-[var(--zzz-primary)] disabled:opacity-40">
+            一键修腿
+          </button>
         )}
 
         <button

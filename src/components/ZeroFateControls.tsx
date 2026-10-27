@@ -43,7 +43,8 @@ export function ZeroFateControls({ isCurrent, onGenerateDraft, onConfirmDraft, o
           <p>本步调用一次生图。确认后才会开始零命转换。</p>
         </div>
       </div>
-      <YinghuaStagePreview slot={draft} title="动作底稿" hint="确认前请检查关节连接与遮挡；底稿可下载、修改，也可保留后重新生成。">
+      <YinghuaStagePreview slot={draft} title="动作底稿" hint="确认前请检查关节连接与遮挡；底稿可下载、修改，也可保留后重新生成。"
+        repairTarget={draft.images[0] ? { type: 'yinghua-draft', index: 0, url: draft.images[0] } : undefined}>
         <ResultView slot={preview} downloadPrefix="yinghua-action-draft" onInpaintClick={onInpaintClick} inpaintMeta={{ type: 'yinghua-draft' }} />
       </YinghuaStagePreview>
     </div>

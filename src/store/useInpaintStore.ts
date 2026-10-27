@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ImageEditVersion, InpaintTarget } from '../types';
+import type { ImageEditVersion, InpaintTarget, UpstreamErrorDetails } from '../types';
 import { MAX_UNDO_HISTORY } from '../lib/constants';
 
 interface InpaintState {
@@ -45,6 +45,8 @@ interface InpaintState {
   setPrompt: (p: string) => void;
   isGenerating: boolean;
   setIsGenerating: (v: boolean) => void;
+  generationError: { message: string; upstreamError?: UpstreamErrorDetails } | null;
+  setGenerationError: (error: { message: string; upstreamError?: UpstreamErrorDetails } | null) => void;
 
   // --- Reset ---
   reset: () => void;
@@ -71,6 +73,7 @@ function createInitialState() {
     shapeType: 'rect' as const,
     history: [] as string[],
     isGenerating: false,
+    generationError: null,
   };
 }
 
@@ -99,6 +102,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
       history: [],
       prompt: '',
       isGenerating: false,
+      generationError: null,
     });
   },
 
@@ -114,6 +118,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
       history: [],
       prompt: '',
       isGenerating: false,
+      generationError: null,
     });
   },
 
@@ -176,6 +181,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
 
   setPrompt: (prompt) => set({ prompt }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
+  setGenerationError: (generationError) => set({ generationError }),
 
   reset: () => set(createInitialState()),
 }));

@@ -164,7 +164,8 @@ const StyleCard = memo(function StyleCard({
           <p>{style.id === 1 ? '转换失败时会保留动作底稿，可单独重试本步。' : style.id === 2 ? '需要已完成的零命图片作为底图。' : '阳面完成后，可切换到阴面继续创作。'}</p>
         </div>
       </div>
-      <YinghuaStagePreview slot={displayedSlot} title={title} hint="预览、下载或继续修改当前结果；切换步骤会保留已生成的图片。">
+      <YinghuaStagePreview slot={displayedSlot} title={title} hint="预览、下载或继续修改当前结果；切换步骤会保留已生成的图片。"
+        repairTarget={displayedImage ? { type: 'yinghua', slotId: style.id, index: style.id === 3 ? displayedSixImage?.index : 0, url: displayedImage } : undefined}>
         <ResultView slot={resultSlot} downloadPrefix={`yinghua-style${style.id}`}
           saveInfo={displayedImage ? ({ imageUrl: displayedImage, style: style.label, characterName, prompt, provider } satisfies GallerySaveInfo) : undefined}
           imageClassName={style.id === 3 && displayedSixImage ? 'fx-face-flip' : undefined}
