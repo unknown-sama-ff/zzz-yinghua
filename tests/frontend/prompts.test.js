@@ -100,3 +100,16 @@ test('splitName retains the single-name and compound-name layout', () => {
   assert.deepEqual(splitName('CORIN'), ['CORIN', 'CORIN']);
   assert.deepEqual(splitName('HAMAN KARN'), ['HAMAN', 'KARN']);
 });
+
+test('zero and both six-fate faces forbid knee/calf branching while preserving hidden limbs', () => {
+  for (const [id, , zhKey, enKey] of variants.filter(([id]) => id !== 2)) {
+    const zh = prompt(id, zhKey);
+    const en = prompt(id, enKey, 'en');
+    assert.match(zh, /每个膝盖只接一条小腿/);
+    assert.match(zh, /不在大腿或膝盖处分叉出额外小腿/);
+    assert.match(zh, /隐藏或出框部位保持原状/);
+    assert.match(en, /Each knee connects to only one calf/);
+    assert.match(en, /Never branch an additional calf/);
+    assert.match(en, /Keep hidden\/off-frame parts hidden or off-frame/);
+  }
+});

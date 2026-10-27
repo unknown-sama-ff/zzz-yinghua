@@ -31,6 +31,7 @@ for (const lang of ['zh', 'en']) {
     assert.doesNotMatch(prompt, /卸防感|毫无戒备|慵懒|defenseless|unguarded|languid/i);
     assert.match(prompt, lang === 'zh' ? /衣装完整/ : /complete original costume/);
     assert.match(prompt, lang === 'zh' ? /只有两条腿/ : /exactly two legs/);
+    assert.match(prompt, lang === 'zh' ? /每个膝盖只接一条小腿/ : /Each knee connects to only one calf/);
   });
   test(`zero conversion/${lang} freezes the draft instead of choosing the pose again`, () => {
     const prompt = buildZeroFateRenderPrompt({ ...options, lang });
@@ -38,6 +39,7 @@ for (const lang of ['zh', 'en']) {
     assert.match(prompt, lang === 'zh' ? /只改变明暗配色、背景及指定文字/ : /Only change value\/color treatment, background and requested typography/);
     assert.match(prompt, /QA/);
     assert.match(prompt, /HERO/);
+    assert.match(prompt, lang === 'zh' ? /不在大腿或膝盖处分叉出额外小腿/ : /Never branch an additional calf/);
     assert.doesNotMatch(prompt, /大仰视、大俯视|prioritize dramatic low-angle|侧躺|第1张主图.*原衣装唯一权威|\{[A-Z_]+\}/);
     const noText = buildZeroFateRenderPrompt({ ...options, lang, showText: false });
     assert.doesNotMatch(noText, /QA|HERO|【文字】|\[TYPOGRAPHY\]/);

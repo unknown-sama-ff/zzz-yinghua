@@ -1,3 +1,5 @@
+import { LEG_REPAIR_ZH } from './legStructurePrompt';
+
 export function buildContextualEditPrompt(
   instruction: string,
   mode: 'smart' | 'precise',
@@ -6,5 +8,7 @@ export function buildContextualEditPrompt(
   const maskRule = mode === 'precise'
     ? '仅修改蒙版指定区域，蒙版外的内容必须保持不变。'
     : '';
-  return `${preservation}${maskRule}\n\n本轮修改：${instruction.trim()}`;
+  const legRepair = /(?:多余|额外|多出|第三|三条).{0,12}腿|腿.{0,10}(?:分叉|畸形|粘连)|(?:extra|third|additional|branched)\s+(?:[a-z-]+\s+){0,3}leg|three\s+legs/i.test(instruction)
+    ? `\n${LEG_REPAIR_ZH}` : '';
+  return `${preservation}${maskRule}${legRepair}\n\n本轮修改：${instruction.trim()}`;
 }

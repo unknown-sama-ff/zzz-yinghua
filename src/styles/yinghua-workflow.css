@@ -21,6 +21,7 @@
 .yinghua-addon-preview button { padding: 6px 12px; font-size: 11px; }
 .yinghua-mode-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 19px 0; }
 .yinghua-mode-row > p { color: var(--studio-secondary); font-size: 11px; line-height: 1.8; }
+.yinghua-mode-notice { margin: -6px 0 18px; padding-left: 11px; border-left: 2px solid var(--yinghua-rule); color: var(--studio-secondary); font-size: 11px; line-height: 1.9; }
 .yinghua-mode-switch { display: inline-flex; gap: 3px; padding: 3px; background: color-mix(in srgb, var(--zzz-text) 4%, transparent); border-radius: 7px; flex-shrink: 0; }
 .yinghua-mode-switch button { min-height: 32px; padding: 6px 14px; border-radius: 5px; color: var(--studio-secondary); font-size: 11px; }
 .yinghua-mode-switch button[aria-pressed=true] { background: var(--zzz-panel); color: var(--zzz-text); box-shadow: 0 1px 4px #0002; }

@@ -56,7 +56,8 @@ async function setup(viewport = { width: 1440, height: 1100 }, model = 'gpt-imag
       return route.fulfill({ json: { ok: true, images: [isDraft ? fixtures.draft : fixtures.zero] } });
     }
     if (path === '/api/inpaint') {
-      edits.push(request.postDataBuffer().length);
+      const body = request.postDataBuffer().toString('utf8');
+      edits.push({ preservesSelectedBranches: body.includes('用户明确指定保留的分支不得删除或替换'), removesCompleteBranch: body.includes('删除多余分支及其脚踝、鞋袜') });
       return route.fulfill({ json: { ok: true, images: [fixtures.edited] } });
     }
     if (path === '/api/gallery' || path === '/api/prompts') return route.fulfill({ json: { ok: true, rows: [], hasMore: false } });
@@ -98,6 +99,10 @@ async function state(page) {
 try {
   const { context, page, zero, panel, requests, edits, control } = await setup();
   assert.equal(await panel.getByRole('button', { name: '两阶段生成', exact: true }).getAttribute('aria-pressed'), 'true');
+  const modeNotice = panel.getByRole('note');
+  assert.equal(await modeNotice.isVisible(), true);
+  assert.match(await modeNotice.textContent(), /两阶段生成可能收到上游内容审核拒绝/);
+  assert.match(await modeNotice.textContent(), /两种模式均须通过内容审核/);
   assert.equal(await panel.locator('[data-yinghua-stage]').count(), 1);
   assert.equal(await panel.locator('textarea:visible').count(), 0, 'prompt editors are collapsed by default');
   await goToStep(panel, '三命灰阶');
@@ -124,6 +129,7 @@ try {
   assert.equal(requests[0].refImages?.length ?? 0, 0, 'draft should not receive silhouette samples');
   assert.equal(requests[0].inputImageMaxDimension, 1536);
   assert.match(requests[0].prompt, /【文字关闭】/);
+  assert.match(requests[0].prompt, /每个膝盖只接一条小腿/);
   assert.doesNotMatch(requests[0].prompt, /卸防感|毫无戒备|慵懒|defenseless|unguarded|languid/i);
   assert.deepEqual((await state(page)).yinghuaSlots[1].images, []);
   await goToStep(panel, '三命灰阶');
@@ -132,7 +138,7 @@ try {
   checked('draft is previewed independently, preserves readable input size and never unlocks three-fate');
 
   await zero.getByRole('button', { name: '修改动作底稿', exact: true }).click();
-  await page.getByPlaceholder('直接描述下一步改进', { exact: false }).fill('只修复腿部连接，其余保持不变');
+  await page.getByPlaceholder('直接描述下一步改进', { exact: false }).fill('删除左下方多余的腿，保留底部中间的腿，其余保持不变');
   await page.getByRole('button', { name: '✨ 继续生成', exact: true }).click();
   await page.waitForFunction(async (edited) => {
     const { useInpaintStore } = await import('/src/store/useInpaintStore.ts');
@@ -142,6 +148,8 @@ try {
   assert.equal((await state(page)).zeroFateDraft.images[0], fixtures.edited);
   assert.equal((await state(page)).yinghuaSlots[1].images.length, 0);
   assert.equal(edits.length, 1);
+  assert.equal(edits[0].preservesSelectedBranches, true);
+  assert.equal(edits[0].removesCompleteBranch, true);
   await page.getByRole('button', { name: '✕ 关闭', exact: true }).first().click();
   await screenshot(page, '02-reviewed-draft');
   await zero.screenshot({ path: join(output, 'reviewed-draft-card.png') });
@@ -155,6 +163,7 @@ try {
   assert.equal(requests[1].refImages[0].base64, fixtures.character.split(',')[1]);
   assert.equal(requests[1].refImages.length, 4, 'canonical character then three style samples');
   assert.doesNotMatch(requests[1].prompt, /优先采用大仰视/);
+  assert.match(requests[1].prompt, /不在大腿或膝盖处分叉出额外小腿/);
   assert.equal((await state(page)).zeroFateDraft.images[0], fixtures.edited);
   await screenshot(page, '03-conversion-retry');
   await page.evaluate(async ({ three, six }) => {
@@ -212,6 +221,7 @@ try {
   assert.deepEqual((await state(page)).zeroFateDraft.context, contextBeforeSafety);
   assert.equal((await state(page)).zeroFateDraftPrompt, promptBeforeSafety);
   assert.equal(requests.at(-1).prompt, promptBeforeSafety);
+  assert.equal(await panel.getByRole('button', { name: '两阶段生成', exact: true }).getAttribute('aria-pressed'), 'true', 'a rejection must not switch modes automatically');
   await zero.getByText('查看应用提示（非上游原文）', { exact: true }).waitFor();
   assert.equal(await zero.getByText('查看上游原始错误', { exact: true }).count(), 0, 'old responses must not fabricate an upstream original');
   await screenshot(page, '05b-content-rejection');

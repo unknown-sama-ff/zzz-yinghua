@@ -597,6 +597,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         </div>
         <p>{zeroFateMode === 'two-stage' ? '底稿确认后再转换，每一步可单独重试。' : '直接生成零命剪影，沿用原有生成方式。'}</p>
       </div>
+      <p className="yinghua-mode-notice" role="note">两阶段生成可能收到上游内容审核拒绝。若需要一步生成零命剪影，也可主动选择“直接生成”；两种模式均须通过内容审核。</p>
       <nav className="yinghua-step-navigation" aria-label="影画制作步骤">
         {steps.map((step, index) => {
           const done = step.id === 'draft' ? draftReady : Boolean(yinghuaSlots[step.id].images[0]);
