@@ -17,6 +17,7 @@ for (const [name, color] of [['character', '#285a8f'], ['draft', '#58b9b1'], ['e
 }
 const errors = [];
 const checks = [];
+const upstreamOriginalMessage = 'Your request was rejected by the safety system. If you believe this is an error, contact us at help.openai.com and include request ID req-provider-qa-123. safety_violations=[sexual].';
 function checked(message) { checks.push(message); console.log('PASS ' + message); }
 async function screenshot(page, name) {
   await page.evaluate(() => { window.scrollTo(0, 0); });
@@ -47,6 +48,10 @@ async function setup(viewport = { width: 1440, height: 1100 }, model = 'gpt-imag
       if (behavior === 'hold') await new Promise((resolve) => { control.release = resolve; control.onHeld?.(); });
       if (behavior === 'fail') return route.fulfill({ json: { ok: false, code: 'UPSTREAM_ERROR', message: '本地模拟生成失败' } });
       if (behavior === 'safety') return route.fulfill({ json: { ok: false, code: 'CONTENT_REJECTED', message: 'Your request was rejected by the safety system. safety_violations=[sexual].' } });
+      if (behavior === 'safety-detail') return route.fulfill({ json: {
+        ok: false, code: 'CONTENT_REJECTED', message: '上游返回内容审核拒绝（sexual）。',
+        upstreamError: { source: 'upstream', message: upstreamOriginalMessage, httpStatus: 400, code: 'moderation_blocked', type: 'image_generation_error', category: 'sexual', requestId: 'req-provider-qa-123', redacted: false, truncated: false },
+      } });
       const isDraft = /动作底稿·第一阶段|ACTION DRAFT — STAGE 1/.test(body.prompt);
       return route.fulfill({ json: { ok: true, images: [isDraft ? fixtures.draft : fixtures.zero] } });
     }
@@ -207,8 +212,22 @@ try {
   assert.deepEqual((await state(page)).zeroFateDraft.context, contextBeforeSafety);
   assert.equal((await state(page)).zeroFateDraftPrompt, promptBeforeSafety);
   assert.equal(requests.at(-1).prompt, promptBeforeSafety);
+  await zero.getByText('查看应用提示（非上游原文）', { exact: true }).waitFor();
+  assert.equal(await zero.getByText('查看上游原始错误', { exact: true }).count(), 0, 'old responses must not fabricate an upstream original');
   await screenshot(page, '05b-content-rejection');
   checked('content rejection shows actionable guidance, preserves inputs and never automatically retries');
+
+  control.next = 'safety-detail';
+  await zero.getByRole('button', { name: '重新生成动作底稿', exact: true }).click();
+  await zero.getByText('查看上游原始错误', { exact: true }).waitFor();
+  await zero.getByText('查看上游原始错误', { exact: true }).click();
+  assert.equal(await zero.locator('[data-upstream-error-message]').textContent(), upstreamOriginalMessage);
+  assert.equal(await zero.getByText('req-provider-qa-123', { exact: true }).count(), 1);
+  assert.equal((await state(page)).zeroFateDraft.upstreamError.requestId, 'req-provider-qa-123');
+  assert.equal(requests.at(-1).prompt, promptBeforeSafety);
+  await screenshot(page, '05c-upstream-original-error');
+  await zero.locator('.yinghua-error').screenshot({ path: join(output, 'upstream-error-provenance.png'), style: '.studio-header,.studio-edit-button { visibility: hidden !important; }' });
+  checked('provider original message, request ID and category remain distinct from local guidance');
 
   await panel.getByRole('button', { name: '直接生成', exact: true }).click();
   const beforeDirect = requests.length;

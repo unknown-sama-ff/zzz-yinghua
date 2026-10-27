@@ -41,10 +41,23 @@ export interface GenResult {
   raw?: unknown;
 }
 
+/** Provider-supplied error evidence, separate from the application's explanation. */
+export interface UpstreamErrorDetails {
+  source: 'upstream';
+  message: string;
+  httpStatus: number;
+  code?: string;
+  type?: string;
+  category?: string;
+  requestId?: string;
+  redacted: boolean;
+  truncated: boolean;
+}
+
 /** Unified API envelope returned by the proxy. */
 export type ApiResponse =
   | { ok: true; images: string[]; taskId?: string; raw?: unknown }
-  | { ok: false; code: ApiErrorCode; message: string };
+  | { ok: false; code: ApiErrorCode; message: string; upstreamError?: UpstreamErrorDetails };
 
 export type ApiErrorCode =
   | 'INVALID_INPUT'
@@ -230,6 +243,7 @@ export interface GenSlot {
   status: GenStatus;
   images: string[];
   error?: string;
+  upstreamError?: UpstreamErrorDetails;
 }
 
 /** Canvas API exposed via window.__inpaintCanvas for InpaintWorkspace. */

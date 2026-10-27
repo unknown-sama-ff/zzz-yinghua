@@ -83,6 +83,11 @@
 .yinghua-error p { color: var(--studio-secondary); margin-top: 5px; }
 .yinghua-error details { margin-top: 8px; }
 .yinghua-error summary { cursor: pointer; color: var(--studio-secondary); }
+.yinghua-error-metadata { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin-top: 10px; }
+.yinghua-error-metadata dt { color: var(--studio-secondary); }
+.yinghua-error-metadata dd { min-width: 0; overflow-wrap: anywhere; }
+.yinghua-error pre { margin-top: 8px; padding: 9px; border: 1px solid var(--yinghua-rule); border-radius: 4px; font: 10px/1.8 'JetBrains Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.yinghua-error .yinghua-error-origin { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--yinghua-rule); font-size: 10px; }
 .yinghua-workflow-footnote { margin-top: 20px; border-top: 1px solid var(--yinghua-rule); padding-top: 14px; font-size: 10px; color: var(--studio-secondary); line-height: 1.8; }
 @media (max-width: 1020px) {
   .yinghua-step-navigation > button { padding: 15px 12px; gap: 9px; }

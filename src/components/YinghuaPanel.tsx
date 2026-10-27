@@ -27,7 +27,7 @@ import { GenerationErrorNotice } from './GenerationErrorNotice';
 import { YinghuaStagePreview } from './YinghuaStagePreview';
 import '../styles/yinghua-workflow.css';
 import type { GallerySaveInfo } from './GallerySaveButton';
-import type { GenSlot, InpaintTarget, YinghuaStyleId, ZeroFateMode } from '../types';
+import type { GenSlot, InpaintTarget, UpstreamErrorDetails, YinghuaStyleId, ZeroFateMode } from '../types';
 
 // ---------------------------------------------------------------------------
 // One current stage keeps generation controls beside its preview.
@@ -155,7 +155,7 @@ const StyleCard = memo(function StyleCard({
           <summary>编辑{style.id === 1 ? '零命' : style.id === 2 ? '三命' : '六命'}提示词 <span aria-hidden="true">＋</span></summary>
           <textarea aria-label={`${style.label}提示词`} value={prompt} onChange={(e) => onPromptChange(style.id, e.target.value)} rows={10} className="glass-input" />
         </details>
-        <GenerationErrorNotice message={slot.error} />
+        <GenerationErrorNotice message={slot.error} upstreamError={slot.upstreamError} />
         {needsDraft && <p className="yinghua-stage-note">先完成动作底稿并检查结构，再进入零命转换。</p>}
         <div className="yinghua-stage-actions">
           <button type="button" onClick={() => onRun(style.id)} disabled={Boolean(activeGeneration) || needsBase || backNeedsFront || needsDraft} className="yinghua-primary-action">{generateLabel}<span aria-hidden="true">↗</span></button>
@@ -346,9 +346,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     const selectedDraftImage = zeroFateDraft.images[0];
     const selectedDraftContext = { sourceImage, addonImage, prompt: zeroFateDraftPrompt };
 
-    const setGenerationError = (message: string) => {
-      if (phase === 'draft') setZeroFateDraft({ status: 'error', error: message });
-      else setYinghuaSlot(id, { status: 'error', error: message });
+    const setGenerationError = (message: string, upstreamError?: UpstreamErrorDetails) => {
+      if (phase === 'draft') setZeroFateDraft({ status: 'error', error: message, upstreamError });
+      else setYinghuaSlot(id, { status: 'error', error: message, upstreamError });
     };
 
     let imageOverride: string | undefined;
@@ -464,7 +464,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : '风格参考图准备失败';
-      setGenerationError(msg);
+      setGenerationError(msg, err instanceof ApiError ? err.upstreamError : undefined);
       showError(msg);
       endYinghuaGeneration(idempotencyKey);
       return;
@@ -534,7 +534,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       }, 0);
     } catch (err) {
       const msg = err instanceof ApiError || err instanceof Error ? err.message : '生成失败';
-      setGenerationError(msg);
+      setGenerationError(msg, err instanceof ApiError ? err.upstreamError : undefined);
       showError(msg);
     } finally {
       endYinghuaGeneration(idempotencyKey);

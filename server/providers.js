@@ -421,8 +421,8 @@ async function gptImage(req) {
     let res = await tryEdits(buildEditForm(inputImages, preparedMask));
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
-      console.warn(`[gpt-image] edits failed ${res.status}: ${bodyText.slice(0, 200)}`);
-      const rejection = contentRejectionError(res, bodyText);
+      const rejection = contentRejectionError(res, bodyText, [key]);
+      console.warn(`[gpt-image] edits failed ${res.status}: ${(rejection?.upstreamError?.message ?? bodyText).slice(0, 200)}`);
       if (rejection) throw rejection;
       if (qualityRejected(req, res, bodyText)) throw qualityRejectionError(res.status);
       // Cheap relays may still reject. Retry with smaller size if this was a large image.
@@ -446,7 +446,7 @@ async function gptImage(req) {
           res = await tryEdits(buildEditForm(reducedInputs, reducedMask));
           if (!res.ok) {
             const retryText = await res.text().catch(() => '');
-            const rejection = contentRejectionError(res, retryText);
+            const rejection = contentRejectionError(res, retryText, [key]);
             if (rejection) throw rejection;
             if (qualityRejected(req, res, retryText)) throw qualityRejectionError(res.status);
             console.warn(`[gpt-image] reduced retry also failed ${res.status}: ${retryText.slice(0, 200)}`);
@@ -481,7 +481,7 @@ async function gptImage(req) {
     });
     if (!res.ok) {
       const errorText = await res.text().catch(() => '');
-      const rejection = contentRejectionError(res, errorText);
+      const rejection = contentRejectionError(res, errorText, [key]);
       if (rejection) throw rejection;
       if (qualityRejected(req, res, errorText)) throw qualityRejectionError(res.status);
       throw new UpstreamError(codeFromStatus(res.status), `gpt-image 返回 ${res.status}`, res.status);

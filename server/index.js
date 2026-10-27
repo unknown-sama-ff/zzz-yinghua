@@ -557,6 +557,8 @@ app.get('/api/task/:id', taskRateLimit, (req, res) => {
       status: task.status,
       count: Array.isArray(task.images) ? task.images.length : 0,
       error: task.status === 'error' ? (task.error ?? '生成失败') : undefined,
+      code: task.status === 'error' ? task.errorCode : undefined,
+      upstreamError: task.status === 'error' ? task.upstreamError : undefined,
       taskId: id,
     });
   }
@@ -566,7 +568,7 @@ app.get('/api/task/:id', taskRateLimit, (req, res) => {
   }
   if (task.status === 'error') {
     cleanupTask(id);
-    return fail(res, 502, 'UPSTREAM_ERROR', task.error ?? '生成失败');
+    return fail(res, task.errorStatus ?? 502, task.errorCode ?? 'UPSTREAM_ERROR', task.error ?? '生成失败', task.upstreamError);
   }
   // Still pending/running — 202 Accepted
   res.status(202).json({ ok: true, taskId: id, status: task.status });
@@ -673,13 +675,20 @@ function finalizeAsyncTask(taskId, result) {
       const inner = taskStore.get(innerId);
       if (!inner) { entry.status = 'error'; entry.error = '上游任务已过期'; return; }
       if (inner.status === 'done') { entry.status = 'done'; entry.images = inner.images; return; }
-      if (inner.status === 'error') { entry.status = 'error'; entry.error = inner.error || '生成失败'; return; }
+      if (inner.status === 'error') {
+        entry.status = 'error'; entry.error = inner.error || '生成失败';
+        entry.errorCode = inner.errorCode; entry.errorStatus = inner.errorStatus; entry.upstreamError = inner.upstreamError;
+        return;
+      }
       setTimeout(poll, 1000);
     };
     poll();
   } else {
     entry.status = 'error';
     entry.error = out.message || '生成失败';
+    entry.errorCode = out.code;
+    entry.errorStatus = result.status;
+    entry.upstreamError = out.upstreamError;
   }
   entry.timer = setTimeout(() => cleanupTask(taskId), TASK_TTL_MS);
 }
@@ -808,7 +817,7 @@ async function executeGeneration(body, idempotencyKey) {
   } catch (err) {
     if (err instanceof UpstreamError) {
       console.warn(`[generate] provider=${provider} ${err.code}: ${err.message} (${Date.now() - started}ms)${operation}`);
-      return { status: err.status, body: { ok: false, code: err.code, message: err.message } };
+      return { status: err.status, body: { ok: false, code: err.code, message: err.message, ...(err.upstreamError ? { upstreamError: err.upstreamError } : {}) } };
     }
     console.error(`[generate] unexpected error:${operation}`, err);
     return { status: 500, body: { ok: false, code: 'UNKNOWN', message: '服务端内部错误' } };
@@ -902,7 +911,7 @@ app.post('/api/inpaint', rateLimit, upload.fields([
     return res.json({ ok: true, images: result.images });
   } catch (err) {
     if (err instanceof UpstreamError) {
-      return fail(res, err.status, err.code, err.message);
+      return fail(res, err.status, err.code, err.message, err.upstreamError);
     }
     console.error('[inpaint] unexpected error:', err);
     return fail(res, 500, 'UNKNOWN', '服务端内部错误');
@@ -1220,8 +1229,8 @@ app.use((err, _req, res, _next) => {
   if (!res.headersSent) res.status(500).json({ ok: false, code: 'UNKNOWN', message: '服务端内部错误' });
 });
 
-function fail(res, status, code, message) {
-  return res.status(status).json({ ok: false, code, message });
+function fail(res, status, code, message, upstreamError) {
+  return res.status(status).json({ ok: false, code, message, ...(upstreamError ? { upstreamError } : {}) });
 }
 
 /**

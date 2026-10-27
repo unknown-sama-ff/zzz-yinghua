@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { YinghuaStyleId, ZeroFateDraft, ZeroFateMode } from '../types';
+import type { GenSlot, YinghuaStyleId, ZeroFateDraft, ZeroFateMode } from '../types';
 
 type ActiveGeneration = {
   id: YinghuaStyleId;
@@ -41,11 +41,7 @@ interface YinghuaState {
   setStyle3Face: (face: 'front' | 'back') => void;
 }
 
-interface GenSlotLike {
-  status: 'idle' | 'loading' | 'done' | 'error';
-  images: string[];
-  error?: string;
-}
+type GenSlotLike = GenSlot;
 
 export const useYinghuaStore = create<YinghuaState>((set) => ({
   yinghuaPrompts: { 1: '', 2: '', 3: '' },
@@ -69,10 +65,10 @@ export const useYinghuaStore = create<YinghuaState>((set) => ({
       return {
         activeGeneration: generation,
         ...(phase === 'draft' ? {
-          zeroFateDraft: { ...s.zeroFateDraft, status: 'loading' as const, error: undefined },
+          zeroFateDraft: { ...s.zeroFateDraft, status: 'loading' as const, error: undefined, upstreamError: undefined },
         } : { yinghuaSlots: {
           ...s.yinghuaSlots,
-          [id]: { ...s.yinghuaSlots[id], status: 'loading', error: undefined },
+          [id]: { ...s.yinghuaSlots[id], status: 'loading', error: undefined, upstreamError: undefined },
         } }),
       };
     });

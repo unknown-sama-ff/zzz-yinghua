@@ -1,4 +1,4 @@
-import type { ApiResponse, GenRequest, GptImageQuality } from '../types';
+import type { ApiResponse, GenRequest, GptImageQuality, UpstreamErrorDetails } from '../types';
 import { API_BASE } from './apiBase';
 import { GENERATE_TIMEOUT_MS, JSON_WORKER_TIMEOUT_MS, POLL_DEADLINE_MS, POLL_INTERVAL_MS } from './constants';
 
@@ -80,6 +80,7 @@ export class ApiError extends Error {
     message: string,
     public status?: number,
     public requestId?: string,
+    public upstreamError?: UpstreamErrorDetails,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -129,7 +130,7 @@ async function fetchJson(
   if (!res.ok) {
     const error = await res.json().catch(() => null) as ApiResponse | null;
     if (error?.ok === false && typeof error.message === 'string') {
-      throw new ApiError(error.code, error.message, res.status, responseRequestId);
+      throw new ApiError(error.code, error.message, res.status, responseRequestId, error.upstreamError);
     }
     throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`, res.status, responseRequestId);
   }
@@ -154,12 +155,12 @@ async function pollTask(taskId: string, requestId?: string): Promise<string[]> {
     if (!res.ok) {
       const error = await res.json().catch(() => null) as ApiResponse | null;
       if (error?.ok === false) {
-        throw new ApiError(error.code, error.message, res.status, requestId);
+        throw new ApiError(error.code, error.message, res.status, requestId, error.upstreamError);
       }
       throw new ApiError('UPSTREAM_ERROR', `任务查询失败 (${res.status})`, res.status, requestId);
     }
     const data = (await res.json()) as ApiResponse;
-    if (!data.ok) throw new ApiError(data.code, data.message, res.status, requestId);
+    if (!data.ok) throw new ApiError(data.code, data.message, res.status, requestId, data.upstreamError);
     if (data.images && data.images.length > 0) return data.images;
     if (data.taskId && data.images?.length === 0) continue; // still processing
   }
@@ -178,7 +179,7 @@ export async function generate(req: GenRequest): Promise<string[]> {
     }, req.idempotencyKey);
 
     if (!data.ok) {
-      throw new ApiError(data.code, data.message, undefined, req.idempotencyKey);
+      throw new ApiError(data.code, data.message, undefined, req.idempotencyKey, data.upstreamError);
     }
 
     if (data.taskId) {
@@ -274,7 +275,7 @@ export async function inpaint(params: {
     });
 
     if (!data.ok) {
-      throw new ApiError(data.code, data.message);
+      throw new ApiError(data.code, data.message, undefined, undefined, data.upstreamError);
     }
 
     if (data.taskId) {

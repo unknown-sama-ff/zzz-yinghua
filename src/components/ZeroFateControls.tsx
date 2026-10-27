@@ -30,7 +30,7 @@ export function ZeroFateControls({ isCurrent, onGenerateDraft, onConfirmDraft, o
           <button type="button" onClick={onResetPrompt} disabled={Boolean(active)} className="yinghua-text-button">恢复默认底稿提示词</button>
         </details>
         {draft.images[0] && !isCurrent && <p role="status" className="yinghua-stage-warning">角色、动作或提示词已更新，请重新生成底稿。</p>}
-        <GenerationErrorNotice message={draft.error} />
+        <GenerationErrorNotice message={draft.error} upstreamError={draft.upstreamError} />
         <div className="yinghua-stage-actions">
           <button type="button" onClick={isCurrent ? onConfirmDraft : onGenerateDraft} disabled={Boolean(active)} className="yinghua-primary-action">
             {loading ? '生成动作底稿中…' : isCurrent ? '确认结构并生成零命' : draft.images[0] ? '重新生成动作底稿' : '生成动作底稿'}
