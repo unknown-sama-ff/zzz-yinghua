@@ -253,13 +253,14 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
   }, [isMobile]);
 
   const handleRefreshClip = useCallback(() => {
-    const displayedSixImage = resolveYinghuaFaceImage(yinghuaSlots[3].images, style3Face);
-    if (yinghuaSlots[3].status !== 'done' || !displayedSixImage) {
+    // 六命裁切始终以阳面为基准；阴面可选生成，且失败状态不能阻断已完成的阳面。
+    const sixYangImage = resolveYinghuaFaceImage(yinghuaSlots[3].images, 'front');
+    if (!sixYangImage) {
       showError('请先完成六命图片生成');
       return;
     }
-    void runFaceDetect(displayedSixImage.src);
-  }, [yinghuaSlots, style3Face, runFaceDetect, showError]);
+    void runFaceDetect(sixYangImage.src);
+  }, [yinghuaSlots, runFaceDetect, showError]);
 
   const handleExportPng = useCallback(async () => {
     if (!exportReady || exportInProgress.current || !stageRef.current) return;
@@ -341,7 +342,7 @@ export const YinghuaViewer = memo(function YinghuaViewer() {
       newImages[face === 'front' ? 0 : 1] = dataUrl;
       // Use setYinghuaSlot to preserve both front and back images
       setYinghuaSlot(id, { status: 'done', images: newImages });
-      if (id === 3) void runFaceDetect(dataUrl);
+      if (id === 3 && face === 'front') void runFaceDetect(dataUrl);
     },
     [setYinghuaSlot, showError, runFaceDetect, yinghuaSlots],
   );
