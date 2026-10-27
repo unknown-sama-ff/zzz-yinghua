@@ -66,47 +66,43 @@ test('concurrent generation responses stay with their request when the worker re
   t.mock.timers.tick(60_001);
 });
 
-test('a parsing failure releases its listeners without rejecting another generation', async (t) => {
+test('a worker parse failure falls back to the retained response and releases listeners', async (t) => {
   const { client, workers } = await clientHarness(t);
-  const failed = client.generate({ provider: 'gpt-image', prompt: 'malformed response', idempotencyKey: 'parse-failure' }).catch((error) => error);
+  const recovered = client.generate({ provider: 'gpt-image', prompt: 'worker parse failure', idempotencyKey: 'parse-failure' });
   const successful = client.generate({ provider: 'gpt-image', prompt: 'valid response' });
   const worker = await waitingForRequests(workers, 2);
   worker.emit('message', { requestId: worker.requests[0].requestId, type: 'error', message: 'invalid JSON' });
-  const error = await failed;
-  assert.equal(error.code, 'UPSTREAM_ERROR');
-  assert.equal(error.status, 200);
-  assert.equal(error.requestId, 'parse-failure');
-  worker.reply(0, ['late-failed-image']);
+  assert.deepEqual(await recovered, ['unused']);
   worker.reply(1, ['valid-image']);
   assert.deepEqual(await successful, ['valid-image']);
   assert.equal(worker.listenerCount(), 0);
 });
 
-test('a timed-out parse removes its listeners and ignores late replies while another request completes', async (t) => {
+test('a timed-out worker parse falls back all pending requests and later requests get a fresh worker', async (t) => {
   const { client, workers } = await clientHarness(t);
-  const expired = client.generate({ provider: 'gpt-image', prompt: 'slow response' }).catch((error) => error);
-  const worker = await waitingForRequests(workers, 1);
-  t.mock.timers.tick(30_000);
+  const first = client.generate({ provider: 'gpt-image', prompt: 'slow response one' });
+  const second = client.generate({ provider: 'gpt-image', prompt: 'slow response two' });
+  const worker = await waitingForRequests(workers, 2);
+  t.mock.timers.tick(120_000);
+  assert.deepEqual(await Promise.all([first, second]), [['unused'], ['unused']]);
+  assert.equal(worker.terminated, true, 'a timed-out parser must be terminated');
   const current = client.generate({ provider: 'gpt-image', prompt: 'new response' });
-  await waitingForRequests(workers, 2);
-  t.mock.timers.tick(30_000);
-  assert.equal((await expired).code, 'UPSTREAM_ERROR');
-  assert.equal(worker.listenerCount(), 3, 'only the current request may keep message/error listeners');
-  worker.reply(0, ['expired-image']);
-  worker.reply(1, ['current-image']);
+  for (let attempt = 0; attempt < 50 && workers[1]?.requests.length !== 1; attempt++) await new Promise((done) => setImmediate(done));
+  assert.equal(workers.length, 2, 'a later request must create a fresh parser');
+  workers[1].reply(0, ['current-image']);
   assert.deepEqual(await current, ['current-image']);
-  assert.equal(worker.listenerCount(), 0);
+  assert.equal(workers[1].listenerCount(), 0);
 });
 
 for (const event of ['error', 'messageerror']) {
-  test(`a worker ${event} rejects current requests and a later generation uses a fresh worker`, async (t) => {
+  test(`a worker ${event} falls back for current requests and a later generation uses a fresh worker`, async (t) => {
     const { client, workers } = await clientHarness(t);
     const first = client.generate({ provider: 'gpt-image', prompt: 'first' }).catch((error) => error);
     const second = client.generate({ provider: 'gpt-image', prompt: 'second' }).catch((error) => error);
     const worker = await waitingForRequests(workers, 2);
     worker.emit(event);
-    assert.equal((await first).code, 'UPSTREAM_ERROR');
-    assert.equal((await second).code, 'UPSTREAM_ERROR');
+    assert.deepEqual(await first, ['unused']);
+    assert.deepEqual(await second, ['unused']);
     assert.equal(worker.terminated, true);
     assert.equal(worker.listenerCount(), 0);
     const next = client.generate({ provider: 'gpt-image', prompt: 'recover' });
@@ -118,16 +114,29 @@ for (const event of ['error', 'messageerror']) {
   });
 }
 
-test('a failed worker post releases every listener and timer', async (t) => {
+test('a failed worker post falls back and releases every listener and timer', async (t) => {
   const { client, workers } = await clientHarness(t);
   const first = client.generate({ provider: 'gpt-image', prompt: 'warm worker' });
   const worker = await waitingForRequests(workers, 1);
   worker.reply(0, ['warm-image']);
   await first;
   worker.postMessage = () => { throw new Error('could not clone input'); };
-  await assert.rejects(() => client.generate({ provider: 'gpt-image', prompt: 'clone failure' }), { code: 'UPSTREAM_ERROR' });
+  assert.deepEqual(await client.generate({ provider: 'gpt-image', prompt: 'clone failure' }), ['unused']);
   assert.equal(worker.listenerCount(), 0);
-  t.mock.timers.tick(60_001);
+  t.mock.timers.tick(120_001);
+});
+
+test('an invalid HTTP 200 body still reports a response parse failure after fallback', async (t) => {
+  const { client, workers } = await clientHarness(t);
+  globalThis.fetch = async () => new Response('{invalid', { status: 200 });
+  const failure = client.generate({ provider: 'gpt-image', prompt: 'invalid JSON', idempotencyKey: 'invalid-json' }).catch((error) => error);
+  const worker = await waitingForRequests(workers, 1);
+  worker.emit('message', { requestId: worker.requests[0].requestId, type: 'error', message: 'invalid JSON' });
+  const error = await failure;
+  assert.equal(error.code, 'UPSTREAM_ERROR');
+  assert.equal(error.status, 200);
+  assert.equal(error.requestId, 'invalid-json');
+  assert.equal(worker.listenerCount(), 0);
 });
 
 test('HTTP failures carry a status and the application attempt ID without exposing request credentials', async (t) => {
@@ -196,13 +205,17 @@ test('task polling keeps waiting for a 202 pending response and returns that tas
   assert.equal(polls, 2);
 });
 
-test('the real JSON worker echoes each request ID for successful and malformed JSON', async () => {
+test('the real JSON worker parses response Blobs and echoes request IDs for valid and malformed JSON', async () => {
   const result = await build({ entryPoints: ['src/workers/jsonWorker.ts'], bundle: true, platform: 'browser', format: 'iife', write: false });
   const replies = [];
   const worker = {};
-  runInNewContext(result.outputFiles[0].text, { self: worker, TextDecoder, postMessage: (reply) => replies.push(reply) });
-  for (const [requestId, json] of [['success', '{"ok":true,"images":["worker-image"]}'], ['failure', '{invalid']]) {
-    worker.onmessage({ data: { requestId, buffer: new TextEncoder().encode(json).buffer } });
+  runInNewContext(result.outputFiles[0].text, { self: worker, TextDecoder, Blob, postMessage: (reply) => replies.push(reply) });
+  const validJson = '{"ok":true,"images":["worker-image"]}';
+  await worker.onmessage({ data: { requestId: 'success', blob: new Blob([validJson]) } });
+  await worker.onmessage({ data: { requestId: 'failure', buffer: new TextEncoder().encode('{invalid').buffer } });
+  for (const [requestId, type] of [['success', 'result'], ['failure', 'error']]) {
+    const reply = replies.find((item) => item.requestId === requestId);
+    assert.equal(reply.type, type);
   }
   assert.equal(replies[0].requestId, 'success');
   assert.equal(replies[0].type, 'result');

@@ -4,6 +4,7 @@ import { GENERATE_TIMEOUT_MS, JSON_WORKER_TIMEOUT_MS, POLL_DEADLINE_MS, POLL_INT
 
 let jsonWorker: Worker | null = null;
 let jsonParseRequestId = 0;
+const jsonWorkerRequests = new WeakMap<Worker, Set<(error: Error) => void>>();
 
 function getJsonWorker(): Worker | null {
   if (!jsonWorker) {
@@ -18,58 +19,80 @@ function getJsonWorker(): Worker | null {
   return jsonWorker;
 }
 
+function invalidateJsonWorker(worker: Worker, error: Error): void {
+  if (jsonWorker === worker) {
+    jsonWorker = null;
+    worker.terminate();
+  }
+  for (const rejectRequest of [...(jsonWorkerRequests.get(worker) ?? [])]) rejectRequest(error);
+}
+
 async function parseJsonOffThread(response: Response): Promise<ApiResponse> {
+  const responseBlob = await response.blob();
   const worker = getJsonWorker();
   if (!worker) {
-    return response.json();
+    return JSON.parse(await responseBlob.text()) as ApiResponse;
   }
 
-  const buffer = await response.arrayBuffer();
   const requestId = `json-${++jsonParseRequestId}`;
 
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    function cleanup(): boolean {
-      if (settled) return false;
-      settled = true;
-      clearTimeout(timer);
-      worker!.removeEventListener('message', handler);
-      worker!.removeEventListener('error', handleWorkerError);
-      worker!.removeEventListener('messageerror', handleWorkerError);
-      return true;
-    }
-    const timer = setTimeout(
-      () => {
-        if (cleanup()) reject(new Error('json worker timed out'));
-      },
-      JSON_WORKER_TIMEOUT_MS,
-    );
-    const handler = (e: MessageEvent) => {
-      const data = e.data as { requestId?: string; type: string; data?: ApiResponse; message?: string };
-      if (!data || typeof data !== 'object' || data.requestId !== requestId) return;
-      if (!cleanup()) return;
-      if (data.type === 'result' && data.data) {
-        resolve(data.data);
-      } else {
-        reject(new Error(data.message ?? 'json worker error'));
+  try {
+    return await new Promise<ApiResponse>((resolve, reject) => {
+      let settled = false;
+      const workerRequests = jsonWorkerRequests.get(worker) ?? new Set<(error: Error) => void>();
+      jsonWorkerRequests.set(worker, workerRequests);
+      const rejectRequest = (error: Error) => {
+        if (cleanup()) reject(error);
+      };
+      function cleanup(): boolean {
+        if (settled) return false;
+        settled = true;
+        clearTimeout(timer);
+        workerRequests.delete(rejectRequest);
+        worker!.removeEventListener('message', handler);
+        worker!.removeEventListener('error', handleWorkerError);
+        worker!.removeEventListener('messageerror', handleWorkerError);
+        return true;
       }
-    };
-    const handleWorkerError = () => {
-      if (jsonWorker === worker) {
-        jsonWorker = null;
-        worker.terminate();
+      const timer = setTimeout(
+        () => {
+          invalidateJsonWorker(worker, new Error('json worker timed out'));
+        },
+        JSON_WORKER_TIMEOUT_MS,
+      );
+      const handler = (e: MessageEvent) => {
+        const data = e.data as { requestId?: string; type: string; data?: ApiResponse; message?: string };
+        if (!data || typeof data !== 'object' || data.requestId !== requestId) return;
+        if (!cleanup()) return;
+        if (data.type === 'result' && data.data) {
+          resolve(data.data);
+        } else {
+          reject(new Error(data.message ?? 'json worker error'));
+        }
+      };
+      const handleWorkerError = () => {
+        invalidateJsonWorker(worker, new Error('json worker unavailable'));
+      };
+      workerRequests.add(rejectRequest);
+      worker.addEventListener('message', handler);
+      worker.addEventListener('error', handleWorkerError);
+      worker.addEventListener('messageerror', handleWorkerError);
+      try {
+        // Keep the Blob for a main-thread fallback if the Worker crashes,
+        // times out, or cannot receive the message. Cloning a Blob avoids
+        // duplicating the full response buffer for this fallback path.
+        worker.postMessage({ requestId, blob: responseBlob });
+      } catch {
+        if (cleanup()) reject(new Error('json worker request failed'));
       }
-      if (cleanup()) reject(new Error('json worker unavailable'));
-    };
-    worker.addEventListener('message', handler);
-    worker.addEventListener('error', handleWorkerError);
-    worker.addEventListener('messageerror', handleWorkerError);
+    });
+  } catch (workerError) {
     try {
-      worker.postMessage({ requestId, buffer }, [buffer]);
+      return JSON.parse(await responseBlob.text()) as ApiResponse;
     } catch {
-      if (cleanup()) reject(new Error('json worker request failed'));
+      throw workerError;
     }
-  });
+  }
 }
 
 // ── Shared primitives ────────────────────────────────────────────────────────
@@ -124,21 +147,25 @@ async function fetchJson(
     timeoutMs,
   );
 
-  clear();
   const responseRequestId = res.headers.get('x-request-id') || requestId;
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => null) as ApiResponse | null;
-    if (error?.ok === false && typeof error.message === 'string') {
-      throw new ApiError(error.code, error.message, res.status, responseRequestId, error.upstreamError);
-    }
-    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`, res.status, responseRequestId);
-  }
-
   try {
-    return useWorker ? await parseJsonOffThread(res) : (await res.json()) as ApiResponse;
-  } catch {
-    throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`, res.status, responseRequestId);
+    if (!res.ok) {
+      const error = await res.json().catch(() => null) as ApiResponse | null;
+      if (error?.ok === false && typeof error.message === 'string') {
+        throw new ApiError(error.code, error.message, res.status, responseRequestId, error.upstreamError);
+      }
+      throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`, res.status, responseRequestId);
+    }
+
+    try {
+      return useWorker ? await parseJsonOffThread(res) : (await res.json()) as ApiResponse;
+    } catch {
+      throw new ApiError('UPSTREAM_ERROR', `服务端返回异常 (${res.status})`, res.status, responseRequestId);
+    }
+  } finally {
+    // Keep the request deadline active while reading and parsing the response.
+    clear();
   }
 }
 

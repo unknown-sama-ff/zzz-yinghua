@@ -1,0 +1,1 @@
+(function(){"use strict";self.onmessage=async a=>{const{requestId:s,blob:t,buffer:r}=a.data;try{const e=t&&typeof t.text=="function"?await t.text():new TextDecoder("utf-8",{fatal:!1}).decode(r),o=JSON.parse(e);postMessage({requestId:s,type:"result",data:o})}catch(e){postMessage({requestId:s,type:"error",message:e instanceof Error?e.message:"json worker parse failed"})}}})();

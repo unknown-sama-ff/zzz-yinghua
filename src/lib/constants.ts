@@ -6,8 +6,8 @@ export const DEFAULT_UPSTREAM_TIMEOUT_MS = 300_000;
 /** Generate / inpaint request timeout (6 min). */
 export const GENERATE_TIMEOUT_MS = 360_000;
 
-/** JSON worker off-thread parse timeout (1 min). */
-export const JSON_WORKER_TIMEOUT_MS = 60_000;
+/** JSON worker off-thread parse timeout (2 min); parsing falls back to the main thread. */
+export const JSON_WORKER_TIMEOUT_MS = 120_000;
 
 /** Long-task poll deadline (3 min). */
 export const POLL_DEADLINE_MS = 180_000;
