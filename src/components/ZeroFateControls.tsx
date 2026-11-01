@@ -2,14 +2,16 @@ import { useYinghuaStore } from '../store/useYinghuaStore';
 import { ResultView } from './ResultView';
 import { GenerationErrorNotice } from './GenerationErrorNotice';
 import { YinghuaStagePreview } from './YinghuaStagePreview';
+import type { GallerySaveInfo } from './GallerySaveButton';
 import type { InpaintTarget } from '../types';
 
-export function ZeroFateControls({ isCurrent, onGenerateDraft, onConfirmDraft, onResetPrompt, onInpaintClick }: {
+export function ZeroFateControls({ isCurrent, onGenerateDraft, onConfirmDraft, onResetPrompt, onInpaintClick, saveInfo }: {
   isCurrent: boolean;
   onGenerateDraft: () => void;
   onConfirmDraft: () => void;
   onResetPrompt: () => void;
   onInpaintClick: (src: string, target: InpaintTarget) => void;
+  saveInfo?: GallerySaveInfo;
 }) {
   const draft = useYinghuaStore((s) => s.zeroFateDraft);
   const prompt = useYinghuaStore((s) => s.zeroFateDraftPrompt);
@@ -45,7 +47,7 @@ export function ZeroFateControls({ isCurrent, onGenerateDraft, onConfirmDraft, o
       </div>
       <YinghuaStagePreview slot={draft} title="动作底稿" hint="确认前请检查关节连接与遮挡；底稿可下载、修改，也可保留后重新生成。"
         repairTarget={draft.images[0] ? { type: 'yinghua-draft', index: 0, url: draft.images[0] } : undefined}>
-        <ResultView slot={preview} downloadPrefix="yinghua-action-draft" onInpaintClick={onInpaintClick} inpaintMeta={{ type: 'yinghua-draft' }} />
+        <ResultView slot={preview} downloadPrefix="yinghua-action-draft" saveInfo={saveInfo} onInpaintClick={onInpaintClick} inpaintMeta={{ type: 'yinghua-draft' }} />
       </YinghuaStagePreview>
     </div>
   );

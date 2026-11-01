@@ -17,6 +17,7 @@ for (const [name, color] of [['character', '#285a8f'], ['draft', '#58b9b1'], ['e
 }
 const errors = [];
 const checks = [];
+const galleryWrites = [];
 const upstreamOriginalMessage = 'Your request was rejected by the safety system. If you believe this is an error, contact us at help.openai.com and include request ID req-provider-qa-123. safety_violations=[sexual].';
 function checked(message) { checks.push(message); console.log('PASS ' + message); }
 async function screenshot(page, name) {
@@ -60,7 +61,18 @@ async function setup(viewport = { width: 1440, height: 1100 }, model = 'gpt-imag
       edits.push({ preservesSelectedBranches: body.includes('用户明确指定保留的分支不得删除或替换'), removesCompleteBranch: body.includes('删除多余分支及其脚踝、鞋袜') });
       return route.fulfill({ json: { ok: true, images: [fixtures.edited] } });
     }
-    if (path === '/api/gallery' || path === '/api/prompts') return route.fulfill({ json: { ok: true, rows: [], hasMore: false } });
+    if (path === '/api/gallery') {
+      if (request.method() === 'POST') {
+        const body = request.postDataJSON();
+        galleryWrites.push(body);
+        return route.fulfill({ json: {
+          ok: true,
+          row: { id: 'draft-gallery-1', image_url: 'data:image/webp;base64,' + body.imageBase64, style: body.style, character_name: body.characterName, prompt: body.prompt, provider: body.provider },
+        } });
+      }
+      return route.fulfill({ json: { ok: true, rows: [], hasMore: false } });
+    }
+    if (path === '/api/prompts') return route.fulfill({ json: { ok: true, rows: [], hasMore: false } });
     if (path === '/api/payments/sponsors') return route.fulfill({ json: { ok: true, sponsors: [] } });
     if (path === '/api/image-capabilities') return route.fulfill({ json: { ok: true, presetQualityOptions: ['auto', 'high'] } });
     errors.push('Unexpected API: ' + path);
@@ -83,7 +95,7 @@ async function setup(viewport = { width: 1440, height: 1100 }, model = 'gpt-imag
     const { useYinghuaStore } = await import('/src/store/useYinghuaStore.ts');
     return useYinghuaStore.getState().yinghuaPrompts[1].includes('QA');
   });
-  return { context, page, zero, panel, requests, edits, control };
+  return { context, page, zero, panel, requests, edits, control, galleryWrites };
 }
 async function goToStep(panel, name) {
   await panel.getByRole('navigation', { name: '影画制作步骤' }).getByRole('button', { name: new RegExp(name) }).click();
@@ -97,7 +109,7 @@ async function state(page) {
 }
 
 try {
-  const { context, page, zero, panel, requests, edits, control } = await setup();
+  const { context, page, zero, panel, requests, edits, control, galleryWrites } = await setup();
   assert.equal(await panel.getByRole('button', { name: '两阶段生成', exact: true }).getAttribute('aria-pressed'), 'true');
   const modeNotice = panel.getByRole('note');
   assert.equal(await modeNotice.isVisible(), true);
@@ -125,6 +137,13 @@ try {
   assert.ok(Math.abs(loadingCanvas.height - canvas.height) < 2, 'loading keeps a steady preview area');
   control.release();
   await zero.getByRole('button', { name: '确认结构并生成零命', exact: true }).waitFor();
+  await zero.getByRole('button', { name: '保存到画廊', exact: true }).click();
+  await zero.getByText('已保存', { exact: true }).waitFor();
+  assert.equal(galleryWrites.length, 1);
+  assert.equal(galleryWrites[0].style, '动作底稿');
+  assert.equal(galleryWrites[0].characterName, 'QA HERO');
+  assert.equal(galleryWrites[0].prompt, (await state(page)).zeroFateDraft.context.prompt);
+  assert.equal(galleryWrites[0].provider, 'gpt-image');
   assert.equal(requests.length, 1, 'stage 2 requires explicit confirmation');
   assert.equal(requests[0].refImages?.length ?? 0, 0, 'draft should not receive silhouette samples');
   assert.equal(requests[0].inputImageMaxDimension, 1536);
@@ -135,7 +154,7 @@ try {
   await goToStep(panel, '三命灰阶');
   assert.equal(await panel.getByRole('button', { name: '需先生成零命', exact: true }).isDisabled(), true);
   await goToStep(panel, '动作底稿');
-  checked('draft is previewed independently, preserves readable input size and never unlocks three-fate');
+  checked('draft is previewed independently, can be saved to gallery, preserves readable input size and never unlocks three-fate');
 
   await zero.getByRole('button', { name: '修改动作底稿', exact: true }).click();
   await page.getByPlaceholder('直接描述下一步改进', { exact: false }).fill('删除左下方多余的腿，保留底部中间的腿，其余保持不变');

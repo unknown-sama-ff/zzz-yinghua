@@ -38,6 +38,7 @@ const StyleCard = memo(function StyleCard({
   slot,
   characterName,
   provider,
+  draftSaveInfo,
   yinghuaSlots,
   activeGeneration,
   style3Face,
@@ -59,6 +60,7 @@ const StyleCard = memo(function StyleCard({
   slot: GenSlot;
   characterName: string;
   provider: string;
+  draftSaveInfo?: GallerySaveInfo;
   yinghuaSlots: Record<YinghuaStyleId, GenSlot>;
   activeGeneration: { id: YinghuaStyleId; phase?: 'draft' | 'render' } | null;
   style3Face: 'front' | 'back';
@@ -135,7 +137,7 @@ const StyleCard = memo(function StyleCard({
     }
   }, [style3Face, style.id]);
 
-  if (showDraft) return <ZeroFateControls isCurrent={draftReady} onGenerateDraft={onGenerateDraft} onConfirmDraft={onConfirmDraft} onResetPrompt={onResetDraftPrompt} onInpaintClick={onInpaintClick} />;
+  if (showDraft) return <ZeroFateControls isCurrent={draftReady} onGenerateDraft={onGenerateDraft} onConfirmDraft={onConfirmDraft} onResetPrompt={onResetDraftPrompt} onInpaintClick={onInpaintClick} saveInfo={draftSaveInfo} />;
   const title = style.id === 1 ? '零命剪影' : style.id === 2 ? '三命灰阶' : style3Face === 'front' ? '六命全彩 · 阳' : '六命全彩 · 阴';
   const description = style.id === 1
     ? '沿用确认的动作与镜头，转为深色剪影，再添加角色文字。'
@@ -502,11 +504,11 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           || (phase === 'render' && current.zeroFateDraft.images[0] !== selectedDraftImage)) {
           // Keep an outdated draft available for inspection, but never
           // silently promote an old character/pose to the current workflow.
-          if (phase === 'draft') setZeroFateDraft({ images, context: selectedDraftContext });
+          if (phase === 'draft') setZeroFateDraft({ images, context: selectedDraftContext, characterName, provider: selectedProvider });
           throw new Error('生成期间角色或动作输入已更新，请检查结果并重新生成当前底稿');
         }
         if (phase === 'draft') {
-          setZeroFateDraft({ status: 'done', images: [images[0]], context: selectedDraftContext, error: undefined });
+          setZeroFateDraft({ status: 'done', images: [images[0]], context: selectedDraftContext, characterName, provider: selectedProvider, error: undefined });
           return;
         }
       }
@@ -612,7 +614,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       </nav>
       <div id="yinghua-current-stage">
         <StyleCard key={activeStep} style={selectedStyle} prompt={yinghuaPrompts[selectedStyle.id]} slot={yinghuaSlots[selectedStyle.id]}
-          characterName={characterName} provider={provider} yinghuaSlots={yinghuaSlots} activeGeneration={activeGeneration} style3Face={style3Face}
+          characterName={characterName} provider={provider}
+          draftSaveInfo={zeroFateDraft.images[0] ? ({ imageUrl: zeroFateDraft.images[0], style: '动作底稿', characterName: zeroFateDraft.characterName ?? characterName, prompt: zeroFateDraft.context?.prompt ?? zeroFateDraftPrompt, provider: zeroFateDraft.provider ?? provider } satisfies GallerySaveInfo) : undefined}
+          yinghuaSlots={yinghuaSlots} activeGeneration={activeGeneration} style3Face={style3Face}
           onRun={run} onPromptChange={handlePromptChange} onInpaintClick={handleInpaintClick} onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
           zeroFateMode={zeroFateMode} draftReady={draftReady} showDraft={activeStep === 'draft'}
           onGenerateDraft={() => void run(1, true)} onConfirmDraft={() => { setActiveStep(1); void run(1); }}

@@ -176,6 +176,8 @@ export interface ZeroFateDraftContext {
 
 export interface ZeroFateDraft extends GenSlot {
   context: ZeroFateDraftContext | null;
+  characterName?: string;
+  provider?: string;
 }
 
 /** A displayed image that can be opened in the local continuous editing workspace. */
