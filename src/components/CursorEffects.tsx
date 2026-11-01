@@ -208,18 +208,17 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
       lastTrailY = lastTrailRef.current.y;
       mouseX = mousePosRef.current.x;
       mouseY = mousePosRef.current.y;
-      // Clamp dt: besides the idle-wake case (handled by resetting
-      // lastFrame in requestTick), a backgrounded tab also pauses rAF and
-      // can hand back an arbitrarily large gap on the first frame after
-      // refocusing. Cap it so particle life/color easing never jumps.
-      const dt = Math.min(now - lastFrame, 50);
+      const elapsed = now - lastFrame;
+      // Bound theme easing after a scheduling hiccup, but age particles by
+      // real elapsed time so they cannot reappear after a main-thread pause.
+      const dt = Math.min(elapsed, 50);
       lastFrame = now;
       themeColors.refreshIfStale(now);
       themeColors.step(dt);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       particles = particles.filter((p) => {
-        p.life += dt;
+        p.life += elapsed;
         if (p.life >= p.maxLife) return false;
         const t = p.life / p.maxLife;
 

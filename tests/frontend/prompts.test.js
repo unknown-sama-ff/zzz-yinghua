@@ -46,6 +46,17 @@ test('zero-fate original Chinese view, pose, crop, occupancy and alignment requi
   assert.match(prompt(1, 'promptTemplateEn', 'en'), /Crop aggressively with limbs extending to frame borders/);
 });
 
+test('foreground typography uses directional quotation marks at the lower corners', () => {
+  for (const [id, , zhKey, enKey] of variants) {
+    const chinese = prompt(id, zhKey);
+    const english = prompt(id, enKey, 'en');
+    assert.match(chinese, /左下角.*KARN”/s);
+    assert.match(chinese, /右下角.*“KARN/s);
+    assert.match(english, /bottom-left.*KARN”/s);
+    assert.match(english, /bottom-right.*“KARN/s);
+  }
+});
+
 test('zero-fate anatomy guard protects waist and legs without changing the original camera design', () => {
   const zh = prompt(1, 'promptTemplate');
   const en = prompt(1, 'promptTemplateEn', 'en');

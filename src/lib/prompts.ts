@@ -41,8 +41,16 @@ const EDIT_LOCK_EN = '[FRAME LOCK] Never move, scale, rotate, crop or recompose.
 const LIGHTING_ZH = '【光照】全局45度柔和顶光；光向与布料褶皱、发丝走向共同决定明暗，同一材质按朝向分层，明暗交界清晰但不锐利。';
 const LIGHTING_EN = '[LIGHTING] Global soft 45-degree top light. Light direction together with fabric folds and hair flow determines material brightness by orientation; clear but gentle light/shadow boundaries.';
 
-const ZERO_TEXT_ZH = '【文字】超大、水平正置的做旧印刷体「{NAME_TOP}」「{NAME_BOTTOM}」，贴角落边缘；双角配对四选一：左上+左下、右上+右下、左上+右下、右上+左下，不可沿顶边或底边横向并排。基线平行画幅上下边缘，不随人物倾斜，禁止旋转、斜切、弧排或透视变形。「{NAME_TOP}」为最大最宽文字层，宽近左右边缘、高约画面四分之一强，位于角色后方；「{NAME_BOTTOM}」为其50%~60%大小，压于角色前方。必须与角色重叠遮挡，不得缩小或移到空白处回避；前景可遮肩/发/手臂，不挡脸。两层100%不透明实心，颜色分别严格为「{TEXT_TOP}」「{TEXT_BOTTOM}」。';
-const ZERO_TEXT_EN = '[TYPOGRAPHY] Oversized horizontal, upright distressed letterpress 「{NAME_TOP}」 and 「{NAME_BOTTOM}」 against corner edges. Choose only top-left+bottom-left, top-right+bottom-right, top-left+bottom-right or top-right+bottom-left; never pair side-by-side along the top/bottom edge. Baselines stay parallel to frame edges regardless of the reclining character; no rotation, skew, arc or perspective deformation. 「{NAME_TOP}」 is the largest/widest layer, spanning near both side edges and slightly over a quarter of frame height, BEHIND the character. 「{NAME_BOTTOM}」 is 50%-60% of its size, IN FRONT. Both must overlap/occlude the character, never shrink or move to empty space to avoid overlap. Foreground may cover shoulders/hair/arms, not the face. Both are solid, 100% opaque; exact colors respectively 「{TEXT_TOP}」 and 「{TEXT_BOTTOM}」.';
+const FRONT_TEXT_QUOTES_ZH = '【前景字标点】前景文字「{NAME_BOTTOM}」必须位于图片内容前方并与角色重叠；若排在左下角，文字内容后紧跟后引号 ”（形式：{NAME_BOTTOM}”）；若排在右下角，文字内容前紧跟前引号 “（形式：“{NAME_BOTTOM}）。';
+const FRONT_TEXT_QUOTES_EN = '[FOREGROUND TEXT PUNCTUATION] The foreground text 「{NAME_BOTTOM}」 must sit in front of the image content and overlap the character. If placed at bottom-left, append the closing quote ” directly after the text (form: {NAME_BOTTOM}”); if placed at bottom-right, prepend the opening quote “ directly before the text (form: “{NAME_BOTTOM}).';
+const ZERO_TEXT_ZH = join(
+  '【文字】超大、水平正置的做旧印刷体「{NAME_TOP}」「{NAME_BOTTOM}」，贴角落边缘；双角配对四选一：左上+左下、右上+右下、左上+右下、右上+左下，不可沿顶边或底边横向并排。基线平行画幅上下边缘，不随人物倾斜，禁止旋转、斜切、弧排或透视变形。「{NAME_TOP}」为最大最宽文字层，宽近左右边缘、高约画面四分之一强，位于角色后方；「{NAME_BOTTOM}」为其50%~60%大小，压于角色前方。必须与角色重叠遮挡，不得缩小或移到空白处回避；前景可遮肩/发/手臂，不挡脸。两层100%不透明实心，颜色分别严格为「{TEXT_TOP}」「{TEXT_BOTTOM}」。',
+  FRONT_TEXT_QUOTES_ZH,
+);
+const ZERO_TEXT_EN = join(
+  '[TYPOGRAPHY] Oversized horizontal, upright distressed letterpress 「{NAME_TOP}」 and 「{NAME_BOTTOM}」 against corner edges. Choose only top-left+bottom-left, top-right+bottom-right, top-left+bottom-right or top-right+bottom-left; never pair side-by-side along the top/bottom edge. Baselines stay parallel to frame edges regardless of the reclining character; no rotation, skew, arc or perspective deformation. 「{NAME_TOP}」 is the largest/widest layer, spanning near both side edges and slightly over a quarter of frame height, BEHIND the character. 「{NAME_BOTTOM}」 is 50%-60% of its size, IN FRONT. Both must overlap/occlude the character, never shrink or move to empty space to avoid overlap. Foreground may cover shoulders/hair/arms, not the face. Both are solid, 100% opaque; exact colors respectively 「{TEXT_TOP}」 and 「{TEXT_BOTTOM}」.',
+  FRONT_TEXT_QUOTES_EN,
+);
 const ZERO_RENDER_ZH = join(
   '【角色明暗与配色】主体统一为「{DOMINANT_COLOR}」单一色相的低饱和灰调，暗部占绝大部分，接近深色剪影。全部裸露皮肤为最暗近纯黑，五官极隐约；头发、衣装、护甲和配饰也以深暗为主，仅受光面、结构线和褶皱高光提亮，不大面积铺亮色/白色，不把皮肤画亮。通过明度差保留材质和原衣装/花纹细节。双色调主色为低饱和「{DOMINANT_COLOR}」；仅虹膜和极少数标志配饰保留主图原色，不换主题色、不额外提亮，除此无其他色相。',
   LIGHTING_ZH,
@@ -53,10 +61,22 @@ const ZERO_RENDER_EN = join(
   LIGHTING_EN,
   '[BACKGROUND] Flat vivid, high-saturation/high-brightness 「{DOMINANT_COLOR}」, not muted grayscale. Strong light/dark and saturation contrast against the deep muted subject. Clearly separate subject/background, allowing only tiny edge bleeding; never merge large subject masses into the background. Strong negative space, diagonal impact and entrance tension; full-body framing is not required.',
 );
-const THREE_TEXT_ZH = '【文字】仅「{NAME_TOP}」「{NAME_BOTTOM}」，位置、大小、字形与零命完全一致；两层均严格用「{TEXT_BOTTOM}」高饱和实心字体，100%不透明，禁止去饱和或透出后方角色。';
-const THREE_TEXT_EN = '[TYPOGRAPHY] Only 「{NAME_TOP}」 and 「{NAME_BOTTOM}」. Preserve zero-fate placement, size and letterforms. Both must be 「{TEXT_BOTTOM}」, highly saturated, solid and 100% opaque; never desaturate or reveal the character through them.';
-const SIX_TEXT_ZH = '【文字】仅「{NAME_TOP}」「{NAME_BOTTOM}」，位置、大小、字形和前后层级沿用底图；分别严格使用「{TEXT_TOP_BRIGHT}」「{TEXT_BOTTOM}」，100%不透明实心。直接叠加在完整画面之上，文字背后的角色和背景仍完整渲染，不挖空、不留白、不填纯色块。';
-const SIX_TEXT_EN = '[TYPOGRAPHY] Only 「{NAME_TOP}」 and 「{NAME_BOTTOM}」. Retain base placement, size, letterforms and front/back ordering; exact colors respectively 「{TEXT_TOP_BRIGHT}」 and 「{TEXT_BOTTOM}」, solid and 100% opaque. Overlay on fully rendered character/background content; never cut out, blank or flat-fill the regions behind text.';
+const THREE_TEXT_ZH = join(
+  '【文字】仅「{NAME_TOP}」「{NAME_BOTTOM}」，位置、大小、字形与零命完全一致；两层均严格用「{TEXT_BOTTOM}」高饱和实心字体，100%不透明，禁止去饱和或透出后方角色。',
+  FRONT_TEXT_QUOTES_ZH,
+);
+const THREE_TEXT_EN = join(
+  '[TYPOGRAPHY] Only 「{NAME_TOP}」 and 「{NAME_BOTTOM}」. Preserve zero-fate placement, size and letterforms. Both must be 「{TEXT_BOTTOM}」, highly saturated, solid and 100% opaque; never desaturate or reveal the character through them.',
+  FRONT_TEXT_QUOTES_EN,
+);
+const SIX_TEXT_ZH = join(
+  '【文字】仅「{NAME_TOP}」「{NAME_BOTTOM}」，位置、大小、字形和前后层级沿用底图；分别严格使用「{TEXT_TOP_BRIGHT}」「{TEXT_BOTTOM}」，100%不透明实心。直接叠加在完整画面之上，文字背后的角色和背景仍完整渲染，不挖空、不留白、不填纯色块。',
+  FRONT_TEXT_QUOTES_ZH,
+);
+const SIX_TEXT_EN = join(
+  '[TYPOGRAPHY] Only 「{NAME_TOP}」 and 「{NAME_BOTTOM}」. Retain base placement, size, letterforms and front/back ordering; exact colors respectively 「{TEXT_TOP_BRIGHT}」 and 「{TEXT_BOTTOM}」, solid and 100% opaque. Overlay on fully rendered character/background content; never cut out, blank or flat-fill the regions behind text.',
+  FRONT_TEXT_QUOTES_EN,
+);
 
 const SIX_COLOR_ZH = '【六命配色铁律】肤色、发色、服装、花纹和配饰100%匹配第2张全彩三视图，原色优先于光照与风格化，不统一染色或另换配色。尤其不得把灰阶误认成白/银/浅灰/漂白发；三视图没有这种发色就不生成。';
 const SIX_COLOR_EN = '[SIX-FATE COLOR IRON RULE] Skin, hair, garments, patterns and accessories must match input 2\'s original full-color palette 100%; original colors take priority over lighting and stylization. Never recolor uniformly or replace the palette. Never mistake grayscale for white/silver/light-gray/bleached hair unless the canonical three-view actually has that hair color.';
