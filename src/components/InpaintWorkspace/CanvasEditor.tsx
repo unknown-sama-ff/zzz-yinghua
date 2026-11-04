@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useInpaintStore } from '../../store/useInpaintStore';
+import { MaskHistory } from '../../lib/maskCanvas';
+import { useShallow } from 'zustand/react/shallow';
 
-export function CanvasEditor({
-  onMaskChange,
-  onMaskEmpty,
-}: {
-  onMaskChange: (dataUrl: string) => void;
-  onMaskEmpty: () => void;
-}) {
-  const { mode, tool, brushSize, featherRadius, shapeType, setMaskDataUrl, maskDataUrl } = useInpaintStore((s) => s);
+export function CanvasEditor() {
+  const { mode, tool, brushSize, featherRadius, shapeType, maskRevision } = useInpaintStore(useShallow((s) => ({ mode: s.mode, tool: s.tool, brushSize: s.brushSize, featherRadius: s.featherRadius, shapeType: s.shapeType, maskRevision: s.maskRevision })));
+  const currentVersionId = useInpaintStore((s) => s.currentVersionId);
   const currentVersionUrl = useInpaintStore((s) => s.currentVersionUrl);
   const isWorkspaceOpen = useInpaintStore((s) => s.isWorkspaceOpen);
 
@@ -47,60 +44,12 @@ export function CanvasEditor({
   } | null>(null);
 
   const maskRestoreVersionRef = useRef(0);
-  const historyRef = useRef<string[]>([]);
-  const MAX_UNDO = 20;
-
-  const restoreMaskFromDataUrl = useCallback((dataUrl: string | null) => {
-    const mask = maskRef.current;
-    if (!mask) return;
-    const ctx = mask.getContext('2d');
-    if (!ctx) return;
-
-    if (!dataUrl) {
-      ctx.clearRect(0, 0, mask.width, mask.height);
-      return;
-    }
-
-    const version = ++maskRestoreVersionRef.current;
-    const img = new Image();
-    img.onload = () => {
-      if (version !== maskRestoreVersionRef.current) return;
-      ctx.clearRect(0, 0, mask.width, mask.height);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, mask.width, mask.height);
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.drawImage(img, 0, 0);
-      ctx.globalCompositeOperation = 'source-over';
-      setMaskDataUrl(dataUrl);
-      redrawRef.current();
-    };
-    img.src = dataUrl;
-  }, [setMaskDataUrl]);
-
-  const isMaskEmptyDataUrl = useCallback((dataUrl: string | null): boolean => {
-    if (!dataUrl) return true;
-    if (!dataUrl.startsWith('data:image/png;base64,')) return true;
-    try {
-      const binary = atob(dataUrl.split(',')[1]);
-      let hasContent = false;
-      for (let i = 3; i < binary.length; i += 4) {
-        if (binary.charCodeAt(i) > 0) { hasContent = true; break; }
-      }
-      return !hasContent;
-    } catch {
-      return true;
-    }
+  const historyRef = useRef<MaskHistory | null>(null);
+  const publishMask = useCallback(() => {
+    const hasMask = historyRef.current?.hasContent ?? false;
+    useInpaintStore.getState().setMaskContent(hasMask);
   }, []);
-
-  const undo = useCallback(() => {
-    if (historyRef.current.length === 0) return;
-    const prev = historyRef.current[historyRef.current.length - 1];
-    historyRef.current = historyRef.current.slice(0, -1);
-    restoreMaskFromDataUrl(prev);
-    if (isMaskEmptyDataUrl(prev)) {
-      onMaskEmpty();
-    }
-  }, [restoreMaskFromDataUrl, isMaskEmptyDataUrl, onMaskEmpty]);
+  const undo = useCallback(() => { if (historyRef.current?.undo()) { publishMask(); redrawRef.current(); } }, [publishMask]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -196,6 +145,10 @@ export function CanvasEditor({
   useEffect(() => {
     if (!isWorkspaceOpen || !currentVersionUrl) return;
     let cancelled = false;
+    ++maskRestoreVersionRef.current;
+    historyRef.current?.reset(); originalImgRef.current = null; isDrawingRef.current = false;
+    rectStartRef.current = null; rectPreviewRef.current = null; lastPosRef.current = null;
+    cancelScheduledRedraw();
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
@@ -207,6 +160,7 @@ export function CanvasEditor({
         const canvas = ref.current;
         if (canvas) { canvas.width = w; canvas.height = h; }
       });
+      historyRef.current = maskRef.current ? new MaskHistory(maskRef.current) : null;
       const mCtx = maskRef.current?.getContext('2d');
       if (mCtx) mCtx.clearRect(0, 0, w, h);
       setZoom(1);
@@ -216,23 +170,21 @@ export function CanvasEditor({
     return () => {
       cancelled = true;
     };
-  }, [isWorkspaceOpen, currentVersionUrl]);
+  }, [isWorkspaceOpen, currentVersionUrl, currentVersionId, cancelScheduledRedraw]);
 
-  const maskBlobUrlRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const version = ++maskRestoreVersionRef.current;
+    const maskDataUrl = useInpaintStore.getState().maskDataUrl;
     if (!maskRef.current || imageSize.width === 0) return;
     const ctx = maskRef.current.getContext('2d');
     if (!ctx) return;
-    if (maskBlobUrlRef.current) {
-      URL.revokeObjectURL(maskBlobUrlRef.current);
-      maskBlobUrlRef.current = null;
-    }
     if (!maskDataUrl) {
       ctx.clearRect(0, 0, imageSize.width, imageSize.height);
+      historyRef.current?.reset();
       redraw();
       return;
     }
-    const version = ++maskRestoreVersionRef.current;
     const img = new Image();
     img.onload = () => {
       if (version !== maskRestoreVersionRef.current) return;
@@ -243,18 +195,12 @@ export function CanvasEditor({
       ctx.drawImage(img, 0, 0);
       ctx.globalCompositeOperation = 'source-over';
       redraw();
-      try {
-        const byteChars = atob(maskDataUrl.split(',')[1]);
-        const byteNumbers = new Uint8Array(byteChars.length);
-        for (let i = 0; i < byteChars.length; i++) {
-          byteNumbers[i] = byteChars.charCodeAt(i);
-        }
-        const blob = new Blob([byteNumbers], { type: 'image/png' });
-        maskBlobUrlRef.current = URL.createObjectURL(blob);
-      } catch { /* fallback to dataUrl */ }
+      historyRef.current?.reset();
+      historyRef.current?.update(0, 0, imageSize.width, imageSize.height);
+      publishMask();
     };
     img.src = maskDataUrl;
-  }, [maskDataUrl, imageSize.width, imageSize.height, redraw]);
+  }, [maskRevision, imageSize.width, imageSize.height, publishMask]);
 
   useEffect(() => { redraw(); }, [redraw]);
 
@@ -349,19 +295,9 @@ export function CanvasEditor({
     ctx.restore();
   }, [shapeType]);
 
-  const checkMaskEmpty = useCallback((): boolean => {
-    const mask = maskRef.current;
-    if (!mask) return true;
-    const ctx = mask.getContext('2d');
-    if (!ctx) return true;
-    const data = ctx.getImageData(0, 0, mask.width, mask.height).data;
-    for (let i = 3; i < data.length; i += 4) { if (data[i] > 0) return false; }
-    return true;
-  }, []);
-
   const exportMask = useCallback((): string | null => {
     const mask = maskRef.current;
-    if (!mask) return null;
+    if (!mask || !originalImgRef.current) return null;
     const w = mask.width, h = mask.height;
     const out = document.createElement('canvas');
     out.width = w; out.height = h;
@@ -369,12 +305,8 @@ export function CanvasEditor({
     if (!ctx) return null;
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, w, h);
-    const maskData = mask.getContext('2d')!.getImageData(0, 0, w, h);
-    const outData = ctx.getImageData(0, 0, w, h);
-    for (let i = 0; i < maskData.data.length; i += 4) {
-      outData.data[i + 3] = 255 - maskData.data[i + 3];
-    }
-    ctx.putImageData(outData, 0, 0);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.drawImage(mask, 0, 0);
     return out.toDataURL('image/png');
   }, []);
 
@@ -410,29 +342,31 @@ export function CanvasEditor({
         redraw();
       },
       exportMask,
-      getMaskBlobUrl: () => maskBlobUrlRef.current,
+      getMaskBlobUrl: () => null,
       undo: () => undoRef.current(),
       clearMask: () => {
         const ctx = maskRef.current?.getContext('2d');
         if (!ctx) return;
         ctx.clearRect(0, 0, imageSize.width, imageSize.height);
         rectPreviewRef.current = null;
+        historyRef.current?.reset();
+        publishMask();
         redraw();
-        onMaskEmpty();
       },
     };
-  }, [featherRadius, exportMask, imageSize, redraw, onMaskEmpty]);
+  }, [featherRadius, exportMask, imageSize, redraw, publishMask]);
 
   useEffect(() => {
     return () => {
-      if (maskBlobUrlRef.current) URL.revokeObjectURL(maskBlobUrlRef.current);
+      ++maskRestoreVersionRef.current;
+      delete window.__inpaintCanvas;
       cancelScheduledRedraw();
     };
   }, [cancelScheduledRedraw]);
 
   const handlePointerDown = useCallback(
     (e: React.MouseEvent | React.TouchEvent) => {
-      if (!isWorkspaceOpen || spaceHeld) return;
+      if (!isWorkspaceOpen || spaceHeld || !originalImgRef.current) return;
       e.preventDefault();
       if ('button' in e && e.button === 1) {
         setMiddleHeld(true);
@@ -445,25 +379,20 @@ export function CanvasEditor({
         rectStartRef.current = pos;
         isDrawingRef.current = true;
         rectPreviewRef.current = { x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y };
-        const preDrawMask = exportMask();
-        if (preDrawMask) {
-          historyRef.current = [...historyRef.current, preDrawMask];
-          if (historyRef.current.length > MAX_UNDO) historyRef.current.shift();
-        }
+        historyRef.current?.begin();
       } else {
         isDrawingRef.current = true;
         lastPosRef.current = pos;
         cancelScheduledRedraw();
-        const preStrokeMask = exportMask();
-        if (preStrokeMask) {
-          historyRef.current = [...historyRef.current, preStrokeMask];
-          if (historyRef.current.length > MAX_UNDO) historyRef.current.shift();
-        }
+        historyRef.current?.begin();
+        const r = brushSize / 2 + 2;
+        historyRef.current?.capture(pos.x-r, pos.y-r, pos.x+r, pos.y+r);
         drawDot(pos.x, pos.y, tool === 'eraser');
+        historyRef.current?.update(pos.x-r, pos.y-r, pos.x+r, pos.y+r);
         redraw();
       }
     },
-    [spaceHeld, tool, mode, screenToImage, drawDot, redraw, isWorkspaceOpen, exportMask],
+    [spaceHeld, tool, mode, screenToImage, drawDot, redraw, isWorkspaceOpen, brushSize, cancelScheduledRedraw],
   );
 
   const handlePointerMove = useCallback(
@@ -516,7 +445,11 @@ export function CanvasEditor({
         rectPreviewRef.current = { x1: rectStartRef.current.x, y1: rectStartRef.current.y, x2: pos.x, y2: pos.y };
         redraw();
       } else if (lastPosRef.current) {
-        drawLine(lastPosRef.current.x, lastPosRef.current.y, pos.x, pos.y, tool === 'eraser');
+        const r = brushSize / 2 + 2, from = lastPosRef.current;
+        const bounds = [Math.min(from.x,pos.x)-r, Math.min(from.y,pos.y)-r, Math.max(from.x,pos.x)+r, Math.max(from.y,pos.y)+r] as const;
+        historyRef.current?.capture(...bounds);
+        drawLine(from.x, from.y, pos.x, pos.y, tool === 'eraser');
+        historyRef.current?.update(...bounds);
         lastPosRef.current = pos;
         scheduleRedraw();
       }
@@ -535,9 +468,16 @@ export function CanvasEditor({
         cancelScheduledRedraw();
         return;
       }
-      if (tool === 'shape' && rectStartRef.current && isDrawingRef.current) {
+      if (!isDrawingRef.current) return;
+      if (tool === 'shape' && rectStartRef.current) {
         const pos = screenToImage(e);
-        fillShape(rectStartRef.current.x, rectStartRef.current.y, pos.x, pos.y);
+        const start = rectStartRef.current;
+        const cx=(start.x+pos.x)/2, cy=(start.y+pos.y)/2, rx=Math.abs(start.x-pos.x)/2, ry=Math.abs(start.y-pos.y)/2;
+        const w=shapeType==='circle'?Math.max(rx,ry):rx, h=shapeType==='circle'?Math.max(rx,ry):ry;
+        const bounds=[cx-w-2,cy-h-2,cx+w+2,cy+h+2] as const;
+        historyRef.current?.capture(...bounds);
+        fillShape(start.x,start.y,pos.x,pos.y);
+        historyRef.current?.update(...bounds);
         rectPreviewRef.current = null;
         redraw();
       }
@@ -545,12 +485,10 @@ export function CanvasEditor({
       rectStartRef.current = null;
       lastPosRef.current = null;
       cancelScheduledRedraw();
-      if (!checkMaskEmpty()) {
-        const dataUrl = exportMask();
-        if (dataUrl) { setMaskDataUrl(dataUrl); onMaskChange(dataUrl); }
-      } else { onMaskEmpty(); }
+      historyRef.current?.commit();
+      publishMask(); redraw();
     },
-    [spaceHeld, middleHeld, tool, mode, fillShape, redraw, screenToImage, checkMaskEmpty, exportMask, setMaskDataUrl, onMaskChange, onMaskEmpty, cancelScheduledRedraw],
+    [spaceHeld, middleHeld, tool, mode, fillShape, redraw, screenToImage, publishMask, shapeType, cancelScheduledRedraw],
   );
 
   const handleWheel = useCallback((e: React.WheelEvent) => {

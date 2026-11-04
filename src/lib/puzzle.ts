@@ -70,14 +70,35 @@ export function createPuzzleGroups(pieces: PuzzlePiece[], layout: PuzzleLayout, 
   return scatterPuzzleGroups(pieces.map((piece, index) => ({ id: piece.id, pieceIds: [piece.id], z: index + 1, x: 0, y: 0 })), pieces, layout, random);
 }
 
+// Groups retain their pieceIds array while moving; only a merge creates new
+// membership. Weak keys let finished rounds disappear without cache cleanup.
+const groupGeometry = new WeakMap<PuzzlePiece[], { pieces: Map<number, PuzzlePiece>; groups: WeakMap<number[], { minCol: number; minRow: number; columns: number; rows: number; cells: ReadonlySet<string> }> }>();
+export function puzzleGroupGeometry(group: PuzzleGroup, pieces: PuzzlePiece[]) {
+  let round = groupGeometry.get(pieces);
+  if (!round) {
+    round = { pieces: new Map(pieces.map((piece) => [piece.id, piece])), groups: new WeakMap() };
+    groupGeometry.set(pieces, round);
+  }
+  let geometry = round.groups.get(group.pieceIds);
+  if (!geometry) {
+    let minCol = Infinity; let minRow = Infinity; let maxCol = -Infinity; let maxRow = -Infinity;
+    const cells = new Set<string>();
+    for (const id of group.pieceIds) {
+      const piece = round.pieces.get(id);
+      if (!piece) continue;
+      minCol = Math.min(minCol, piece.col); maxCol = Math.max(maxCol, piece.col);
+      minRow = Math.min(minRow, piece.row); maxRow = Math.max(maxRow, piece.row);
+      cells.add(`${piece.row}:${piece.col}`);
+    }
+    geometry = { minCol, minRow, columns: maxCol - minCol + 1, rows: maxRow - minRow + 1, cells };
+    round.groups.set(group.pieceIds, geometry);
+  }
+  return geometry;
+}
+
 export function puzzleGroupBounds(group: PuzzleGroup, pieces: PuzzlePiece[], layout: PuzzleLayout) {
-  const members = pieces.filter((piece) => group.pieceIds.includes(piece.id));
-  const minCol = Math.min(...members.map((piece) => piece.col));
-  const minRow = Math.min(...members.map((piece) => piece.row));
-  return { minCol, minRow,
-    width: (Math.max(...members.map((piece) => piece.col)) - minCol + 1) * layout.cellWidth,
-    height: (Math.max(...members.map((piece) => piece.row)) - minRow + 1) * layout.cellHeight,
-  };
+  const { minCol, minRow, columns, rows } = puzzleGroupGeometry(group, pieces);
+  return { minCol, minRow, width: columns * layout.cellWidth, height: rows * layout.cellHeight };
 }
 
 export function piecePosition(piece: PuzzlePiece, group: PuzzleGroup, pieces: PuzzlePiece[], layout: PuzzleLayout) {

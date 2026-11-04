@@ -32,6 +32,13 @@ async function intercept(context) {
       ++reads;
       return route.fulfill({ json: { ok: true, rows, hasMore: false } });
     }
+    const thumbnail = path.match(/^\/api\/gallery\/([^/]+)\/thumbnail$/);
+    if (thumbnail) {
+      const row = rows.find((row) => String(row.id) === decodeURIComponent(thumbnail[1]));
+      if (!row) return route.fulfill({ status: 404, body: '' });
+      const image = Buffer.from(row.image_url.split(',')[1], 'base64');
+      return route.fulfill({ contentType: 'image/webp', body: await sharp(image).resize(640, 640, { fit: 'inside', withoutEnlargement: true }).webp().toBuffer() });
+    }
     if (path === '/api/gallery' && request.method() === 'POST') {
       const body = request.postDataJSON();
       writes.push(body);
@@ -173,6 +180,7 @@ try {
   const mobileViewer = viewerOn(mobile);
   assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await mobileViewer.getByRole('button', { name: '全屏', exact: true }).click();
+  await mobileViewer.getByRole('button', { name: '退出全屏', exact: true }).waitFor();
   await mobileViewer.getByRole('button', { name: '保存到画廊', exact: true }).click();
   await mobileViewer.getByRole('button', { name: '已保存到画廊', exact: true }).waitFor();
   assert.ok(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

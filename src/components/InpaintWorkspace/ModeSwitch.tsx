@@ -3,10 +3,10 @@ import { useInpaintStore } from '../../store/useInpaintStore';
 export function ModeSwitch() {
   const mode = useInpaintStore((s) => s.mode);
   const setMode = useInpaintStore((s) => s.setMode);
-  const maskDataUrl = useInpaintStore((s) => s.maskDataUrl);
+  const hasMask = useInpaintStore((s) => s.hasMask);
 
   const switchToPrecise = () => {
-    if (!maskDataUrl) {
+    if (!hasMask) {
       // Show a hint but allow switching - the CanvasEditor will show the empty state
       setMode('precise');
     } else {
@@ -39,7 +39,7 @@ export function ModeSwitch() {
         `}
       >
         🎯 精准重绘
-        {!maskDataUrl && mode === 'precise' && (
+        {!hasMask && mode === 'precise' && (
           <span className="text-[var(--zzz-magenta)]/80">· 请先涂抹</span>
         )}
       </button>

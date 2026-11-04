@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, memo } from 'react';
 import {
   deleteFromGallery,
   galleryImageProxyUrl,
+  galleryThumbnailUrl,
   listGalleryPage,
   GALLERY_PAGE_SIZE,
   GALLERY_SAVED_EVENT,
@@ -23,28 +24,23 @@ function readTokens(): Record<string, string> {
 }
 
 /**
- * A gallery thumbnail that falls back to the backend image proxy.
- *
- * Images live on *.supabase.co, which some visitors can't reach. The direct URL
- * is tried first so a healthy connection costs us no bandwidth; on error we
- * switch to the proxy once. `failed` only ever flips false→true, so if the
- * proxy fails too the browser shows a broken image instead of looping.
+ * Lists use a 640px thumbnail. A failed thumbnail degrades once to the existing
+ * image proxy; zoom always opens the original, independently of this fallback.
  */
-const GalleryImage = memo(function GalleryImage({ url, alt }: { url: string; alt: string }) {
+const GalleryImage = memo(function GalleryImage({ id, url, alt }: { id: number | string; url: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   const proxied = galleryImageProxyUrl(url);
   return (
     <div className="relative flex aspect-[4/5] w-full items-center justify-center overflow-hidden bg-zzz-ink/40">
       <img
-        src={failed ? proxied : url}
+        src={failed ? proxied : galleryThumbnailUrl(id)}
         alt={alt}
         loading="lazy"
+        decoding="async"
         onError={() => setFailed(true)}
         className="h-full w-full object-contain"
       />
-      {/* Enlarge the URL this thumbnail actually resolved with, so visitors who
-          can't reach supabase directly get the proxied full image too. */}
-      <ZoomButton src={failed ? proxied : url} alt={alt} fallbackSrc={proxied} />
+      <ZoomButton src={url} alt={alt} fallbackSrc={proxied} />
     </div>
   );
 });
@@ -181,7 +177,7 @@ export const GalleryPanel = memo(function GalleryPanel() {
               key={row.id}
               className="group relative overflow-hidden rounded-xl border border-zzz-text/10 bg-zzz-text/[0.03]"
             >
-              <GalleryImage url={row.image_url} alt={row.style} />
+              <GalleryImage key={row.image_url} id={row.id} url={row.image_url} alt={row.style} />
               <div className="p-2 font-mono text-[10px] text-zzz-text/55 leading-relaxed">
                 <div className="text-zzz-primary/80 truncate">{row.style}</div>
                 {row.character_name && <div>角色：{row.character_name}</div>}

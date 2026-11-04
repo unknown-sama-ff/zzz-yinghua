@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadFrontend } from './loadFrontend.js';
 
-const { PUZZLE_DIFFICULTIES, puzzleGrid, puzzleLayout, createPuzzlePieces, createPuzzleGroups, centerPuzzleGroup, piecePosition, positionPuzzleGroup, puzzleGroupBounds, reflowPuzzleGroups, snapPuzzleGroup, puzzlePiecePath, eligiblePuzzleImages, pickPuzzleImage, loadPuzzleGallery } = await loadFrontend(`
+const { PUZZLE_DIFFICULTIES, puzzleGrid, puzzleLayout, createPuzzlePieces, createPuzzleGroups, centerPuzzleGroup, piecePosition, positionPuzzleGroup, puzzleGroupGeometry, puzzleGroupBounds, reflowPuzzleGroups, snapPuzzleGroup, puzzlePiecePath, eligiblePuzzleImages, pickPuzzleImage, loadPuzzleGallery } = await loadFrontend(`
   export * from './src/lib/puzzle';
   export * from './src/lib/puzzleGallery';
 `);
@@ -67,6 +67,21 @@ const grid = puzzleGrid(1536, 1024, 'easy');
 const layout = puzzleLayout(1000, 1536, 1024, grid);
 const pieces = createPuzzlePieces(grid);
 const cw = layout.cellWidth; const ch = layout.cellHeight;
+
+test('group geometry survives movement but refreshes for merges, rounds and resize scale', () => {
+  const initial = group(0, [0, 1], 100, 80);
+  const geometry = puzzleGroupGeometry(initial, pieces);
+  const moved = positionPuzzleGroup([initial], 0, 180, 160, pieces, layout)[0];
+  assert.equal(puzzleGroupGeometry(moved, pieces), geometry);
+  assert.deepEqual([...geometry.cells], ['0:0', '0:1']);
+  const merged = { ...moved, pieceIds: [...moved.pieceIds, 4] };
+  assert.notEqual(puzzleGroupGeometry(merged, pieces), geometry);
+  assert.equal(puzzleGroupGeometry(merged, pieces).rows, 2);
+  const portrait = createPuzzlePieces({ rows: 4, columns: 3 });
+  assert.notEqual(puzzleGroupGeometry(initial, portrait), geometry);
+  const narrow = puzzleLayout(350, 1536, 1024, grid);
+  near(puzzleGroupBounds(moved, pieces, narrow).width, narrow.cellWidth * 2);
+});
 
 test('correct horizontal and vertical neighbors snap anywhere without a fixed frame', () => {
   for (const [x, y] of [[100, 70], [310, 180]]) {

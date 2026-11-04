@@ -59,7 +59,8 @@ import {
   verifyAndDecryptNotify,
 } from './payments/wechat.js';
 import { parseSponsorName } from './payments/sponsorName.js';
-import { GalleryStorageError, deleteGalleryItem, getGalleryImage, listGallery, saveGalleryItem } from './gallery.js';
+import { GalleryStorageError, deleteGalleryItem, galleryThumbnails, getGalleryImage, listGallery, saveGalleryItem } from './gallery.js';
+import { GalleryThumbnailError } from './lib/galleryThumbnails.js';
 import { PromptGalleryError, deletePrompt, listPrompts, savePrompt } from './promptGallery.js';
 import { createImageToPromptHandler } from './imageToPrompt.js';
 import { createPuzzleLayersRouter } from './parallax/router.js';
@@ -1136,6 +1137,18 @@ app.delete('/api/gallery/:id', rateLimit, async (req, res) => {
 
 // Read the gallery through the service-role proxy (mini program request
 // domains can't include *.supabase.co, so it must read here instead).
+app.get('/api/gallery/:id/thumbnail', imageRateLimit, async (req, res) => {
+  try {
+    const image = await galleryThumbnails.get(req.params.id);
+    res.set('Cache-Control', 'public, max-age=3600');
+    return res.type('image/webp').send(image);
+  } catch (error) {
+    const status = error instanceof GalleryThumbnailError ? error.status : 502;
+    const code = status === 404 ? 'NOT_FOUND' : status === 429 ? 'RATE_LIMITED' : status === 400 ? 'INVALID_INPUT' : 'UPSTREAM_ERROR';
+    return fail(res, status, code, error instanceof GalleryThumbnailError ? error.message : '缩略图暂时无法读取');
+  }
+});
+
 app.get('/api/gallery', rateLimit, async (req, res) => {
   const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 60));
   const offset = Math.max(0, Number(req.query.offset) || 0);

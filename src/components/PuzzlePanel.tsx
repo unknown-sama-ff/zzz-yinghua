@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { GALLERY_SAVED_EVENT, type GalleryRow } from '../lib/galleryClient';
 import { ROUTE_HASHES } from '../lib/navigation';
 import { loadPuzzleGallery, loadPuzzleImage, pickPuzzleImage } from '../lib/puzzleGallery';
-import { centerPuzzleGroup, createPuzzleGroups, createPuzzlePieces, piecePosition, positionPuzzleGroup, PUZZLE_DIFFICULTIES, puzzleGrid, puzzleLayout, puzzlePiecePath, reflowPuzzleGroups, snapPuzzleGroup, type PuzzleDifficulty, type PuzzleGrid, type PuzzleGroup, type PuzzleLayout, type PuzzlePiece } from '../lib/puzzle';
+import { centerPuzzleGroup, createPuzzleGroups, createPuzzlePieces, piecePosition, positionPuzzleGroup, PUZZLE_DIFFICULTIES, puzzleGrid, puzzleGroupGeometry, puzzleLayout, puzzlePiecePath, reflowPuzzleGroups, snapPuzzleGroup, type PuzzleDifficulty, type PuzzleGrid, type PuzzleGroup, type PuzzleLayout, type PuzzlePiece } from '../lib/puzzle';
 import { PuzzleReveal } from './PuzzleReveal';
 import { createPuzzleAudio, readPuzzleSoundPreference, writePuzzleSoundPreference } from '../lib/puzzleAudio';
 import { getPuzzleLayers } from '../lib/puzzleLayers';
@@ -47,18 +47,25 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   const z = useRef(100);
   const snapKey = useRef(0);
   const drag = useRef<Drag | null>(null);
+  const dragFrame = useRef<number | null>(null);
   const clipPrefix = useId().replace(/:/g, '');
   gameRef.current = game; widthRef.current = width; heightRef.current = height;
-  const layout = game ? puzzleLayout(width, game.width, game.height, game.grid, height) : null;
+  const layout = useMemo(() => game ? puzzleLayout(width, game.width, game.height, game.grid, height) : null, [width, height, game?.width, game?.height, game?.grid]);
   const layoutRef = useRef<PuzzleLayout | null>(layout);
   layoutRef.current = layout;
   const complete = game?.groups.length === 1;
   const showcase = Boolean(game && showcaseRound === game.roundId);
   const connections = game ? game.pieces.length - game.groups.length : 0;
   const maxConnections = Math.max(1, (game?.pieces.length ?? 2) - 1);
-  const membership = new Map(game?.groups.flatMap((group) => group.pieceIds.map((id) => [id, group] as const)));
-  const groupCells = new Map(game?.groups.map((group) => [group.id, new Set(game.pieces.filter((piece) => group.pieceIds.includes(piece.id)).map((piece) => `${piece.row}:${piece.col}`))]));
-
+  const membership = useMemo(() => {
+    const result = new Map<number, PuzzleGroup>();
+    for (const group of game?.groups ?? []) for (const id of group.pieceIds) result.set(id, group);
+    return result;
+  }, [game?.groups]);
+  const piecePaths = useMemo(() => new Map(game?.pieces.map((piece) => [piece.id, puzzlePiecePath(piece, layout!)])), [game?.pieces, layout]);
+  const outlinePaths = useMemo(() => new WeakMap<ReadonlySet<string>, Map<number, string>>(), [layout]);
+  const cancelDragFrame = useCallback(() => { if (dragFrame.current !== null) { cancelAnimationFrame(dragFrame.current); dragFrame.current = null; } }, []);
+  useEffect(() => cancelDragFrame, [cancelDragFrame]);
   const commitGame = useCallback((next: Game) => { gameRef.current = next; setGame(next); }, []);
   const revealReady = useCallback((roundId: string) => setShowcaseRound(roundId), []);
   useEffect(() => {
@@ -69,7 +76,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   const draw = useCallback(async () => {
     const current = ++request.current;
     setLoading(true); setError(''); setNotice(''); setSnapping(null);
-    drag.current = null; setDragging(null); setSelected(null);
+    cancelDragFrame(); drag.current = null; setDragging(null); setSelected(null);
     try {
       pool.current ??= loadPuzzleGallery();
       const rows = await pool.current;
@@ -88,7 +95,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     } catch (err) {
       if (current === request.current) { pool.current = null; setError(err instanceof Error ? err.message : '抽取图片失败，请重试。'); }
     } finally { if (current === request.current) setLoading(false); }
-  }, [commitGame]);
+  }, [commitGame, cancelDragFrame]);
 
   useEffect(() => {
     void draw();
@@ -120,17 +127,17 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     if (header) observer.observe(header);
     window.addEventListener('resize', fitViewport);
     window.visualViewport?.addEventListener('resize', fitViewport);
-    return () => { observer.disconnect(); window.removeEventListener('resize', fitViewport); window.visualViewport?.removeEventListener('resize', fitViewport); drag.current = null; setDragging(null); };
-  }, [active]);
+    return () => { observer.disconnect(); window.removeEventListener('resize', fitViewport); window.visualViewport?.removeEventListener('resize', fitViewport); cancelDragFrame(); drag.current = null; setDragging(null); };
+  }, [active, cancelDragFrame]);
 
   useEffect(() => {
-    drag.current = null; setDragging(null); setSnapping(null);
+    cancelDragFrame(); drag.current = null; setDragging(null); setSnapping(null);
     const previous = gameRef.current;
     if (!previous || previous.layoutWidth === width && previous.layoutHeight === height) return;
     const nextLayout = puzzleLayout(width, previous.width, previous.height, previous.grid, height);
     const reflowed = reflowPuzzleGroups(previous.groups, previous.pieces, nextLayout);
     commitGame({ ...previous, layoutWidth: width, layoutHeight: height, groups: reflowed.groups });
-  }, [width, height, commitGame]);
+  }, [width, height, commitGame, cancelDragFrame]);
 
   useEffect(() => {
     if (!snapping) return;
@@ -138,7 +145,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     return () => window.clearTimeout(timer);
   }, [snapping]);
 
-  const moveDrag = useCallback((clientX: number, clientY: number) => {
+  const applyDrag = useCallback((clientX: number, clientY: number) => {
     const moving = drag.current;
     const bounds = mat.current?.getBoundingClientRect();
     const currentLayout = layoutRef.current;
@@ -148,6 +155,30 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     moving.moved ||= Math.hypot(clientX - moving.startX, clientY - moving.startY) > 4;
     commitGame({ ...current, groups: positionPuzzleGroup(current.groups, moving.groupId, clientX - bounds.left - mat.current!.clientLeft - moving.offsetX, clientY - bounds.top - mat.current!.clientTop - moving.offsetY, current.pieces, currentLayout) });
   }, [commitGame]);
+
+  const moveDrag = useCallback((clientX: number, clientY: number) => {
+    const moving = drag.current;
+    if (!moving) return;
+    moving.clientX = clientX; moving.clientY = clientY;
+    moving.moved ||= Math.hypot(clientX - moving.startX, clientY - moving.startY) > 4;
+    if (dragFrame.current !== null) return;
+    dragFrame.current = requestAnimationFrame(() => {
+      dragFrame.current = null;
+      const latest = drag.current;
+      if (latest) applyDrag(latest.clientX, latest.clientY);
+    });
+  }, [applyDrag]);
+
+  const flushDrag = useCallback((clientX?: number, clientY?: number) => {
+    const moving = drag.current;
+    if (!moving) return;
+    if (clientX !== undefined && clientY !== undefined) {
+      moving.clientX = clientX; moving.clientY = clientY;
+      moving.moved ||= Math.hypot(clientX - moving.startX, clientY - moving.startY) > 4;
+    }
+    if (dragFrame.current !== null) { cancelAnimationFrame(dragFrame.current); dragFrame.current = null; }
+    applyDrag(moving.clientX, moving.clientY);
+  }, [applyDrag]);
 
   useEffect(() => {
     if (dragging === null || !active) return;
@@ -195,8 +226,9 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   const finishDrag = (event: PointerEvent<HTMLButtonElement>, cancelled = false) => {
     const moving = drag.current;
     if (!moving || moving.pointerId !== event.pointerId) return;
-    if (!cancelled) moveDrag(event.clientX, event.clientY);
-    drag.current = null; setDragging(null);
+    if (!cancelled) flushDrag(event.clientX, event.clientY);
+    else if (dragFrame.current !== null) { cancelAnimationFrame(dragFrame.current); dragFrame.current = null; }
+    cancelDragFrame(); drag.current = null; setDragging(null);
     if (!cancelled && moving.moved) settleGroup(moving.groupId);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
@@ -213,7 +245,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
 
   const restart = (level = difficulty) => {
     difficultyRef.current = level; setDifficulty(level);
-    drag.current = null; setDragging(null); setSelected(null); setNotice(''); setSnapping(null); z.current = 100;
+    cancelDragFrame(); drag.current = null; setDragging(null); setSelected(null); setNotice(''); setSnapping(null); z.current = 100;
     const previous = gameRef.current;
     if (previous) commitGame(freshGame(previous.row, previous, level, widthRef.current, heightRef.current));
   };
@@ -246,8 +278,12 @@ export function PuzzlePanel({ active }: { active: boolean }) {
         {game.pieces.map((piece) => {
           const group = membership.get(piece.id)!;
           const position = piecePosition(piece, group, game.pieces, layout);
-          const path = puzzlePiecePath(piece, layout);
-          const outline = puzzlePiecePath(piece, layout, groupCells.get(group.id));
+          const path = piecePaths.get(piece.id)!;
+          const cells = puzzleGroupGeometry(group, game.pieces).cells;
+          let outlines = outlinePaths.get(cells);
+          if (!outlines) { outlines = new Map(); outlinePaths.set(cells, outlines); }
+          let outline = outlines.get(piece.id);
+          if (outline === undefined) { outline = puzzlePiecePath(piece, layout, cells); outlines.set(piece.id, outline); }
           const clip = `${clipPrefix}-${piece.id}`;
           const w = layout.cellWidth + layout.padding * 2; const h = layout.cellHeight + layout.padding * 2;
           const snappingPiece = snapping?.pieceIds.includes(piece.id);

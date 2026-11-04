@@ -27,18 +27,9 @@ interface ThumbSpec {
 
 function loadImage(src: string): Promise<ImageBitmap> {
   const url = src.trim();
-  if (url.startsWith('blob:') || url.startsWith('data:')) {
-    return fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error(`fetch failed ${r.status}: ${url}`);
-        return r.blob();
-      })
-      .then((blob) => createImageBitmap(blob));
-  }
-  // Absolute same-origin path (e.g. /影画样式1/xxx.PNG).
   return fetch(url)
     .then((r) => {
-      if (!r.ok) throw new Error(`fetch failed ${r.status}: ${url}`);
+      if (!r.ok) throw new Error(`fetch failed ${r.status}: ${url.slice(0, 80)}`);
       return r.blob();
     })
     .then((blob) => createImageBitmap(blob));
@@ -50,6 +41,15 @@ self.onmessage = async (e: MessageEvent) => {
   // Cast once after the type guard — TypeScript can't narrow through try/catch.
   const isStitch = msg && typeof msg === 'object' && msg.type === 'stitch';
   const isEmbed  = msg && typeof msg === 'object' && msg.type === 'embedThumbnail';
+  const decoded: ImageBitmap[] = [];
+  let finished = false;
+  const load = async (source: string) => {
+    const bitmap = await loadImage(source);
+    // A sibling decode may have failed while this one was still loading.
+    if (finished) bitmap.close?.();
+    else decoded.push(bitmap);
+    return bitmap;
+  };
 
   try {
     if (isStitch) {
@@ -60,7 +60,7 @@ self.onmessage = async (e: MessageEvent) => {
         return;
       }
       if (urls.length === 1) {
-        const bmp = await loadImage(urls[0]);
+        const bmp = await load(urls[0]);
         const oc = new OffscreenCanvas(bmp.width, bmp.height);
         const ctx = oc.getContext('2d')!;
         ctx.drawImage(bmp, 0, 0);
@@ -69,7 +69,7 @@ self.onmessage = async (e: MessageEvent) => {
         return;
       }
 
-      const bitmaps = await Promise.all(urls.map(loadImage));
+      const bitmaps = await Promise.all(urls.map(load));
       const maxH = Math.min(
         Math.max(...bitmaps.map((b) => b.height)),
         MAX_STITCH_HEIGHT,
@@ -90,8 +90,8 @@ self.onmessage = async (e: MessageEvent) => {
     } else if (isEmbed) {
       const req = msg as { base: string; thumbs: ThumbSpec[] };
       const [baseBmp, ...thumbBmps] = await Promise.all([
-        loadImage(req.base),
-        ...req.thumbs.map((t) => loadImage(t.url)),
+        load(req.base),
+        ...req.thumbs.map((t) => load(t.url)),
       ]);
 
       const oc = new OffscreenCanvas(baseBmp.width, baseBmp.height);
@@ -153,5 +153,8 @@ self.onmessage = async (e: MessageEvent) => {
       type: 'error',
       message: err instanceof Error ? err.message : 'unknown worker error',
     });
+  } finally {
+    finished = true;
+    for (const bitmap of decoded) bitmap.close?.();
   }
 };

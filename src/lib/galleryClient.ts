@@ -89,6 +89,11 @@ export function galleryImageProxyUrl(imageUrl: string): string {
   return `${API_BASE}/proxy-image?url=${encodeURIComponent(imageUrl)}`;
 }
 
+/** Fixed-size public thumbnails; arbitrary source URLs and resize options are not accepted. */
+export function galleryThumbnailUrl(id: number | string): string {
+  return `${API_BASE}/gallery/${encodeURIComponent(String(id))}/thumbnail`;
+}
+
 /** Persist a generated piece to the gallery via the server (service-role key). */
 export async function saveToGallery(input: GallerySaveInput): Promise<GallerySaveResult> {
   const response = await fetch(`${API_BASE}/gallery`, {

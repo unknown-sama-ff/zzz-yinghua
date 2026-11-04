@@ -174,6 +174,7 @@ try {
   check('mouse drag joins correct neighbors; snap animation; dragging either member moves the whole; two subgroups merge');
   await nav.getByRole('link', { name: '首页', exact: true }).click();
   await nav.getByRole('link', { name: '美图拼图', exact: true }).click();
+  await page.locator('.puzzle-mat').waitFor({ state: 'visible' });
   assert.equal(await fragment(page, 0).getAttribute('data-group-size'), '4');
   await page.setViewportSize({ width: 1440, height: 800 });
   await page.waitForFunction(() => { const el = document.querySelector('.puzzle-mat'); return el.getBoundingClientRect().bottom <= innerHeight + 1; });
@@ -268,6 +269,39 @@ try {
   assert.equal(await page.locator('.puzzle-piece').count(), 24);
   await page.getByRole('button', { name: /困难/ }).click();
   assert.equal(await page.locator('.puzzle-piece').count(), 48);
+  const dragPerformance = await page.evaluate(async () => {
+    const piece = document.querySelector('.puzzle-piece');
+    const rect = piece.getBoundingClientRect();
+    const x = rect.x + rect.width / 2; const y = rect.y + rect.height / 2;
+    // Discrete events force React to commit each sample: high-rate pen/mouse input
+    // must still produce at most one position update per animation frame.
+    let updates = 0;
+    const observe = new MutationObserver((records) => { updates += records.filter((record) => record.attributeName === 'style').length; });
+    observe.observe(piece, { attributes: true, attributeFilter: ['style'] });
+    const send = (type, dx, dy) => piece.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 71, pointerType: 'pen', button: 0, clientX: x + dx, clientY: y + dy }));
+    const capture = piece.setPointerCapture; piece.setPointerCapture = () => {};
+    send('pointerdown', 0, 0);
+    await new Promise(requestAnimationFrame);
+    updates = 0;
+    const begin = performance.now();
+    for (let frame = 0; frame < 8; frame++) {
+      await new Promise(requestAnimationFrame);
+      for (let sample = 0; sample < 12; sample++) {
+        send('pointermove', frame * 4 + sample / 3, 12);
+        await Promise.resolve();
+      }
+    }
+    // Release differs from the last move; it must be synchronously applied.
+    send('pointerup', 47, 23);
+    await new Promise(requestAnimationFrame);
+    const released = piece.style.transform;
+    await new Promise(requestAnimationFrame);
+    if (released !== piece.style.transform) throw new Error('A pending drag frame overwrote the released position');
+    if (updates > 10) throw new Error(`96 pointer samples caused ${updates} position updates`);
+    observe.disconnect(); piece.setPointerCapture = capture;
+    return { pointerMoves: 96, positionUpdates: updates, durationMs: Math.round(performance.now() - begin) };
+  });
+  console.log('PERF puzzle hard drag ' + JSON.stringify(dragPerformance));
   await page.getByRole('button', { name: '换一张', exact: true }).click();
   await page.getByText(/自由创作.*8 列 × 6 行/).waitFor();
   assert.equal(await page.locator('.puzzle-mat').getAttribute('data-group-count'), '48');

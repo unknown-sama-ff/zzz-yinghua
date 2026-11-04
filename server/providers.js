@@ -14,12 +14,12 @@ import {
 import { pluckImages } from './lib/pluckImages.js';
 import { contentRejectionError } from './lib/contentRejection.js';
 import sharp from 'sharp';
+import { prepareEditImages } from './lib/prepareEditImages.js';
 import {
   POLL_DEADLINE_MS,
   DEFAULT_TIMEOUT_MS,
   MAX_COMPRESS_DIM,
   MAX_HIGH_FIDELITY_EDIT_DIM,
-  JPEG_QUALITY,
   RETRY_RESIZE_DIM,
   RETRY_SIZE_KB_THRESHOLD,
   RETRY_JPEG_QUALITY,
@@ -323,89 +323,16 @@ async function gptImage(req) {
       ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
     }
     const payloadBytes = buffer.length;
-    let processedBuffer = buffer;
-    let processedMime = mime;
-    let processedExt = ext;
     const requestedMaxDim = Number(req.inputImageMaxDimension);
     const imageMaxDim = Number.isInteger(requestedMaxDim)
       ? Math.min(Math.max(requestedMaxDim, MAX_COMPRESS_DIM), MAX_HIGH_FIDELITY_EDIT_DIM)
       : MAX_COMPRESS_DIM;
     const preserveInputQuality = req.preserveInputQuality === true;
     const rawReferences = Array.isArray(req.refImages) ? req.refImages : [];
-    const processedReferences = await Promise.all(rawReferences.map(async (reference) => {
-      const referenceBuffer = Buffer.from(reference.base64, 'base64');
-      const referenceMime = reference.mime || 'image/png';
-      const referenceExt = referenceMime === 'image/jpeg' || referenceMime === 'image/jpg' ? 'jpg' : 'png';
-      let buffer = referenceBuffer;
-      let mime = referenceMime;
-      let ext = referenceExt;
-      try {
-        const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
-        const needsResize = meta.width && meta.height && (meta.width > imageMaxDim || meta.height > imageMaxDim);
-        const needsFormatChange = preserveInputQuality
-          ? !['image/png', 'image/jpeg'].includes(mime)
-          : mime !== 'image/jpeg';
-        if (needsResize || needsFormatChange) {
-          const pipeline = sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS });
-          if (needsResize) pipeline.resize(imageMaxDim, imageMaxDim, { fit: 'inside', withoutEnlargement: true });
-          if (needsFormatChange) {
-            if (preserveInputQuality) {
-              mime = 'image/png';
-              ext = 'png';
-              pipeline.png();
-            } else {
-              mime = 'image/jpeg';
-              ext = 'jpg';
-              pipeline.jpeg({ quality: JPEG_QUALITY });
-            }
-          } else if (preserveInputQuality && needsResize) {
-            mime = 'image/png';
-            ext = 'png';
-            pipeline.png();
-          }
-          buffer = await pipeline.toBuffer();
-        }
-      } catch (e) {
-        console.warn(`[gpt-image] reference processing failed, using original: ${e.message}`);
-      }
-      return { buffer, mime, ext };
-    }));
     console.log(`[gpt-image] edits payload (raw): ${payloadBytes} bytes (${(payloadBytes/1024).toFixed(1)} KB) mime=${mime} ext=${ext}`);
-    try {
-      const maxDim = imageMaxDim;
-      const jpegQuality = JPEG_QUALITY;
-      const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
-      const needsResize = meta.width && meta.height && (meta.width > maxDim || meta.height > maxDim);
-      const needsFormatChange = preserveInputQuality
-        ? !['image/png', 'image/jpeg'].includes(mime)
-        : mime !== 'image/jpeg';
-      if (needsResize || needsFormatChange) {
-        const pipeline = sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS });
-        if (needsResize) {
-          pipeline.resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true });
-        }
-        if (needsFormatChange) {
-          if (preserveInputQuality) {
-            processedMime = 'image/png';
-            processedExt = 'png';
-            pipeline.png();
-          } else {
-            processedMime = 'image/jpeg';
-            processedExt = 'jpg';
-            pipeline.jpeg({ quality: jpegQuality });
-          }
-        } else if (preserveInputQuality && needsResize) {
-          // Resizing a JPEG must be re-encoded, so use lossless PNG afterward.
-          processedMime = 'image/png';
-          processedExt = 'png';
-          pipeline.png();
-        }
-        processedBuffer = await pipeline.toBuffer();
-        console.log(`[gpt-image] server-side processed: ${payloadBytes} -> ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) maxDim=${maxDim} resize=${needsResize} format=${needsFormatChange ? 'to-jpeg' : 'unchanged'}`);
-      }
-    } catch (e) {
-      console.warn(`[gpt-image] server-side processing failed, using original: ${e.message}`);
-    }
+    const [{ buffer: processedBuffer, mime: processedMime, ext: processedExt }, ...processedReferences] = await prepareEditImages(
+      [{ buffer, mime }, ...rawReferences], { maxDimension: imageMaxDim, preserveInputQuality },
+    );
 
     console.log(`[gpt-image] edits payload: ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) mime=${processedMime} ext=${processedExt} size=${size || 'default'} references=${processedReferences.length}`);
     const inputImages = [

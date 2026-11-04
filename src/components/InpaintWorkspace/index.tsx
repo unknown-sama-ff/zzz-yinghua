@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, memo } from 'react';
+import { useRef, useState, memo } from 'react';
 import { useInpaintStore } from '../../store/useInpaintStore';
 import { useToast } from '../../store/useToast';
 import { ToolPanel } from './ToolPanel';
@@ -13,7 +13,6 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
   const targetImage = useInpaintStore((s) => s.targetImage);
   const setTargetImage = useInpaintStore((s) => s.setTargetImage);
   const closeWorkspace = useInpaintStore((s) => s.closeWorkspace);
-  const setMaskDataUrl = useInpaintStore((s) => s.setMaskDataUrl);
   const versions = useInpaintStore((s) => s.versions);
   const currentVersionId = useInpaintStore((s) => s.currentVersionId);
   const currentVersionUrl = useInpaintStore((s) => s.currentVersionUrl);
@@ -55,10 +54,6 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
       setIsApplying(false);
     }
   };
-
-  const handleMaskEmpty = useCallback(() => {
-    setMaskDataUrl(null);
-  }, [setMaskDataUrl]);
 
   if (!isWorkspaceOpen || !targetImage || !currentVersionUrl) return null;
 
@@ -167,10 +162,7 @@ export const InpaintWorkspace = memo(function InpaintWorkspace() {
 
       <div className="flex flex-1 overflow-hidden">
         <ToolPanel />
-        <CanvasEditor
-          onMaskChange={(dataUrl) => setMaskDataUrl(dataUrl)}
-          onMaskEmpty={handleMaskEmpty}
-        />
+        <CanvasEditor />
       </div>
 
       <PromptBar />

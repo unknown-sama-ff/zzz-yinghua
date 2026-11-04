@@ -16,6 +16,7 @@
 import crypto from 'node:crypto';
 import sharp from 'sharp';
 import { MAX_INPUT_PIXELS } from './lib/constants.js';
+import { createGalleryThumbnailService, encodeGalleryThumbnail, galleryThumbnailPath } from './lib/galleryThumbnails.js';
 
 const MAX_GALLERY_IMAGE_BYTES = 10 * 1024 * 1024;
 const DELETE_TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
@@ -69,7 +70,7 @@ function storagePathFromPublicUrl(publicUrl) {
   }
 }
 
-export async function saveGalleryItem({ imageBase64, style, characterName, prompt, provider, deleteToken }) {
+export async function saveGalleryItem({ imageBase64, style, characterName, prompt, provider, deleteToken }, storageClient) {
   if (typeof imageBase64 !== 'string' || !imageBase64) {
     throw new GalleryStorageError('缺少图片数据');
   }
@@ -96,35 +97,39 @@ export async function saveGalleryItem({ imageBase64, style, characterName, promp
     throw new GalleryStorageError('图片数据无效（仅支持 PNG/JPEG/WebP）');
   }
 
-  const supabase = await db();
-  const path = `gallery/${Date.now()}-${crypto.randomBytes(6).toString('hex')}.webp`;
-  const { error: uploadError } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, uploadBuffer, {
-      contentType: 'image/webp',
-      cacheControl: 'public, max-age=31536000, immutable',
-      upsert: false,
-    });
-  if (uploadError) throw new GalleryStorageError(`画廊图片上传失败: ${uploadError.message}`);
+  const thumbnail = await encodeGalleryThumbnail(uploadBuffer);
+  const supabase = storageClient || await db();
+  const path = `gallery/${Date.now()}-${crypto.randomBytes(6).toString('hex')}-full.webp`;
+  const thumbnailPath = galleryThumbnailPath(path);
+  const storage = supabase.storage.from(BUCKET);
+  let row;
+  try {
+    for (const [objectPath, bytes] of [[path, uploadBuffer], [thumbnailPath, thumbnail]]) {
+      const { error } = await storage.upload(objectPath, bytes, { contentType: 'image/webp', cacheControl: '31536000', upsert: false });
+      if (error) throw new GalleryStorageError(`画廊图片上传失败: ${error.message}`);
+    }
 
-  const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  const { data: row, error: insertError } = await supabase
-    .from('gallery')
-    .insert({
-      image_url: publicData.publicUrl,
-      style: str(style, 100),
-      character_name: str(characterName, 100),
-      prompt: str(prompt, 2000),
-      provider: str(provider, 50),
-      delete_token_hash: crypto.createHash('sha256').update(deleteToken).digest('hex'),
-    })
-    .select('id, image_url, style, character_name, prompt, provider, created_at')
-    .single();
-  if (insertError) {
-    // Roll back the orphaned storage object.
-    await supabase.storage.from(BUCKET).remove([path]).catch(() => {});
-    throw new GalleryStorageError(`画廊记录保存失败: ${insertError.message}`);
+    const { data: publicData } = storage.getPublicUrl(path);
+    const { data: savedRow, error: insertError } = await supabase
+      .from('gallery')
+      .insert({
+        image_url: publicData.publicUrl,
+        style: str(style, 100),
+        character_name: str(characterName, 100),
+        prompt: str(prompt, 2000),
+        provider: str(provider, 50),
+        delete_token_hash: crypto.createHash('sha256').update(deleteToken).digest('hex'),
+      })
+      .select('id, image_url, style, character_name, prompt, provider, created_at')
+      .single();
+    if (insertError) throw new GalleryStorageError(`画廊记录保存失败: ${insertError.message}`);
+    row = savedRow;
+  } catch (error) {
+    // Roll back both objects, including rejected network promises and DB errors.
+    await storage.remove([path, thumbnailPath]).catch(() => {});
+    throw error;
   }
+  galleryThumbnails.prime(row, thumbnail);
   return ensureOk({ data: row }, '画廊记录保存失败');
 }
 
@@ -140,7 +145,9 @@ export async function listGallery(limit = 20, offset = 0) {
     .select('id, image_url, style, character_name, prompt, provider, created_at')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
-  return ensureOk(result, '查询画廊失败');
+  const rows = ensureOk(result, '查询画廊失败');
+  galleryThumbnails.remember(rows);
+  return rows;
 }
 
 /** Public metadata only; the layer service validates the id and eligible source style. */
@@ -149,7 +156,7 @@ export async function getGalleryImage(id) {
   return ensureOk(await supabase.from('gallery').select('image_url, style').eq('id', id).maybeSingle(), '查询画廊作品失败');
 }
 
-export async function deleteGalleryItem({ id, deleteToken }) {
+export async function deleteGalleryItem({ id, deleteToken }, storageClient) {
   // Accept both integer and UUID ids (the table may use either).
   const validId = Number.isInteger(id)
     ? id > 0
@@ -161,7 +168,7 @@ export async function deleteGalleryItem({ id, deleteToken }) {
   if (!DELETE_TOKEN_RE.test(deleteToken || '')) {
     throw new GalleryStorageError('删除凭证无效');
   }
-  const supabase = await db();
+  const supabase = storageClient || await db();
   const rowResult = await supabase
     .from('gallery')
     .select('id, image_url, delete_token_hash')
@@ -175,11 +182,14 @@ export async function deleteGalleryItem({ id, deleteToken }) {
 
   const objectPath = storagePathFromPublicUrl(row.image_url);
   if (objectPath) {
-    await supabase.storage.from(BUCKET).remove([objectPath]).catch((e) => {
+    await supabase.storage.from(BUCKET).remove([objectPath, galleryThumbnailPath(objectPath)].filter(Boolean)).catch((e) => {
       console.warn(`[gallery] storage remove failed: ${e?.message}`);
     });
   }
-  const deleteResult = await supabase.from('gallery').delete().eq('id', id);
+  const deleteResult = await supabase.from('gallery').delete().eq('id', idValue);
   if (deleteResult.error) throw new GalleryStorageError(`画廊记录删除失败: ${deleteResult.error.message}`);
+  galleryThumbnails.invalidate(idValue);
   return { ok: true };
 }
+
+export const galleryThumbnails = createGalleryThumbnailService({ lookupImage: getGalleryImage });

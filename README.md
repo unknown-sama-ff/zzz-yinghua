@@ -108,6 +108,8 @@ npm start              # Node 代理同时托管 dist/ 静态资源
 
 ## 可访问性 / 性能
 
+- 画廊列表通过 `GET /api/gallery/:id/thumbnail` 读取最长边 640px 的 WebP，放大查看沿用原图。新作品成对保存 `-full.webp` 和 `-thumb.webp`，失败时回滚两份对象，删除时一起清理。无需新增数据库字段；旧作品按需生成缩略图，列表读取结果会预热元数据以减少重复查询。服务端最多并发两项任务，结果缓存限制为 16 MiB / 256 项、有效期一小时；失败会回退现有图片代理。浏览器回归见 `tests/browser/gallery-thumbnails-smoke.mjs`（存储读写均使用模拟服务）。
+
 - 按钮 Tab 聚焦 + Enter 触发，含 ARIA 标签。
 - 图片懒加载，结果区骨架屏占位。
 - 切换特效 `prefers-reduced-motion` 降级为简单淡入淡出。

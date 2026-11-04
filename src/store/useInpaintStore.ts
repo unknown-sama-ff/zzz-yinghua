@@ -26,7 +26,11 @@ interface InpaintState {
 
   // --- Mask ---
   maskDataUrl: string | null;
+  hasMask: boolean;
+  /** Only external mask imports/clears advance this; brush pixels stay on canvas. */
+  maskRevision: number;
   setMaskDataUrl: (d: string | null) => void;
+  setMaskContent: (hasMask: boolean) => void;
   brushSize: number;
   setBrushSize: (s: number) => void;
   featherRadius: number;
@@ -66,6 +70,8 @@ function createInitialState() {
     currentVersionUrl: null as string | null,
     mode: 'smart' as const,
     maskDataUrl: null as string | null,
+    hasMask: false,
+    maskRevision: 0,
     prompt: '',
     brushSize: 24,
     featherRadius: 12,
@@ -99,6 +105,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
       currentVersionUrl: root.url,
       mode: 'smart',
       maskDataUrl: null,
+      hasMask: false,
       history: [],
       prompt: '',
       isGenerating: false,
@@ -115,6 +122,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
       currentVersionId: null,
       currentVersionUrl: null,
       maskDataUrl: null,
+      hasMask: false,
       history: [],
       prompt: '',
       isGenerating: false,
@@ -129,6 +137,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
       currentVersionId: version.id,
       currentVersionUrl: version.url,
       maskDataUrl: null,
+      hasMask: false,
       history: [],
     });
   },
@@ -148,6 +157,7 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
       currentVersionId: version.id,
       currentVersionUrl: version.url,
       maskDataUrl: null,
+      hasMask: false,
       history: [],
       prompt: '',
     }));
@@ -156,7 +166,8 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
 
   setMode: (mode) => set({ mode }),
 
-  setMaskDataUrl: (maskDataUrl) => set({ maskDataUrl }),
+  setMaskDataUrl: (maskDataUrl) => set((state) => ({ maskDataUrl, hasMask: Boolean(maskDataUrl), maskRevision: state.maskRevision + 1 })),
+  setMaskContent: (hasMask) => set({ hasMask, maskDataUrl: null }),
   setBrushSize: (brushSize) => set({ brushSize: Math.max(5, Math.min(80, brushSize)) }),
   setFeatherRadius: (featherRadius) => set({ featherRadius: Math.max(0, Math.min(30, featherRadius)) }),
   setTool: (tool) => set({ tool }),
@@ -174,10 +185,10 @@ export const useInpaintStore = create<InpaintState>((set, get) => ({
     const { history } = get();
     if (history.length === 0) return;
     const previous = history[history.length - 1];
-    set({ maskDataUrl: previous, history: history.slice(0, -1) });
+    set((state) => ({ maskDataUrl: previous, hasMask: Boolean(previous), maskRevision: state.maskRevision + 1, history: history.slice(0, -1) }));
   },
 
-  clearMask: () => set({ maskDataUrl: null, history: [] }),
+  clearMask: () => set((state) => ({ maskDataUrl: null, hasMask: false, maskRevision: state.maskRevision + 1, history: [] })),
 
   setPrompt: (prompt) => set({ prompt }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),

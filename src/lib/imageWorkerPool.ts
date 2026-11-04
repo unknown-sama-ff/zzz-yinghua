@@ -1,4 +1,4 @@
-// ─── Main-thread pool: one Worker + in-flight cache + Blob→dataURL cache ────
+// ─── Main-thread pool: one Worker + bounded result/in-flight cache ───────────
 //
 // Exposes the same async signature as the original stitchImages/embedThumbnail:
 //   Promise<string>  (data-URL, ready for <img src> or parseDataUrl())
@@ -24,27 +24,13 @@ export interface ThumbEntry {
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
 
-// stitchImages: key = JSON of the stable input signature
-type StitchKey = string;
-// embedThumbnail(s): key = JSON of [baseDataUrl, thumbsArray, size]
-type EmbedKey = string;
-
-interface CacheEntry {
-  dataUrl: string;
-  ts: number;
-}
 import { CACHE_TTL_MS, CACHE_PURGE_INTERVAL_MS, WORKER_TIMEOUT_MS, MAX_STITCH_HEIGHT } from './constants';
-const stitchCache = new Map<StitchKey, CacheEntry>();
-const embedCache = new Map<EmbedKey, CacheEntry>();
-const structureAnchorCache = new Map<string, CacheEntry>();
+import { ImageResultCache, imageResultKey } from './imageResultCache';
+// One shared 32 MiB upper estimate, rather than three unbounded data-URL maps.
+const resultCache = new ImageResultCache(32 * 1024 * 1024, 24, CACHE_TTL_MS);
 
 // Purge expired entries every 60 s; Map iteration is O(n) but n is tiny.
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of stitchCache) if (now - v.ts > CACHE_TTL_MS) stitchCache.delete(k);
-  for (const [k, v] of embedCache)   if (now - v.ts > CACHE_TTL_MS) embedCache.delete(k);
-  for (const [k, v] of structureAnchorCache) if (now - v.ts > CACHE_TTL_MS) structureAnchorCache.delete(k);
-}, CACHE_PURGE_INTERVAL_MS);
+setInterval(() => resultCache.purgeExpired(), CACHE_PURGE_INTERVAL_MS);
 
 // ── Worker reference ──────────────────────────────────────────────────────────
 
@@ -135,37 +121,6 @@ function sendToWorker(w: Worker, payload: Msg): Promise<string> {
   });
 }
 
-// ── Cache helpers ─────────────────────────────────────────────────────────────
-
-async function cachedOrRun<K extends StitchKey | EmbedKey>(
-  cache: Map<K, CacheEntry>,
-  key: K,
-  run: () => Promise<string>, // run() does its own Blob → dataUrl conversion
-): Promise<string> {
-  const now = Date.now();
-  const hit = cache.get(key);
-  if (hit && now - hit.ts < CACHE_TTL_MS) return hit.dataUrl;
-
-  // Dedupe in-flight requests with the same key.
-  const inflight = (cache as any)._inflight as Map<K, Promise<string>> | undefined;
-  if (inflight?.has(key)) return inflight.get(key)!;
-
-  const task = run().then((dataUrl) => {
-    // Revoke any stale object URL we may have handed out earlier for the same key.
-    const prev = cache.get(key);
-    if (prev?.dataUrl.startsWith('blob:')) URL.revokeObjectURL(prev.dataUrl);
-
-    cache.set(key, { dataUrl, ts: Date.now() });
-    return dataUrl;
-  }).finally(() => {
-    (cache as any)._inflight?.delete(key);
-  });
-
-  if (!inflight) (cache as any)._inflight = new Map<K, Promise<string>>();
-  (cache as any)._inflight.set(key, task);
-  return task;
-}
-
 async function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -175,7 +130,14 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-// ── Main-thread fallback (canvas + toDataURL) ──────────────────────────────────
+function canvasToDataUrl(canvas: HTMLCanvasElement): Promise<string> {
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => {
+    if (!blob) return reject(new Error('canvas.toBlob returned null'));
+    blobToDataUrl(blob).then(resolve, reject);
+  }, 'image/png'));
+}
+
+// ── Main-thread fallback (canvas + asynchronous PNG encoding) ─────────────────
 
 async function fallbackStitch(dataUrls: string[]): Promise<string> {
   const urls = dataUrls.filter((u) => u && u.trim().length > 0);
@@ -187,7 +149,7 @@ async function fallbackStitch(dataUrls: string[]): Promise<string> {
     oc.height = img.naturalHeight;
     const ctx = oc.getContext('2d')!;
     ctx.drawImage(img, 0, 0);
-    return oc.toDataURL('image/png');
+    return canvasToDataUrl(oc);
   }
 
   const imgs = await Promise.all(urls.map(loadImg));
@@ -207,15 +169,7 @@ async function fallbackStitch(dataUrls: string[]): Promise<string> {
     ctx.drawImage(imgs[i], x, 0, scaledWidths[i], maxH);
     x += scaledWidths[i];
   }
-  return new Promise((resolve, reject) => {
-    c.toBlob(
-      (blob) => {
-        if (!blob) return reject(new Error('canvas.toBlob returned null'));
-        blobToDataUrl(blob).then(resolve, reject);
-      },
-      'image/png',
-    );
-  });
+  return canvasToDataUrl(c);
 }
 
 async function fallbackEmbed(
@@ -277,15 +231,7 @@ async function fallbackEmbed(
     rightX += t.w + margin;
   }
 
-  return new Promise((resolve, reject) => {
-    c.toBlob(
-      (blob) => {
-        if (!blob) return reject(new Error('canvas.toBlob returned null'));
-        blobToDataUrl(blob).then(resolve, reject);
-      },
-      'image/png',
-    );
-  });
+  return canvasToDataUrl(c);
 }
 
 /**
@@ -323,15 +269,7 @@ async function fallbackExtractFrontViewStructureAnchor(source: string): Promise<
     image.naturalHeight,
   );
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return reject(new Error('canvas.toBlob returned null'));
-        blobToDataUrl(blob).then(resolve, reject);
-      },
-      'image/png',
-    );
-  });
+  return canvasToDataUrl(canvas);
 }
 
 function loadImg(url: string): Promise<HTMLImageElement> {
@@ -346,17 +284,18 @@ function loadImg(url: string): Promise<HTMLImageElement> {
 // ── Public API (mirrors original stitchImages / embedThumbnail signatures) ─────
 
 export async function stitchImages(dataUrls: (string | null | undefined)[]): Promise<string> {
-  const key = JSON.stringify(dataUrls) as StitchKey;
-  return cachedOrRun(stitchCache, key, async () => {
+  const urls = dataUrls.filter((url): url is string => Boolean(url && url.trim()));
+  const key = await imageResultKey('stitch', urls);
+  return resultCache.run(key, async () => {
     const w = getWorker();
     if (w) {
       try {
-        return await sendToWorker(w, { type: 'stitch', op: 'stitch', dataUrls: dataUrls as string[] });
+        return await sendToWorker(w, { type: 'stitch', op: 'stitch', dataUrls: urls });
       } catch {
         // Worker died mid-flight: fall through to main thread.
       }
     }
-    return fallbackStitch(dataUrls as string[]);
+    return fallbackStitch(urls);
   });
 }
 
@@ -385,8 +324,8 @@ export async function embedThumbnails(
   base: string,
   thumbs: ThumbEntry[],
 ): Promise<string> {
-  const key = JSON.stringify([base, thumbs]) as EmbedKey;
-  return cachedOrRun(embedCache, key, async () => {
+  const key = await imageResultKey('embed', [base, ...thumbs.map((thumb) => thumb.url)], thumbs.map((thumb) => [thumb.size ?? 0.2, thumb.position]));
+  return resultCache.run(key, async () => {
     const w = getWorker();
     if (w) {
       try {
@@ -414,9 +353,9 @@ export async function embedThumbnails(
  * caller simply keeps the original two-reference edit path.
  */
 export async function extractFrontViewStructureAnchor(source: string): Promise<string | null> {
-  const key = `front-structure-v1:${source}`;
   try {
-    return await cachedOrRun(structureAnchorCache, key, async () => {
+    const key = await imageResultKey('front-structure-v1', [source]);
+    return await resultCache.run(key, async () => {
       const anchor = await fallbackExtractFrontViewStructureAnchor(source);
       if (!anchor) throw new Error('reference is not a horizontal three-view');
       return anchor;
