@@ -15,6 +15,8 @@ import {
   parseJsonSafe,
   codeFromStatus,
   assertSafeUrl,
+  installSecureFetch,
+  logUrlOrigin,
 } from './http.js';
 import { createRateLimiter, requestKey, consumePresetBudget } from './lib/rateLimit.js';
 import {
@@ -57,12 +59,15 @@ import {
   verifyAndDecryptNotify,
 } from './payments/wechat.js';
 import { parseSponsorName } from './payments/sponsorName.js';
-import { GalleryStorageError, deleteGalleryItem, listGallery, saveGalleryItem } from './gallery.js';
+import { GalleryStorageError, deleteGalleryItem, getGalleryImage, listGallery, saveGalleryItem } from './gallery.js';
 import { PromptGalleryError, deletePrompt, listPrompts, savePrompt } from './promptGallery.js';
 import { createImageToPromptHandler } from './imageToPrompt.js';
+import { createPuzzleLayersRouter } from './parallax/router.js';
 
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
 loadEnv();
+// Upgrade Node's bundled fetch implementation together with the audited dependency.
+installSecureFetch();
 
 import { TASK_TTL_MS, MAX_UPLOAD_BYTES, MAX_FETCH_BYTES, FREE_CREATE_MAX_INPUT_IMAGES } from './lib/constants.js';
 
@@ -102,20 +107,35 @@ app.use(
     credentials: true,
   }),
 );
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const signedNotification = req.path === '/api/payments/alipay/notify' || req.path === '/api/payments/wechat/notify';
+  if (origin && !ALLOWED_ORIGINS.has(origin) && !['GET', 'HEAD'].includes(req.method) && !signedNotification) {
+    return res.status(403).json({ ok: false, code: 'FORBIDDEN', message: '请求来源不受信任' });
+  }
+  next();
+});
 // Capture the raw request body for the WeChat Pay notify endpoint — its
 // signature is computed over the exact raw bytes, so a re-serialized JSON body
 // would fail verification. express.raw sets req._body, so the global
 // express.json below skips this path and the stream is never double-consumed.
 app.use('/api/payments/wechat/notify', express.raw({ type: '*/*', limit: '100kb' }));
+app.use('/api/payments/alipay/notify', (req, res, next) => {
+  if (req.method === 'POST' && !req.is('application/x-www-form-urlencoded')) return res.status(400).type('text/plain').send('fail');
+  next();
+}, express.urlencoded({ extended: false, limit: '100kb' }));
 
 // Large limit to accommodate base64 image uploads. Three-view stitching tiles
 // several images into one PNG, whose base64 is ~33% larger than the bytes —
 // hence the generous ceiling beyond any single 10MB upload.
-app.use(express.json({ limit: '50mb' }));
+const parseImageJson = express.json({ limit: '50mb' });
+const parseMetadataJson = express.json({ limit: '256kb' });
+const IMAGE_JSON_ROUTES = new Set(['/api/generate', '/api/detect-face', '/api/gallery', '/api/composite']);
+app.use((req, res, next) => (IMAGE_JSON_ROUTES.has(req.path) ? parseImageJson : parseMetadataJson)(req, res, next));
 
 // Multer for multipart/form-data (inpaint endpoint).
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } });
-const promptUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 3 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 16, fields: 32, parts: 49 } });
+const promptUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 3, fields: 8, parts: 12 } });
 
 // ── Security hardening ───────────────────────────────────────────────────────
 // Baseline response headers. A stricter SPA-level CSP is deliberately NOT added
@@ -137,9 +157,8 @@ const rateLimit = createRateLimiter({
   max: RATE_LIMIT_MAX,
   windowMs: RATE_LIMIT_WINDOW_MS,
   // Prefer a verified identity for the bucket: a mini-program user's session
-  // openid, else the visitor cookie, else the real client IP. The visitor
-  // cookie is only issued after the first payment order, so the openid branch
-  // matters for mini-program traffic that never touches payments.
+  // openid, else the trusted client IP. A caller-chosen cookie cannot reset
+  // the anonymous request bucket.
   keyFn: (req) => {
     const identity = resolveIdentity(req);
     if (identity?.kind === 'openid') return `openid:${identity.hash}`;
@@ -228,7 +247,10 @@ function getCookie(req, name) {
   const cookies = String(req.headers.cookie || '').split(';');
   for (const cookie of cookies) {
     const [key, ...value] = cookie.trim().split('=');
-    if (key === name) return decodeURIComponent(value.join('='));
+    if (key === name) {
+      try { const token = decodeURIComponent(value.join('=')); return token.length <= 256 ? token : null; }
+      catch { return null; }
+    }
   }
   return null;
 }
@@ -371,7 +393,7 @@ app.get('/api/payments/orders/:orderNo', rateLimit, async (req, res) => {
   }
 });
 
-app.post('/api/payments/alipay/notify', notifyRateLimit, express.urlencoded({ extended: false, limit: '100kb' }), async (req, res) => {
+app.post('/api/payments/alipay/notify', notifyRateLimit, async (req, res) => {
   const params = { ...req.body };
   try {
     if (!params.app_id || !params.out_trade_no || !params.total_amount || !params.trade_status || !params.sign) {
@@ -545,6 +567,7 @@ registerTaskStore({
 });
 
 app.get('/api/task/:id', taskRateLimit, (req, res) => {
+  res.set('Cache-Control', 'no-store');
   const { id } = req.params;
   const task = taskStore.get(id);
   if (!task) return fail(res, 404, 'NOT_FOUND', '任务不存在或已过期');
@@ -656,7 +679,7 @@ app.post('/api/generate', rateLimit, upload.fields([
 });
 
 function createTaskId() {
-  return `T${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+  return crypto.randomUUID();
 }
 
 /** Copy an executeGeneration outcome into a taskStore entry for polling. */
@@ -792,7 +815,7 @@ async function executeGeneration(body, idempotencyKey) {
   }
 
   console.log(
-    `[generate] provider=${provider} hasImage=${hasImage} size=${body.size || 'default'} endpoint=${body.customEndpoint || body.baseUrl || '(env/default)'}${operation}`,
+    `[generate] provider=${provider} hasImage=${hasImage} endpoint=${body.customEndpoint || body.baseUrl ? logUrlOrigin(body.customEndpoint || body.baseUrl) : '(env/default)'}${operation}`,
   );
 
   try {
@@ -961,7 +984,7 @@ app.post('/api/detect-face', rateLimit, async (req, res) => {
   if (!resolvedModel) {
     return fail(res, 401, 'UNAUTHORIZED', usingPreset ? '视觉模型服务端预设缺少模型名称' : '视觉模型缺少模型名称，请在前端填写');
   }
-  console.log(`[detect-face] useServerPreset=${Boolean(useServerPreset)} usingPreset=${usingPreset} frontHasKey=${Boolean(apiKey)} envHasKey=${Boolean(process.env.VISION_API_KEY)} root=${root} model=${resolvedModel}`);
+  console.log(`[detect-face] useServerPreset=${Boolean(useServerPreset)} usingPreset=${usingPreset} frontHasKey=${Boolean(apiKey)} envHasKey=${Boolean(process.env.VISION_API_KEY)} root=${logUrlOrigin(root)}`);
 
   const body = {
     model: resolvedModel,
@@ -988,7 +1011,6 @@ app.post('/api/detect-face', rateLimit, async (req, res) => {
     }
     const json = await parseJsonSafe(response);
     const text = json.choices?.[0]?.message?.content ?? '';
-    console.log(`[detect-face] raw response: ${text.slice(0, 200)}`);
     let coords;
     try {
       coords = JSON.parse(text);
@@ -1042,10 +1064,10 @@ app.get('/api/proxy-image', imageRateLimit, async (req, res) => {
     if (!ok) {
       throw new UpstreamError(codeFromStatus(status), `proxy-image 返回 ${status}`, status);
     }
-    // Only ever serve images: reflecting an upstream text/html (or script)
-    // Content-Type would let anyone host arbitrary HTML/JS at this origin.
-    if (!/^image\//i.test(contentType)) {
-      return fail(res, 400, 'INVALID_INPUT', '仅允许代理图片资源');
+    // SVG is an active document when opened directly: scripts run at our origin.
+    // Only serve raster types, even when another type claims to be an image.
+    if (!/^image\/(?:png|jpeg|jpg|webp|gif|avif|bmp|x-icon|vnd\.microsoft\.icon)(?:\s*;|\s*$)/i.test(contentType)) {
+      return fail(res, 400, 'INVALID_INPUT', '仅允许代理 PNG、JPEG、WebP、GIF 等位图资源');
     }
     res.set('Content-Type', contentType);
     res.set('Cache-Control', 'public, max-age=3600');
@@ -1056,6 +1078,8 @@ app.get('/api/proxy-image', imageRateLimit, async (req, res) => {
     return fail(res, 502, 'UPSTREAM_ERROR', '图片获取失败');
   }
 });
+
+app.use('/api/puzzle-layers', createPuzzleLayersRouter({ lookupImage: getGalleryImage }));
 
 app.get('/api/image-capabilities', (_req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -1226,6 +1250,9 @@ if (hasDist) {
 
 // Global error handler — must not crash the server
 app.use((err, _req, res, _next) => {
+  if (err.type === 'entity.too.large') return fail(res, 413, 'INVALID_INPUT', '请求内容过大，请减少图片或字段长度');
+  if (err.type === 'entity.parse.failed') return fail(res, 400, 'INVALID_INPUT', '请求 JSON 格式无效');
+  if (err.status >= 400 && err.status < 500 && !(err instanceof multer.MulterError)) return fail(res, err.status, 'INVALID_INPUT', '请求数据格式无效');
   if (err instanceof multer.MulterError) {
     const message = err.code === 'LIMIT_FILE_SIZE'
       ? `图片文件过大，单个文件不能超过 ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`

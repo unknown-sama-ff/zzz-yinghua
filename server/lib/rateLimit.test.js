@@ -1,6 +1,30 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { capN } from '../providers.js';
+import { createRateLimiter, requestKey } from './rateLimit.js';
+
+test('rotating caller-chosen cookies cannot reset the per-IP request limit', () => {
+  const limiter = createRateLimiter({ max: 2, windowMs: 60000, keyFn: requestKey });
+  let admitted = 0; let rejected = 0;
+  const response = { status() { return this; }, json() { rejected++; } };
+  for (let i = 0; i < 4; i++) limiter({ ip: '203.0.113.10', headers: { cookie: `yinghua_payment_visitor=attacker-${i}` } }, response, () => admitted++);
+  assert.equal(admitted, 2); assert.equal(rejected, 2);
+});
+
+test('malformed cookie encoding cannot make rate-limit identity parsing throw', () => {
+  assert.doesNotThrow(() => requestKey({ ip: '203.0.113.10', headers: { cookie: 'yinghua_payment_visitor=%' } }));
+});
+
+test('rate-limit buckets have bounded cardinality and expire without new identities accumulating', (t) => {
+  let time = 1000; t.mock.method(Date, 'now', () => time);
+  const limiter = createRateLimiter({ max: 2, windowMs: 100, maxKeys: 2, keyFn: (req) => req.key });
+  let accepted = 0; let rejected = 0;
+  const res = { status() { return this; }, json() { rejected++; } };
+  for (const key of ['a', 'b', 'c']) limiter({ key }, res, () => accepted++);
+  assert.equal(accepted, 2); assert.equal(rejected, 1);
+  time += 101; limiter({ key: 'c' }, res, () => accepted++);
+  assert.equal(accepted, 3);
+});
 
 // The budget ledger is module-level state; use a fresh import for each case.
 let instance = 0;

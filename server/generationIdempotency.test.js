@@ -83,6 +83,7 @@ test('async duplicate submissions return the same task ID immediately and retain
   assert.equal(calls, 1);
   const running = await fetch(base + '/api/task/' + first.taskId + '?metadata=1');
   assert.equal(running.status, 200);
+  assert.equal(running.headers.get('cache-control'), 'no-store');
   assert.equal((await running.json()).status, 'running');
   finish({ images: ['async-result'] });
   await new Promise((done) => setImmediate(done));

@@ -19,8 +19,9 @@ test('adaptive grids preserve original aspect ratios and scatter every piece ins
       const grid = puzzleGrid(width, height, level.id);
       assert.ok(grid.rows * grid.columns > previous); previous = grid.rows * grid.columns;
       for (const viewport of [280, 350, 780, 1320]) {
-        const layout = puzzleLayout(viewport, width, height, grid);
-        assert.equal(layout.height, layout.width, 'canvas always stays square');
+        const canvasHeight = viewport < 600 ? 420 : 560;
+        const layout = puzzleLayout(viewport, width, height, grid, canvasHeight);
+        assert.equal(layout.height, canvasHeight, 'canvas accepts an independent viewport height');
         near(layout.image.width / layout.image.height, width / height);
         const pieces = createPuzzlePieces(grid);
         const groups = createPuzzleGroups(pieces, layout);
@@ -46,18 +47,19 @@ test('adaptive grids preserve original aspect ratios and scatter every piece ins
 test('scatter has continuous random positions, and completion centers the full image at every size', () => {
   for (const width of [280, 350, 780, 1320]) {
     const grid = puzzleGrid(1024, 1536, 'hard');
-    const layout = puzzleLayout(width, 1024, 1536, grid);
+    const canvasHeight = width < 600 ? 460 : 560;
+    const layout = puzzleLayout(width, 1024, 1536, grid, canvasHeight);
     const pieces = createPuzzlePieces(grid);
     const scattered = createPuzzleGroups(pieces, layout, () => 0.37);
     assert.equal(new Set(scattered.map((item) => item.x.toFixed(3))).size, scattered.length);
     assert.equal(new Set(scattered.map((item) => item.y.toFixed(3))).size, scattered.length);
-    assert.ok(Math.max(...scattered.map((item) => item.y)) - Math.min(...scattered.map((item) => item.y)) > width * 0.5);
+    assert.ok(Math.max(...scattered.map((item) => item.y)) - Math.min(...scattered.map((item) => item.y)) > canvasHeight * 0.5);
     const whole = centerPuzzleGroup({ id: 0, pieceIds: pieces.map((piece) => piece.id), x: 10, y: 20, z: 1 }, pieces, layout);
     const bounds = puzzleGroupBounds(whole, pieces, layout);
     near(whole.x + bounds.width / 2, layout.width / 2);
     near(whole.y + bounds.height / 2, layout.height / 2);
     const resized = reflowPuzzleGroups([whole], pieces, layout);
-    assert.equal(resized.height, width); near(resized.groups[0].x, whole.x); near(resized.groups[0].y, whole.y);
+    assert.equal(resized.height, canvasHeight); near(resized.groups[0].x, whole.x); near(resized.groups[0].y, whole.y);
   }
 });
 

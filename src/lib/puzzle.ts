@@ -28,18 +28,19 @@ export interface PuzzleLayout {
   margin: number;
 }
 
-export function puzzleLayout(width: number, imageWidth: number, imageHeight: number, grid: PuzzleGrid): PuzzleLayout {
+export function puzzleLayout(width: number, imageWidth: number, imageHeight: number, grid: PuzzleGrid, height = Math.round(width * 0.65)): PuzzleLayout {
   width = Math.max(240, width);
+  height = Math.max(180, height);
   const ratio = imageWidth / imageHeight;
   const maxWidth = Math.min(width * 0.6, 640);
-  const imageHeightOnMat = Math.min(maxWidth / ratio, maxWidth);
+  const imageHeightOnMat = Math.min(maxWidth / ratio, height * 0.68, 640);
   const imageWidthOnMat = imageHeightOnMat * ratio;
   const cellWidth = imageWidthOnMat / grid.columns;
   const cellHeight = imageHeightOnMat / grid.rows;
   const padding = Math.min(cellWidth, cellHeight) * 0.2;
   const margin = 16 + padding;
   return {
-    width, height: width,
+    width, height,
     image: { width: imageWidthOnMat, height: imageHeightOnMat },
     cellWidth, cellHeight, padding, margin,
   };
@@ -128,7 +129,7 @@ export function centerPuzzleGroup(group: PuzzleGroup, pieces: PuzzlePiece[], lay
   return { ...group, x: (layout.width - bounds.width) / 2, y: (layout.height - bounds.height) / 2 };
 }
 
-/** Resizing preserves group membership and the square mat, including the finished center. */
+/** Resizing preserves group membership and keeps the finished image centered. */
 export function reflowPuzzleGroups(groups: PuzzleGroup[], pieces: PuzzlePiece[], layout: PuzzleLayout) {
   return { groups: groups.length === 1 ? [centerPuzzleGroup(groups[0], pieces, layout)] : scatterPuzzleGroups(groups, pieces, layout), height: layout.height };
 }

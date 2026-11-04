@@ -32,8 +32,8 @@
 
 ## 技术栈
 
-前端 React 18 + Vite 5 + TypeScript 5（严格模式）+ Tailwind 3 + Zustand。
-后端 Node ≥18 轻量 Express 代理，密钥仅存服务端环境变量，前端永不接触明文密钥。
+前端 React 18 + Vite 7 + TypeScript 5（严格模式）+ Tailwind 3 + Zustand。
+后端使用轻量 Express 代理；运行环境要求 Node 20.19+（20.x）或 ≥22.12，服务端预设密钥存于环境变量。
 
 ## 本地启动
 

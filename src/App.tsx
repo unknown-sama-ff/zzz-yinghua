@@ -8,6 +8,7 @@ import { applyTheme } from './lib/theme';
 import { isWorkshopRoute, routeFromHash, ROUTE_HASHES, type AppRoute } from './lib/navigation';
 import { useCursorEffectsPref } from './lib/useCursorEffectsPref';
 import { HomePage } from './components/HomePage';
+import { PuzzlePanel as Puzzle } from './components/PuzzlePanel';
 import { StudioHeader, StudioFooter, StudioOverlays } from './components/StudioChrome';
 import { InpaintWorkspace } from './components/InpaintWorkspace';
 import { FloatingInpaintButton } from './components/FloatingInpaintButton';
@@ -26,7 +27,6 @@ const YinghuaPanel = lazy(() => import('./components/YinghuaPanel').then((m) => 
 const YinghuaViewer = lazy(() => import('./components/YinghuaViewer').then((m) => ({ default: m.YinghuaViewer })));
 const Poster = lazy(() => import('./components/PosterPanel').then((m) => ({ default: m.PosterPanel })));
 const Gallery = lazy(() => import('./components/GalleryPanel').then((m) => ({ default: m.GalleryPanel })));
-const Puzzle = lazy(() => import('./components/PuzzlePanel').then((m) => ({ default: m.PuzzlePanel })));
 const ImageToPrompt = lazy(() => import('./components/ImageToPromptPanel').then((m) => ({ default: m.ImageToPromptPanel })));
 const LocalDenoise = lazy(() => import('./components/LocalDenoisePanel').then((m) => ({ default: m.LocalDenoisePanel })));
 const Prompts = lazy(() => import('./components/PromptGalleryPanel').then((m) => ({ default: m.PromptGalleryPanel })));

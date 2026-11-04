@@ -6,18 +6,24 @@
 
 /** Express middleware factory. `keyFn(req)` returns the identity key; `max`
  *  requests per `windowMs` are allowed, the rest get HTTP 429. */
-export function createRateLimiter({ max, windowMs, keyFn }) {
+export function createRateLimiter({ max, windowMs, keyFn, maxKeys = 10000 }) {
   const limit = Number(max) || 30;
   const window = Number(windowMs) || 60_000;
   const hits = new Map(); // key -> sorted timestamps (ms)
+  let nextSweep = 0;
 
   return function rateLimit(req, res, next) {
     const key = keyFn(req);
     if (!key) return next(); // no identity available — don't rate limit
     const now = Date.now();
     const cutoff = now - window;
+    if (now >= nextSweep) {
+      for (const [storedKey, timestamps] of hits) if (!timestamps.length || timestamps[timestamps.length - 1] <= cutoff) hits.delete(storedKey);
+      nextSweep = now + window;
+    }
     let bucket = hits.get(key);
     if (!bucket) {
+      if (hits.size >= maxKeys) return res.status(429).json({ ok: false, code: 'RATE_LIMITED', message: '请求过于频繁，请稍后再试' });
       bucket = [];
       hits.set(key, bucket);
     }
@@ -32,20 +38,11 @@ export function createRateLimiter({ max, windowMs, keyFn }) {
 }
 
 /**
- * Identity for rate limiting: the anonymous visitor cookie (strong — HttpOnly,
- * unguessable), else the real client IP via req.ip (which respects the app's
- * `trust proxy` setting). The raw X-Forwarded-For header is deliberately NOT
- * trusted — it is client-assertable and trivially spoofable.
+ * Anonymous callers can choose arbitrary Cookie headers. Bind their quota to
+ * req.ip, interpreted through the configured trusted proxy hop, not a cookie.
+ * Verified WeChat identities are handled separately by the application.
  */
-export function requestKey(req, cookieName = 'yinghua_payment_visitor') {
-  const cookies = String(req.headers.cookie || '').split(';');
-  for (const cookie of cookies) {
-    const [key, ...value] = cookie.trim().split('=');
-    if (key === cookieName) {
-      const token = decodeURIComponent(value.join('='));
-      if (token) return `cookie:${token}`;
-    }
-  }
+export function requestKey(req) {
   const ip = req.ip || req.socket?.remoteAddress || '';
   return ip ? `ip:${ip}` : null;
 }

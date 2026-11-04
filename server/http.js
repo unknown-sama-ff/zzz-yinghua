@@ -5,6 +5,8 @@
 // UPSTREAM_TIMEOUT_MS in .env if your endpoint is faster/slower.
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
+import { Agent, install as installUndici, setGlobalDispatcher } from 'undici';
+import ipaddr from 'ipaddr.js';
 import { DEFAULT_TIMEOUT_MS, UPSTREAM_RETRIES, MAX_FETCH_BYTES } from './lib/constants.js';
 
 /** Normalized upstream error carrying a stable code for the client. */
@@ -17,6 +19,35 @@ export class UpstreamError extends Error {
 }
 
 const MAX_REDIRECTS = 5;
+const PUBLIC_REDIRECT_HEADERS = new Set(['accept', 'accept-language', 'user-agent', 'range', 'if-none-match', 'if-modified-since']);
+let secureFetchInstalled = false;
+
+/** Diagnostics must not record URL credentials, private paths or signed queries. */
+export function logUrlOrigin(value) {
+  try { return new URL(value).origin; } catch { return '(invalid URL)'; }
+}
+
+/** Validate DNS results at the exact lookup used by the TCP connection. */
+export function createPublicLookup(resolve = lookup) {
+  return (hostname, options, callback) => {
+    const settings = typeof options === 'number' ? { family: options } : options || {};
+    resolve(hostname, { ...settings, all: true, verbatim: true }).then((addresses) => {
+      if (!addresses.length || addresses.some(({ address }) => !isIP(address) || isPrivateIpAddress(address))) {
+        callback(new UpstreamError('SSRF_BLOCKED', '已拦截连接时解析到的内网/本地地址', 400)); return;
+      }
+      if (settings.all) callback(null, addresses);
+      else callback(null, addresses[0].address, addresses[0].family);
+    }, callback);
+  };
+}
+
+/** Keep fetch and its Web API classes aligned; do not rely on Node's older bundled copy. */
+export function installSecureFetch() {
+  if (secureFetchInstalled) return;
+  installUndici();
+  setGlobalDispatcher(new Agent({ connect: { lookup: createPublicLookup() } }));
+  secureFetchInstalled = true;
+}
 
 function isRedirectStatus(status) {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
@@ -24,10 +55,9 @@ function isRedirectStatus(status) {
 
 /** Drop body-related headers for the 301/302/303 → GET method transformation. */
 function toGetOptions(options) {
-  const headers = { ...(options.headers || {}) };
+  const headers = new Headers(options.headers || {});
   for (const key of ['content-type', 'content-length', 'transfer-encoding']) {
-    delete headers[key];
-    delete headers[key.toLowerCase()];
+    headers.delete(key);
   }
   return { ...options, method: 'GET', body: undefined, headers };
 }
@@ -45,6 +75,7 @@ function toGetOptions(options) {
  * POST → GET; 307/308 preserve the method and body.
  */
 export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIMEOUT_MS) {
+  const maxResponseBytes = Number(options.maxResponseBytes) > 0 ? Number(options.maxResponseBytes) : 96 * 1024 * 1024;
   const controller = new AbortController();
   const timeoutError = () => new UpstreamError('UPSTREAM_TIMEOUT', `上游请求超时 (${timeout}ms)`, 504);
   let expireBody;
@@ -58,6 +89,7 @@ export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIME
     if (!res.body) return res;
     const reader = res.body.getReader();
     let settled = false;
+    let total = 0;
     function cleanup() {
       settled = true;
       clearTimeout(timer);
@@ -81,7 +113,14 @@ export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIME
           if (done) {
             cleanup();
             stream.close();
-          } else stream.enqueue(value);
+          } else {
+            total += value.byteLength;
+            if (total > maxResponseBytes) {
+              cleanup();
+              stream.error(new UpstreamError('INVALID_INPUT', '上游响应过大，请减少图片数量或降低输出尺寸', 413));
+              void reader.cancel().catch(() => {});
+            } else stream.enqueue(value);
+          }
         } catch (error) {
           if (settled) return;
           cleanup();
@@ -110,8 +149,9 @@ export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIME
       try {
         res = await fetch(currentUrl, { ...currentOptions, redirect: 'manual', signal: controller.signal });
       } catch (err) {
+        if (err.code === 'SSRF_BLOCKED' || err.cause?.code === 'SSRF_BLOCKED') throw err.cause?.code === 'SSRF_BLOCKED' ? err.cause : err;
         if (err.name === 'AbortError') {
-          console.warn(`[upstream] TIMEOUT after ${Date.now() - started}ms → ${currentUrl}`);
+          console.warn(`[upstream] TIMEOUT after ${Date.now() - started}ms → ${new URL(currentUrl).origin}`);
           throw new UpstreamError('UPSTREAM_TIMEOUT', `上游请求超时 (${timeout}ms)`, 504);
         }
         console.warn('[upstream] FAILED to reach upstream endpoint');
@@ -133,6 +173,15 @@ export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIME
         throw error;
       }
       const method = String(currentOptions.method || 'GET').toUpperCase();
+      if (new URL(currentUrl).origin !== next.origin) {
+        if (!['GET', 'HEAD'].includes(method)) {
+          void res.body?.cancel?.().catch(() => {});
+          throw new UpstreamError('SSRF_BLOCKED', '已阻止接口跨域重定向，请填写最终 Base URL', 400);
+        }
+        const headers = new Headers(currentOptions.headers || {});
+        for (const key of [...headers.keys()]) if (!PUBLIC_REDIRECT_HEADERS.has(key)) headers.delete(key);
+        currentOptions = { ...currentOptions, headers };
+      }
       if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === 'POST')) {
         currentOptions = toGetOptions(currentOptions);
       }
@@ -223,50 +272,7 @@ export function sleep(ms) {
  * IPv4, IPv6 (including IPv4-mapped), unique-local and link-local v6.
  */
 function isPrivateIpAddress(ip) {
-  const family = isIP(ip);
-  if (family === 4) {
-    const [a, b] = ip.split('.').map(Number);
-    return (
-      a === 0 ||                          // 0.0.0.0/8
-      a === 10 ||                         // 10.0.0.0/8
-      a === 127 ||                        // 127.0.0.0/8 loopback
-      (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 CGNAT
-      (a === 169 && b === 254) ||         // 169.254.0.0/16 link-local
-      (a === 172 && b >= 16 && b <= 31) ||// 172.16.0.0/12
-      (a === 192 && b === 168) ||         // 192.168.0.0/16
-      (a === 192 && b === 0) ||           // 192.0.0.0/24
-      (a === 198 && (b === 18 || b === 19)) || // 198.18.0.0/15 benchmark
-      (a === 198 && b === 51) ||          // 198.51.100.0/24 TEST-NET-2
-      (a === 203 && b === 0) ||           // 203.0.113.0/24 TEST-NET-3
-      a >= 224                            // multicast + reserved
-    );
-  }
-  if (family === 6) {
-    const lower = ip.toLowerCase();
-    // IPv4-mapped IPv6 (::ffff:a.b.c.d or the hextet form ::ffff:7f00:1 that
-    // Node's URL normalizer produces). Check the embedded IPv4.
-    if (lower.startsWith('::ffff:')) {
-      const tail = lower.slice(7); // after '::ffff:'
-      if (/^\d+\.\d+\.\d+\.\d+$/.test(tail)) return isPrivateIpAddress(tail);
-      const hextets = tail.split(':').filter(Boolean);
-      if (hextets.length >= 2) {
-        const hi = parseInt(hextets[hextets.length - 2], 16);
-        const lo = parseInt(hextets[hextets.length - 1], 16);
-        if (Number.isFinite(hi) && Number.isFinite(lo)) {
-          const embedded = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
-          return isPrivateIpAddress(embedded);
-        }
-      }
-      return true; // unrecognized mapped form — block defensively
-    }
-    if (lower === '::' || lower === '::1') return true;
-    // fc00::/7 unique-local, fe80::/10 link-local
-    if (/^f[cd]/.test(lower) || /^fe[89ab]/.test(lower)) return true;
-    // Reserved/documentation + Teredo (2001::/32 can embed IPv4).
-    if (lower.startsWith('2001:db8') || lower.startsWith('2001:0')) return true;
-    return false;
-  }
-  return false;
+  try { return ipaddr.process(ip).range() !== 'unicast'; } catch { return true; }
 }
 
 /**
@@ -288,9 +294,8 @@ function looksLikeNumericIp(host) {
  * notation that fall on private/loopback/link-local ranges, reserved TLDs, and
  * hostnames whose DNS resolution returns any non-public address. This closes
  * the obvious bypasses (IPv4-mapped IPv6, decimal/hex/octal IPs, DNS rebinding
- * to an internal address). Note: a rebinding *proof* guard would additionally
- * pin the connection to the validated address; this mitigates it by resolving
- * and re-checking at request time.
+ * to an internal address). The installed connection lookup re-checks the exact
+ * addresses handed to the TCP connection, closing the DNS lookup/connect gap.
  */
 export async function assertSafeUrl(rawUrl) {
   let url;
@@ -302,6 +307,7 @@ export async function assertSafeUrl(rawUrl) {
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new UpstreamError('SSRF_BLOCKED', '仅允许 http/https 协议', 400);
   }
+  if (url.username || url.password) throw new UpstreamError('SSRF_BLOCKED', 'URL 不允许内嵌用户名或密码', 400);
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (!host) {
     throw new UpstreamError('SSRF_BLOCKED', 'URL 缺少主机名', 400);
@@ -346,16 +352,15 @@ export function codeFromStatus(status) {
  * other non-JSON (wrong Base URL, login/404 page, gateway error page). Without
  * this, res.json() throws a raw SyntaxError that surfaces as an opaque UNKNOWN.
  *
- * The response body is only logged server-side — never echoed into the
- * client-visible message, which would otherwise act as a read channel for any
- * endpoint the proxy can reach (see SSRF guard).
+ * Neither logs nor client errors include the raw upstream body, which may
+ * contain credentials echoed by an upstream gateway.
  */
 export async function parseJsonSafe(res) {
   const text = await res.text();
   try {
     return JSON.parse(text);
   } catch {
-    console.warn(`[upstream] 上游返回非 JSON 响应，前 120 字符: ${text.trim().slice(0, 120).replace(/\s+/g, ' ')}`);
+    console.warn(`[upstream] 上游返回非 JSON 响应 status=${res.status}`);
     throw new UpstreamError(
       'UPSTREAM_ERROR',
       '上游返回了非 JSON 响应（检查 Base URL / 端点是否正确）',

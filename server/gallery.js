@@ -143,6 +143,12 @@ export async function listGallery(limit = 20, offset = 0) {
   return ensureOk(result, '查询画廊失败');
 }
 
+/** Public metadata only; the layer service validates the id and eligible source style. */
+export async function getGalleryImage(id) {
+  const supabase = await db();
+  return ensureOk(await supabase.from('gallery').select('image_url, style').eq('id', id).maybeSingle(), '查询画廊作品失败');
+}
+
 export async function deleteGalleryItem({ id, deleteToken }) {
   // Accept both integer and UUID ids (the table may use either).
   const validId = Number.isInteger(id)

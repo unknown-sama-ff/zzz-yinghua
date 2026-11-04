@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { resolveGptImageModel, validateGptImageQuality } from './lib/gptImageCapabilities.js';
 import {
   fetchWithTimeout,
@@ -8,6 +9,7 @@ import {
   assertSafeUrl,
   sleep,
   parseJsonSafe,
+  logUrlOrigin,
 } from './http.js';
 import { pluckImages } from './lib/pluckImages.js';
 import { contentRejectionError } from './lib/contentRejection.js';
@@ -89,17 +91,17 @@ export function registerTaskStore(hooks) {
 // Push a completed/in-failed poll result into the task store so the frontend's
 // GET /api/task/:id poll can resolve. Used on Railway (inline poll) and as the
 // fallback when worker_threads is unavailable.
-async function pollSeedreamTaskToStore(base, key, taskId, maxMs) {
+async function pollSeedreamTaskToStore(base, key, taskId, maxMs, localTaskId) {
   try {
     const images = await pollSeedreamTask(base, key, taskId, maxMs);
-    taskHooks?.onDone?.(taskId, images);
+    taskHooks?.onDone?.(localTaskId, images);
   } catch (err) {
-    taskHooks?.onError?.(taskId, err instanceof UpstreamError ? err.message : String(err?.message || err));
+    taskHooks?.onError?.(localTaskId, err instanceof UpstreamError ? err.message : String(err?.message || err));
   }
 }
 
-async function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
-  if (!IS_VERCEL || !taskHooks) return pollSeedreamTaskToStore(base, key, taskId, maxMs);
+async function spawnPollWorker(base, key, taskId, localTaskId, maxMs = POLL_DEADLINE_MS) {
+  if (!IS_VERCEL || !taskHooks) return pollSeedreamTaskToStore(base, key, taskId, maxMs, localTaskId);
 
   // Vercel: delegate polling to a Worker thread so it outlives the
   // serverless function's execution window.
@@ -108,21 +110,9 @@ async function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
     const wrappedScript = `
       'use strict';
       const WORKER_ARGS = ${JSON.stringify({ base, key, taskId })};
+      const HTTP_MODULE = ${JSON.stringify(new URL('./http.js', import.meta.url).href)};
       const { parentPort } = require('worker_threads');
       async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-      async function fetchWithTimeout(url, opts = {}) {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 180000);
-        try {
-          const res = await fetch(url, { ...opts, redirect: 'error', signal: ctrl.signal });
-          const text = await res.text();
-          return { ok: res.ok, json: async () => JSON.parse(text) };
-        }
-        finally { clearTimeout(t); }
-      }
-      async function parseJsonSafe(res) {
-        try { return await res.json(); } catch { return {}; }
-      }
       function pluckImages(json) {
         const out = [];
         if (Array.isArray(json?.data)) for (const d of json.data) { if (d.url) out.push(d.url); else if (d.b64_json) out.push('data:image/png;base64,' + d.b64_json); }
@@ -132,11 +122,13 @@ async function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
         return out;
       }
       (async () => {
+        const { fetchWithTimeout, parseJsonSafe, installSecureFetch } = await import(HTTP_MODULE);
+        installSecureFetch();
         const deadline = Date.now() + 180000;
         while (Date.now() < deadline) {
           await sleep(2000);
-          const res = await fetchWithTimeout(WORKER_ARGS.base + '/tasks/' + WORKER_ARGS.taskId, { headers: { Authorization: 'Bearer ' + WORKER_ARGS.key } });
-          if (!res.ok) continue;
+          const res = await fetchWithTimeout(WORKER_ARGS.base + '/tasks/' + encodeURIComponent(WORKER_ARGS.taskId), { headers: { Authorization: 'Bearer ' + WORKER_ARGS.key } });
+          if (!res.ok) { void res.body?.cancel?.().catch(() => {}); continue; }
           const json = await parseJsonSafe(res);
           const status = json.status || json.state;
           if (status === 'succeeded' || status === 'completed' || status === 'success') {
@@ -153,12 +145,12 @@ async function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
     `;
     const w = new Worker(wrappedScript, { eval: true });
     w.on('message', (msg) => {
-      if (msg.type === 'done') taskHooks?.onDone?.(taskId, msg.images);
-      else if (msg.type === 'error') taskHooks?.onError?.(taskId, msg.message);
+      if (msg.type === 'done') taskHooks?.onDone?.(localTaskId, msg.images);
+      else if (msg.type === 'error') taskHooks?.onError?.(localTaskId, msg.message);
       w.terminate();
     });
     w.on('error', () => {
-      taskHooks?.onError?.(taskId, 'Worker 启动失败');
+      taskHooks?.onError?.(localTaskId, 'Worker 启动失败');
     });
     return;
   } catch {
@@ -166,7 +158,7 @@ async function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
   }
 
   // Fallback: inline poll (works on Railway / long-running server)
-  return pollSeedreamTaskToStore(base, key, taskId, maxMs);
+  return pollSeedreamTaskToStore(base, key, taskId, maxMs, localTaskId);
 }
 
 /**
@@ -224,8 +216,11 @@ async function seedream(req) {
   // Long-task: hand off to background poller and return taskId immediately.
   const taskId = json.task_id || json.id;
   if (taskId && pluckImages(json).length === 0) {
-    void spawnPollWorker(base, key, taskId);
-    return { taskId, images: [] };
+    // Upstream IDs can be sequential or collide across providers/accounts.
+    // Only expose a random local capability for this individual generation.
+    const localTaskId = randomUUID();
+    void spawnPollWorker(base, key, taskId, localTaskId);
+    return { taskId: localTaskId, images: [] };
   }
   return { images: pluckImages(json), raw: json };
 }
@@ -234,7 +229,7 @@ async function pollSeedreamTask(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
   const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     await sleep(2000);
-    const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/tasks/${taskId}`, {
+    const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/tasks/${encodeURIComponent(taskId)}`, {
       headers: { Authorization: `Bearer ${key}` },
     });
     if (!res.ok) { void res.body?.cancel?.().catch(() => {}); continue; }
@@ -310,7 +305,7 @@ async function gptImage(req) {
     if (/^https?:\/\//i.test(req.imageBase64)) {
       // Remote URL is fully attacker-controlled — validate (SSRF) before fetching.
       await assertSafeUrl(req.imageBase64);
-      console.log(`[gpt-image] fetching remote image: ${req.imageBase64.slice(0, 120)}`);
+      console.log(`[gpt-image] fetching remote image from ${logUrlOrigin(req.imageBase64)}`);
       try {
         const { ok, status, buffer: fetched, contentType } = await fetchBufferLimited(req.imageBase64, {}, DEFAULT_TIMEOUT_MS, MAX_FETCH_BYTES);
         if (!ok) throw new UpstreamError('UPSTREAM_ERROR', `远程图片获取失败: ${status}`, status);
@@ -458,7 +453,7 @@ async function gptImage(req) {
     if (!res.ok) {
       const bodyText = await res.text().catch(emptyTextUnlessTimeout);
       const rejection = contentRejectionError(res, bodyText, [key]);
-      console.warn(`[gpt-image] edits failed ${res.status}: ${(rejection?.upstreamError?.message ?? bodyText).slice(0, 200)}`);
+      console.warn(`[gpt-image] edits failed status=${res.status} code=${rejection?.code || 'UPSTREAM_ERROR'}`);
       if (rejection) throw rejection;
       if (qualityRejected(req, res, bodyText)) throw qualityRejectionError(res.status);
       // Cheap relays may still reject. Retry with smaller size if this was a large image.
@@ -485,7 +480,7 @@ async function gptImage(req) {
             const rejection = contentRejectionError(res, retryText, [key]);
             if (rejection) throw rejection;
             if (qualityRejected(req, res, retryText)) throw qualityRejectionError(res.status);
-            console.warn(`[gpt-image] reduced retry also failed ${res.status}: ${retryText.slice(0, 200)}`);
+            console.warn(`[gpt-image] reduced retry also failed status=${res.status}`);
             throw new UpstreamError(codeFromStatus(res.status), `gpt-image 图像编辑返回 ${res.status} (已尝试原图+降级)`, res.status);
           }
         } catch (error) {

@@ -2,7 +2,7 @@
 // src/lib/imageWorkerPool.ts (stitchImages / embedThumbnails) with sharp, so
 // the mini program can avoid client-side canvas entirely.
 import sharp from 'sharp';
-import { MAX_INPUT_PIXELS } from './constants.js';
+import { MAX_INPUT_PIXELS, FREE_CREATE_MAX_INPUT_IMAGES } from './constants.js';
 
 const MAX_STITCH_HEIGHT = 1536;
 const EMBED_MARGIN_RATIO = 0.02;
@@ -10,6 +10,17 @@ const EMBED_PAD = 4;
 
 // Cap decoded pixels on untrusted input (decompression-bomb guard).
 const DECODE = { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS };
+
+function assertImageCount(images) {
+  if (!Array.isArray(images) || images.length > FREE_CREATE_MAX_INPUT_IMAGES) throw new Error('too many composite images');
+}
+
+function assertDimensions(width, height) {
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0
+    || width > 32768 || height > 32768 || width * height > MAX_INPUT_PIXELS) {
+    throw new Error('composite pixel limit exceeded');
+  }
+}
 
 function toBuffer(image) {
   if (typeof image !== 'string' || !image) throw new Error('invalid image input');
@@ -23,6 +34,7 @@ function toBuffer(image) {
 
 /** Horizontal stitch: cap the max height, scale each image proportionally. */
 export async function compositeStitch(dataUrls) {
+  assertImageCount(dataUrls);
   const urls = (dataUrls || []).filter((u) => u && typeof u === 'string');
   if (urls.length === 0) throw new Error('compositeStitch: no images provided');
   if (urls.length === 1) {
@@ -35,8 +47,11 @@ export async function compositeStitch(dataUrls) {
     return { w: meta.width || 0, h: meta.height || 0 };
   }));
   const maxH = Math.min(Math.max(...metas.map((m) => m.h)), MAX_STITCH_HEIGHT);
+  if (metas.reduce((sum, meta) => sum + meta.w * meta.h, 0) > MAX_INPUT_PIXELS) throw new Error('composite input pixel limit exceeded');
   const scaledWidths = metas.map((m) => Math.round((m.w / m.h) * maxH));
   const totalW = scaledWidths.reduce((a, b) => a + b, 0);
+  assertDimensions(totalW, maxH);
+  for (const width of scaledWidths) assertDimensions(width, maxH);
 
   const layers = [];
   let x = 0;
@@ -56,20 +71,27 @@ export async function compositeStitch(dataUrls) {
 
 /** Embed thumbnail(s) into the bottom corners of a base image. */
 export async function compositeEmbed(baseDataUrl, thumbs) {
+  assertImageCount(thumbs);
   const base = toBuffer(baseDataUrl);
   const baseMeta = await sharp(base, DECODE).metadata();
   const baseW = baseMeta.width || 0;
   const baseH = baseMeta.height || 0;
-  if (!baseW || !baseH) throw new Error('compositeEmbed: invalid base image');
+  assertDimensions(baseW, baseH);
 
   const margin = Math.round(baseH * EMBED_MARGIN_RATIO);
   const leftThumbs = [];
   const rightThumbs = [];
+  let plannedPixels = baseW * baseH;
   for (const spec of thumbs || []) {
+    if (!spec || typeof spec !== 'object') throw new Error('invalid thumbnail specification');
     const size = spec.size ?? 0.2;
+    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0 || size > 1) throw new Error('invalid thumbnail size');
     const thumbH = Math.round(baseH * size);
     const meta = await sharp(toBuffer(spec.url), DECODE).metadata();
     const thumbW = Math.round(((meta.width || 0) / (meta.height || 1)) * thumbH);
+    assertDimensions(thumbW + EMBED_PAD * 2, thumbH + EMBED_PAD * 2);
+    plannedPixels += (thumbW + EMBED_PAD * 2) * (thumbH + EMBED_PAD * 2);
+    if (plannedPixels > MAX_INPUT_PIXELS) throw new Error('composite thumbnail pixel limit exceeded');
     const entry = { spec, thumbW, thumbH };
     if (spec.position === 'bottom-left') leftThumbs.push(entry);
     else rightThumbs.push(entry);
@@ -94,7 +116,7 @@ export async function compositeEmbed(baseDataUrl, thumbs) {
     rightX += t.thumbW + margin;
   }
 
-  const out = await sharp(base).composite(layers).png().toBuffer();
+  const out = await sharp(base, DECODE).composite(layers).png().toBuffer();
   return out.toString('base64');
 }
 

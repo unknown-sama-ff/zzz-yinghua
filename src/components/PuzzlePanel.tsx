@@ -4,19 +4,21 @@ import { ROUTE_HASHES } from '../lib/navigation';
 import { loadPuzzleGallery, loadPuzzleImage, pickPuzzleImage } from '../lib/puzzleGallery';
 import { centerPuzzleGroup, createPuzzleGroups, createPuzzlePieces, piecePosition, positionPuzzleGroup, PUZZLE_DIFFICULTIES, puzzleGrid, puzzleLayout, puzzlePiecePath, reflowPuzzleGroups, snapPuzzleGroup, type PuzzleDifficulty, type PuzzleGrid, type PuzzleGroup, type PuzzleLayout, type PuzzlePiece } from '../lib/puzzle';
 import { PuzzleReveal } from './PuzzleReveal';
+import { createPuzzleAudio, readPuzzleSoundPreference, writePuzzleSoundPreference } from '../lib/puzzleAudio';
+import { getPuzzleLayers } from '../lib/puzzleLayers';
 
 interface Game {
-  row: GalleryRow; src: string; width: number; height: number; layoutWidth: number; roundId: string;
+  row: GalleryRow; src: string; width: number; height: number; layoutWidth: number; layoutHeight: number; roundId: string;
   grid: PuzzleGrid; pieces: PuzzlePiece[]; groups: PuzzleGroup[];
 }
 interface Drag { groupId: number; pointerId: number; offsetX: number; offsetY: number; startX: number; startY: number; clientX: number; clientY: number; moved: boolean }
 interface SnapEffect { key: number; pieceIds: number[]; point: { x: number; y: number } }
 
-function freshGame(row: GalleryRow, image: { src: string; width: number; height: number }, difficulty: PuzzleDifficulty, width: number): Game {
+function freshGame(row: GalleryRow, image: { src: string; width: number; height: number }, difficulty: PuzzleDifficulty, width: number, height: number): Game {
   const grid = puzzleGrid(image.width, image.height, difficulty);
-  const layout = puzzleLayout(width, image.width, image.height, grid);
+  const layout = puzzleLayout(width, image.width, image.height, grid, height);
   const pieces = createPuzzlePieces(grid);
-  return { row, ...image, roundId: crypto.randomUUID(), layoutWidth: width, grid, pieces, groups: createPuzzleGroups(pieces, layout) };
+  return { row, ...image, roundId: crypto.randomUUID(), layoutWidth: width, layoutHeight: height, grid, pieces, groups: createPuzzleGroups(pieces, layout) };
 }
 
 export function PuzzlePanel({ active }: { active: boolean }) {
@@ -26,14 +28,19 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showGuide, setShowGuide] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(readPuzzleSoundPreference);
+  const audio = useRef<ReturnType<typeof createPuzzleAudio> | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const [snapping, setSnapping] = useState<SnapEffect | null>(null);
   const [showcaseRound, setShowcaseRound] = useState<string | null>(null);
   const [width, setWidth] = useState(800);
+  const [height, setHeight] = useState(520);
+  const page = useRef<HTMLDivElement>(null);
   const mat = useRef<HTMLDivElement>(null);
   const gameRef = useRef(game);
   const widthRef = useRef(width);
+  const heightRef = useRef(height);
   const difficultyRef = useRef(difficulty);
   const pool = useRef<Promise<GalleryRow[]> | null>(null);
   const request = useRef(0);
@@ -41,8 +48,8 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   const snapKey = useRef(0);
   const drag = useRef<Drag | null>(null);
   const clipPrefix = useId().replace(/:/g, '');
-  gameRef.current = game; widthRef.current = width;
-  const layout = game ? puzzleLayout(width, game.width, game.height, game.grid) : null;
+  gameRef.current = game; widthRef.current = width; heightRef.current = height;
+  const layout = game ? puzzleLayout(width, game.width, game.height, game.grid, height) : null;
   const layoutRef = useRef<PuzzleLayout | null>(layout);
   layoutRef.current = layout;
   const complete = game?.groups.length === 1;
@@ -54,6 +61,11 @@ export function PuzzlePanel({ active }: { active: boolean }) {
 
   const commitGame = useCallback((next: Game) => { gameRef.current = next; setGame(next); }, []);
   const revealReady = useCallback((roundId: string) => setShowcaseRound(roundId), []);
+  useEffect(() => {
+    const player = createPuzzleAudio(); audio.current = player;
+    return () => { player.dispose(); if (audio.current === player) audio.current = null; };
+  }, []);
+  useEffect(() => { audio.current?.setEnabled(soundEnabled && active); }, [soundEnabled, active]);
   const draw = useCallback(async () => {
     const current = ++request.current;
     setLoading(true); setError(''); setNotice(''); setSnapping(null);
@@ -70,7 +82,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
       }
       const image = await loadPuzzleImage(row.image_url);
       if (current !== request.current) return;
-      commitGame(freshGame(row, image, difficultyRef.current, widthRef.current));
+      commitGame(freshGame(row, image, difficultyRef.current, widthRef.current, heightRef.current));
       setShowGuide(false); z.current = 100;
       if (rows.length === 1) setNotice('图库目前只有一张符合条件的图片；换一张会重新打乱这幅拼图。');
     } catch (err) {
@@ -88,19 +100,37 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   useEffect(() => {
     const element = mat.current;
     if (!element || !active) return;
-    const observer = new ResizeObserver(([entry]) => { if (entry.contentRect.width > 0) setWidth(entry.contentRect.width); });
+    const fitViewport = () => {
+      if (!page.current) return;
+      const top = page.current.getBoundingClientRect().top + window.scrollY;
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      page.current.style.setProperty('--puzzle-page-height', `${Math.max(0, viewportHeight - top)}px`);
+    };
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.target !== element) { fitViewport(); continue; }
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          setWidth(entry.contentRect.width); setHeight(entry.contentRect.height);
+        }
+      }
+    });
+    fitViewport();
     observer.observe(element);
-    return () => { observer.disconnect(); drag.current = null; setDragging(null); };
+    const header = document.querySelector('.studio-header');
+    if (header) observer.observe(header);
+    window.addEventListener('resize', fitViewport);
+    window.visualViewport?.addEventListener('resize', fitViewport);
+    return () => { observer.disconnect(); window.removeEventListener('resize', fitViewport); window.visualViewport?.removeEventListener('resize', fitViewport); drag.current = null; setDragging(null); };
   }, [active]);
 
   useEffect(() => {
     drag.current = null; setDragging(null); setSnapping(null);
     const previous = gameRef.current;
-    if (!previous || previous.layoutWidth === width) return;
-    const nextLayout = puzzleLayout(width, previous.width, previous.height, previous.grid);
+    if (!previous || previous.layoutWidth === width && previous.layoutHeight === height) return;
+    const nextLayout = puzzleLayout(width, previous.width, previous.height, previous.grid, height);
     const reflowed = reflowPuzzleGroups(previous.groups, previous.pieces, nextLayout);
-    commitGame({ ...previous, layoutWidth: width, groups: reflowed.groups });
-  }, [width, commitGame]);
+    commitGame({ ...previous, layoutWidth: width, layoutHeight: height, groups: reflowed.groups });
+  }, [width, height, commitGame]);
 
   useEffect(() => {
     if (!snapping) return;
@@ -125,7 +155,8 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     const scroll = () => {
       const moving = drag.current;
       if (moving?.moved) {
-        const speed = moving.clientY < 120 ? -10 : moving.clientY > window.innerHeight - 60 ? 10 : 0;
+        const bounds = mat.current?.getBoundingClientRect();
+        const speed = bounds && moving.clientY < 120 && bounds.top < 120 ? -10 : bounds && moving.clientY > window.innerHeight - 60 && bounds.bottom > window.innerHeight ? 10 : 0;
         if (speed) { window.scrollBy(0, speed); moveDrag(moving.clientX, moving.clientY); }
       }
       frame = requestAnimationFrame(scroll);
@@ -140,16 +171,19 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     if (!current || !currentLayout) return;
     const result = snapPuzzleGroup(current.groups, groupId, current.pieces, currentLayout);
     if (!result.point) return;
+    if (current.groups.length === current.pieces.length) void getPuzzleLayers(current.row.id).catch(() => {});
     const top = ++z.current;
     let groups = result.groups.map((group) => group.id === groupId ? { ...group, z: top } : group);
     if (groups.length === 1) groups = [centerPuzzleGroup(groups[0], current.pieces, currentLayout)];
     commitGame({ ...current, groups });
+    audio.current?.play(groups.length === 1 ? 'complete' : 'snap');
     setSnapping({ key: ++snapKey.current, pieceIds: result.joinedIds, point: result.point });
     setSelected(groupId); setNotice(`吸附成功，已拼成 ${result.joinedIds.length} 块的整体。按住其中任意一块可整组拖动。`);
   };
 
   const startDrag = (event: PointerEvent<HTMLButtonElement>, group: PuzzleGroup) => {
     if (loading || complete || event.button !== 0 || drag.current || !mat.current) return;
+    audio.current?.unlock();
     const bounds = mat.current.getBoundingClientRect();
     drag.current = { groupId: group.id, pointerId: event.pointerId, offsetX: event.clientX - bounds.left - mat.current.clientLeft - group.x, offsetY: event.clientY - bounds.top - mat.current.clientTop - group.y, startX: event.clientX, startY: event.clientY, clientX: event.clientX, clientY: event.clientY, moved: false };
     setDragging(group.id); setSelected(group.id); setNotice(''); setSnapping(null);
@@ -171,6 +205,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     const directions: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     const direction = directions[event.key];
     if (!direction || loading || complete || drag.current || !gameRef.current || !layout) return;
+    audio.current?.unlock();
     event.preventDefault(); setSnapping(null); setSelected(group.id);
     const current = gameRef.current; const step = event.shiftKey ? 1 : 10;
     commitGame({ ...current, groups: positionPuzzleGroup(current.groups, group.id, group.x + direction[0] * step, group.y + direction[1] * step, current.pieces, layout) });
@@ -180,17 +215,18 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     difficultyRef.current = level; setDifficulty(level);
     drag.current = null; setDragging(null); setSelected(null); setNotice(''); setSnapping(null); z.current = 100;
     const previous = gameRef.current;
-    if (previous) commitGame(freshGame(previous.row, previous, level, widthRef.current));
+    if (previous) commitGame(freshGame(previous.row, previous, level, widthRef.current, heightRef.current));
   };
 
-  return <div className='puzzle-page'>
+  return <div ref={page} className='puzzle-page'>
     <header className='puzzle-intro'>
-      <div><p className='studio-eyebrow'>A LITTLE BREAK / IMAGE PUZZLE</p><h1>美图拼图<span>.</span></h1><p>把喜欢的画面，一片片拼回来。生图还在继续，你可以先玩一局。</p></div>
+      <div><p className='studio-eyebrow'>A LITTLE BREAK / IMAGE PUZZLE</p><h1>美图拼图<span>.</span></h1><p>把喜欢的画面，一片片拼回来。</p></div>
       <a href={ROUTE_HASHES.gallery} className='studio-text-link'>图片来自画廊 <span aria-hidden='true'>↗</span></a>
     </header>
     <div className='puzzle-toolbar'>
       <fieldset className='puzzle-levels' disabled={loading}><legend>拼图难度</legend>{PUZZLE_DIFFICULTIES.map((level) => <button key={level.id} type='button' aria-pressed={difficulty === level.id} onClick={() => restart(level.id)}>{level.label}<small>约 {level.target} 块</small></button>)}</fieldset>
       <div className='puzzle-tools'>
+        <button type='button' className='puzzle-tool' aria-label='拼图声效' aria-pressed={soundEnabled} title='轻柔的拼接与完成声效' onClick={() => { const next = !soundEnabled; setSoundEnabled(next); writePuzzleSoundPreference(next); audio.current?.setEnabled(next && active); if (next) audio.current?.unlock(); }}>声效：{soundEnabled ? '开' : '关'}</button>
         <button type='button' className='puzzle-tool' disabled={!game || loading} aria-pressed={showGuide} onClick={() => setShowGuide((show) => !show)}>{showGuide ? '隐藏原图' : '查看原图'}</button>
         <button type='button' className='puzzle-tool' disabled={!game || loading} onClick={() => restart()}>重新打乱</button>
         <button type='button' className='studio-action studio-action-primary puzzle-refresh' disabled={loading} onClick={() => void draw()}><span aria-hidden='true'>↻</span>{loading ? '抽图中…' : '换一张'}</button>
@@ -203,7 +239,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     </div>
     <div className='puzzle-progress' role='progressbar' aria-label='拼图完成度' aria-valuenow={connections} aria-valuemin={0} aria-valuemax={maxConnections}><span style={{ width: `${connections / maxConnections * 100}%` }} /></div>
     {showGuide && game && <figure className='puzzle-reference'><img src={game.src} alt='拼图原图提示' draggable={false} /><figcaption>原图参考 · 可以在桌面任意位置拼接</figcaption></figure>}
-    <p id='puzzle-help' className='puzzle-help'>按住碎片拖动，靠近正确的相邻边时松开即可吸附。拼好的部分可以整组拖动，拼完后自动归中开启视差。键盘可用方向键移动，Shift 加方向键微调。</p>
+    <p id='puzzle-help' className='puzzle-help' title='键盘可用方向键移动，Shift 加方向键微调'>拖动碎片，松开吸附；拼好的部分可以整组移动，完成后自动进入视差展示。<span className='sr-only'>键盘可用方向键移动，Shift 加方向键微调。</span></p>
     <p className='puzzle-status' role='status'>{complete ? showcase ? '拼好了！移动鼠标查看视差，左键翻页切换效果，也可以切回原画 2D。' : '拼好了！画面正在归中，即将开启视差展示。' : notice || (loading ? '正在从图库抽取图片…' : '自由拼接，没有固定落点。站内切换页面会保留进度，生图任务继续运行。')}</p>
     <div ref={mat} className='puzzle-mat' data-complete={complete} data-showcase={showcase} data-group-count={game?.groups.length} aria-label='拼图区域' aria-describedby='puzzle-help' aria-busy={loading}>
       {game && layout ? <>
@@ -225,7 +261,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
           </button>;
         })}
         {snapping && <span key={snapping.key} className='puzzle-snap-burst' aria-hidden='true' style={{ left: snapping.point.x, top: snapping.point.y }} />}
-        {complete && <PuzzleReveal key={game.roundId} src={game.src} width={layout.image.width} height={layout.image.height} matWidth={layout.width} roundId={game.roundId} active={active} disabled={loading} onReady={revealReady} />}
+        {complete && <PuzzleReveal key={game.roundId} src={game.src} galleryId={game.row.id} width={layout.image.width} height={layout.image.height} matWidth={layout.width} matHeight={layout.height} roundId={game.roundId} active={active} disabled={loading} onReady={revealReady} />}
       </> : <div className='puzzle-empty'><span aria-hidden='true'>◇</span><p>{loading ? '把美图变成一桌拼图…' : '保存喜欢的作品，就能在这里拼起来。'}</p>{!loading && <a href={ROUTE_HASHES.gallery} className='studio-text-link'>去画廊看看 ↗</a>}</div>}
     </div>
   </div>;

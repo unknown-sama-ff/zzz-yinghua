@@ -1,22 +1,27 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
+import { forgetPuzzleLayers, getPuzzleLayers, type PuzzleLayers } from '../lib/puzzleLayers';
 
 const MODES = [
   { id: 'flat', label: '原画 2D' },
   { id: 'float', label: '悬浮相片' },
-  { id: 'layers', label: '景深层叠' },
+  { id: 'layers', label: '主体分层' },
   { id: 'lens', label: '弧面透镜' },
 ] as const;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 interface Props {
-  src: string; width: number; height: number; matWidth: number;
+  src: string; galleryId: string | number; width: number; height: number; matWidth: number; matHeight: number;
   roundId: string; active: boolean; disabled: boolean; onReady: (roundId: string) => void;
 }
 
-/** A single-image depth treatment: no extra image generation or network requests. */
-export function PuzzleReveal({ src, width, height, matWidth, roundId, active, disabled, onReady }: Props) {
+/** Real subject/background assets are prepared on the server and reused across rounds. */
+export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeight, roundId, active, disabled, onReady }: Props) {
   const [ready, setReady] = useState(false);
-  const [mode, setMode] = useState(1);
+  const [mode, setMode] = useState(2);
+  const [layers, setLayers] = useState<PuzzleLayers | null>(null);
+  const [layerError, setLayerError] = useState('');
+  const [layerLoading, setLayerLoading] = useState(false);
+  const [layerAttempt, setLayerAttempt] = useState(0);
   const [flipping, setFlipping] = useState(false);
   const [turn, setTurn] = useState({ key: 0, direction: 1 });
   const root = useRef<HTMLDivElement>(null);
@@ -25,8 +30,17 @@ export function PuzzleReveal({ src, width, height, matWidth, roundId, active, di
   const viewed = useRef(false);
   const focused = useRef(false);
   const turning = useRef(false);
-  const extent = Math.min(matWidth * (matWidth < 600 ? 0.6 : 0.68), 820);
-  const scale = extent / Math.max(width, height);
+  const scale = Math.min(Math.min(matWidth * 0.72, 820) / width, Math.max(80, matHeight - 160) / height);
+
+  useEffect(() => {
+    if (!ready || !active) return;
+    let cancelled = false;
+    setLayerLoading(true); setLayerError('');
+    getPuzzleLayers(galleryId).then((result) => { if (!cancelled) setLayers(result); })
+      .catch((error) => { if (!cancelled) { setLayers(null); setLayerError(error instanceof Error ? error.message : '这张图片暂时无法分层'); } })
+      .finally(() => { if (!cancelled) setLayerLoading(false); });
+    return () => { cancelled = true; };
+  }, [ready, active, galleryId, layerAttempt]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { setReady(true); onReady(roundId); }, reducedMotion() ? 0 : 950);
@@ -37,7 +51,9 @@ export function PuzzleReveal({ src, width, height, matWidth, roundId, active, di
     if (!active || viewed.current) return;
     const timer = window.setTimeout(() => {
       viewed.current = true;
-      card.current?.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'instant' : 'smooth' });
+      const bounds = card.current?.getBoundingClientRect();
+      const headerBottom = document.querySelector('.studio-header')?.getBoundingClientRect().bottom ?? 0;
+      if (bounds && (bounds.top < headerBottom || bounds.bottom > window.innerHeight)) card.current?.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'instant' : 'smooth' });
     }, reducedMotion() ? 0 : 150);
     return () => window.clearTimeout(timer);
   }, [active]);
@@ -78,7 +94,9 @@ export function PuzzleReveal({ src, width, height, matWidth, roundId, active, di
     ];
   };
 
-  return <div ref={root} className='puzzle-reveal' data-phase={ready ? 'ready' : 'centering'} data-mode={MODES[mode].id} data-flipping={flipping} onPointerMove={updatePointer} onPointerLeave={resetPointer} style={{ '--reveal-scale': scale, '--flip-direction': turn.direction } as CSSProperties}>
+  const layered = mode === 2 && Boolean(layers);
+  const imageFailed = () => { setLayers(null); setLayerError('分层图片读取失败，原图仍可正常查看'); };
+  return <div ref={root} className='puzzle-reveal' data-phase={ready ? 'ready' : 'centering'} data-mode={MODES[mode].id} data-layered={layered} data-depth-state={layers ? 'ready' : layerLoading ? 'loading' : layerError ? 'error' : 'idle'} data-flipping={flipping} onPointerMove={updatePointer} onPointerLeave={resetPointer} style={{ '--reveal-scale': scale, '--flip-direction': turn.direction } as CSSProperties}>
     <div className='puzzle-reveal-aura' aria-hidden='true' />
     <div className='puzzle-reveal-presentation' style={{ width, height }}>
       <button ref={card} type='button' className='puzzle-reveal-card' disabled={disabled || !ready} aria-label={`切换视差效果，当前：${MODES[mode].label}`} aria-describedby={`${roundId}-reveal-help`} onClick={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); flip((mode + 1) % MODES.length, event.detail && event.clientX < bounds.left + bounds.width / 2 ? -1 : 1); }} onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); flip((mode + (event.key === 'ArrowLeft' ? 3 : 1)) % MODES.length, event.key === 'ArrowLeft' ? -1 : 1); } }}>
@@ -86,9 +104,8 @@ export function PuzzleReveal({ src, width, height, matWidth, roundId, active, di
           <span className='puzzle-reveal-tilt'>
             <span className='puzzle-reveal-edge puzzle-reveal-edge-back' aria-hidden='true' />
             <span className='puzzle-reveal-edge puzzle-reveal-edge-front' aria-hidden='true' />
-            <span className='puzzle-reveal-layer puzzle-reveal-layer-base'><img src={src} alt='拼图完成作品' draggable={false} /></span>
-            <span className='puzzle-reveal-layer puzzle-reveal-layer-middle' aria-hidden='true'><img src={src} alt='' draggable={false} /></span>
-            <span className='puzzle-reveal-layer puzzle-reveal-layer-front' aria-hidden='true'><img src={src} alt='' draggable={false} /></span>
+            <span className='puzzle-reveal-layer puzzle-reveal-layer-base'><img src={layered ? layers!.background : src} alt={layered ? '补全后的背景' : '拼图完成作品'} draggable={false} onError={layered ? imageFailed : undefined} /></span>
+            {layered && <span className='puzzle-reveal-layer puzzle-reveal-layer-subject'><img src={layers!.foreground} alt='分离出的角色前景' draggable={false} onError={imageFailed} /></span>}
             <span className='puzzle-reveal-layer puzzle-reveal-layer-lens' aria-hidden='true'><img src={src} alt='' draggable={false} /></span>
             <span className='puzzle-reveal-gloss' aria-hidden='true' />
           </span>
@@ -96,8 +113,11 @@ export function PuzzleReveal({ src, width, height, matWidth, roundId, active, di
         </span>
       </button>
     </div>
+    {mode === 2 && ready && <div className='puzzle-layer-status' role='status'>
+      {layerLoading ? '正在分离主体与修补背景，先显示原图…' : layerError ? <>{layerError}<button type='button' disabled={disabled} onClick={() => { forgetPuzzleLayers(galleryId); setLayerAttempt((value) => value + 1); }}>重试分层</button></> : layers ? '主体与背景已分离 · 移动鼠标查看层间视差' : ''}
+    </div>}
     <div className='puzzle-reveal-caption'>
-      <div className='puzzle-reveal-mode'><span>{mode ? '2.5D' : '2D'}</span><strong aria-live='polite'>{MODES[mode].label}</strong><small>{mode + 1} / {MODES.length}</small><button type='button' className='puzzle-reveal-toggle' disabled={!ready || disabled || flipping} onClick={() => flip(mode ? 0 : 1)}>{mode ? '切回 2D' : '开启 2.5D'}</button></div>
+      <div className='puzzle-reveal-mode'><span>{mode && (mode !== 2 || layers) ? '2.5D' : '2D'}</span><strong aria-live='polite'>{MODES[mode].label}</strong><small>{mode + 1} / {MODES.length}</small><button type='button' className='puzzle-reveal-toggle' disabled={!ready || disabled || flipping} onClick={() => flip(mode ? 0 : 2)}>{mode ? '切回 2D' : '开启 2.5D'}</button></div>
       <p id={`${roundId}-reveal-help`}>{mode ? '移动鼠标查看视差 · 左键翻页切换效果' : '欣赏完整原画 · 左键翻页开启视差'}</p>
     </div>
   </div>;

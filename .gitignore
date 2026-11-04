@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+/.cache/parallax/
 
 # Local Claude Code scratch (worktrees, diff drafts) — never commit
 .claude/
