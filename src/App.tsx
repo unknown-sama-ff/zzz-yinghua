@@ -19,16 +19,20 @@ import { CursorEffects } from './components/CursorEffects';
 import { AmbientPetals } from './components/AmbientPetals';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/studio.css';
+import './styles/puzzle.css';
 
 const Assets = lazy(() => import('./components/CharacterAssets'));
 const YinghuaPanel = lazy(() => import('./components/YinghuaPanel').then((m) => ({ default: m.YinghuaPanel })));
 const YinghuaViewer = lazy(() => import('./components/YinghuaViewer').then((m) => ({ default: m.YinghuaViewer })));
 const Poster = lazy(() => import('./components/PosterPanel').then((m) => ({ default: m.PosterPanel })));
 const Gallery = lazy(() => import('./components/GalleryPanel').then((m) => ({ default: m.GalleryPanel })));
+const Puzzle = lazy(() => import('./components/PuzzlePanel').then((m) => ({ default: m.PuzzlePanel })));
+const ImageToPrompt = lazy(() => import('./components/ImageToPromptPanel').then((m) => ({ default: m.ImageToPromptPanel })));
+const LocalDenoise = lazy(() => import('./components/LocalDenoisePanel').then((m) => ({ default: m.LocalDenoisePanel })));
 const Prompts = lazy(() => import('./components/PromptGalleryPanel').then((m) => ({ default: m.PromptGalleryPanel })));
 
 const workshopTabs = [{ route: 'assets', label: '角色素材' }, { route: 'yinghua', label: '影画创作' }, { route: 'poster', label: '海报创作' }] as const;
-const pageTitles: Record<AppRoute, string> = { home: '影画工坊 · 让你的角色，有戏可演', assets: '角色素材 · 影画工坊', yinghua: '影画创作 · 影画工坊', poster: '海报创作 · 影画工坊', gallery: '画廊 · 影画工坊', prompts: '提示词 · 影画工坊' };
+const pageTitles: Record<AppRoute, string> = { home: '影画工坊 · 让你的角色，有戏可演', assets: '角色素材 · 影画工坊', yinghua: '影画创作 · 影画工坊', poster: '海报创作 · 影画工坊', gallery: '画廊 · 影画工坊', puzzle: '美图拼图 · 影画工坊', reverse: '看图反推 · 影画工坊', denoise: '图片降噪 · 影画工坊', prompts: '提示词 · 影画工坊' };
 
 /** Mount on first visit; native hidden removes inactive content from layout and focus. */
 function KeepPage({ active, children, name }: { active: boolean; children: ReactNode; name: string }) {
@@ -101,6 +105,9 @@ export default function App() {
           <KeepPage active={route === 'poster'} name="海报创作"><Poster /></KeepPage>
           <KeepPage active={route === 'gallery'} name="画廊"><div className="studio-page-intro"><p className="studio-eyebrow">THE COMMUNITY COLLECTION</p><h1>在这里，让作品相遇<span>.</span></h1><p>浏览大家保存的生成作品，找到下一次创作的灵感。</p></div><Gallery /></KeepPage>
           <KeepPage active={route === 'prompts'} name="提示词"><Prompts /></KeepPage>
+          <KeepPage active={route === 'puzzle'} name="美图拼图"><Puzzle active={route === 'puzzle'} /></KeepPage>
+          <KeepPage active={route === 'reverse'} name="看图反推"><ImageToPrompt /></KeepPage>
+          {route === 'denoise' && <section className="studio-page" aria-label="图片降噪"><ErrorBoundary><Suspense fallback={<p className="studio-loading" role="status">正在打开图片降噪…</p>}><LocalDenoise /></Suspense></ErrorBoundary></section>}
         </InpaintTargetSelector>
       </main>
       <StudioFooter onSupport={() => setSupportOpen(true)} />

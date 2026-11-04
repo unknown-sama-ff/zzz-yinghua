@@ -28,6 +28,11 @@ import {
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 
+function emptyTextUnlessTimeout(error) {
+  if (error instanceof UpstreamError && error.code === 'UPSTREAM_TIMEOUT') throw error;
+  return '';
+}
+
 /**
  * Clamp the per-request image count the client may ask the upstream for, so an
  * arbitrarily large `n` can't reach the provider.
@@ -108,7 +113,11 @@ async function spawnPollWorker(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
       async function fetchWithTimeout(url, opts = {}) {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 180000);
-        try { return await fetch(url, { ...opts, redirect: 'error', signal: ctrl.signal }); }
+        try {
+          const res = await fetch(url, { ...opts, redirect: 'error', signal: ctrl.signal });
+          const text = await res.text();
+          return { ok: res.ok, json: async () => JSON.parse(text) };
+        }
         finally { clearTimeout(t); }
       }
       async function parseJsonSafe(res) {
@@ -206,6 +215,7 @@ async function seedream(req) {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
+      void res.body?.cancel?.().catch(() => {});
       throw new UpstreamError(codeFromStatus(res.status), `seedream 返回 ${res.status}`, res.status);
     }
     return parseJsonSafe(res);
@@ -227,7 +237,7 @@ async function pollSeedreamTask(base, key, taskId, maxMs = POLL_DEADLINE_MS) {
     const res = await fetchWithTimeout(`${base.replace(/\/$/, '')}/tasks/${taskId}`, {
       headers: { Authorization: `Bearer ${key}` },
     });
-    if (!res.ok) continue;
+    if (!res.ok) { void res.body?.cancel?.().catch(() => {}); continue; }
     const json = await parseJsonSafe(res);
     const status = json.status || json.state;
     if (status === 'succeeded' || status === 'completed' || status === 'success') {
@@ -325,6 +335,7 @@ async function gptImage(req) {
     const imageMaxDim = Number.isInteger(requestedMaxDim)
       ? Math.min(Math.max(requestedMaxDim, MAX_COMPRESS_DIM), MAX_HIGH_FIDELITY_EDIT_DIM)
       : MAX_COMPRESS_DIM;
+    const preserveInputQuality = req.preserveInputQuality === true;
     const rawReferences = Array.isArray(req.refImages) ? req.refImages : [];
     const processedReferences = await Promise.all(rawReferences.map(async (reference) => {
       const referenceBuffer = Buffer.from(reference.base64, 'base64');
@@ -336,14 +347,26 @@ async function gptImage(req) {
       try {
         const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
         const needsResize = meta.width && meta.height && (meta.width > imageMaxDim || meta.height > imageMaxDim);
-        const needsFormatChange = mime !== 'image/jpeg';
+        const needsFormatChange = preserveInputQuality
+          ? !['image/png', 'image/jpeg'].includes(mime)
+          : mime !== 'image/jpeg';
         if (needsResize || needsFormatChange) {
           const pipeline = sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS });
           if (needsResize) pipeline.resize(imageMaxDim, imageMaxDim, { fit: 'inside', withoutEnlargement: true });
           if (needsFormatChange) {
-            mime = 'image/jpeg';
-            ext = 'jpg';
-            pipeline.jpeg({ quality: JPEG_QUALITY });
+            if (preserveInputQuality) {
+              mime = 'image/png';
+              ext = 'png';
+              pipeline.png();
+            } else {
+              mime = 'image/jpeg';
+              ext = 'jpg';
+              pipeline.jpeg({ quality: JPEG_QUALITY });
+            }
+          } else if (preserveInputQuality && needsResize) {
+            mime = 'image/png';
+            ext = 'png';
+            pipeline.png();
           }
           buffer = await pipeline.toBuffer();
         }
@@ -358,16 +381,29 @@ async function gptImage(req) {
       const jpegQuality = JPEG_QUALITY;
       const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
       const needsResize = meta.width && meta.height && (meta.width > maxDim || meta.height > maxDim);
-      const needsFormatChange = mime !== 'image/jpeg';
+      const needsFormatChange = preserveInputQuality
+        ? !['image/png', 'image/jpeg'].includes(mime)
+        : mime !== 'image/jpeg';
       if (needsResize || needsFormatChange) {
         const pipeline = sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS });
         if (needsResize) {
           pipeline.resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true });
         }
         if (needsFormatChange) {
-          processedMime = 'image/jpeg';
-          processedExt = 'jpg';
-          pipeline.jpeg({ quality: jpegQuality });
+          if (preserveInputQuality) {
+            processedMime = 'image/png';
+            processedExt = 'png';
+            pipeline.png();
+          } else {
+            processedMime = 'image/jpeg';
+            processedExt = 'jpg';
+            pipeline.jpeg({ quality: jpegQuality });
+          }
+        } else if (preserveInputQuality && needsResize) {
+          // Resizing a JPEG must be re-encoded, so use lossless PNG afterward.
+          processedMime = 'image/png';
+          processedExt = 'png';
+          pipeline.png();
         }
         processedBuffer = await pipeline.toBuffer();
         console.log(`[gpt-image] server-side processed: ${payloadBytes} -> ${processedBuffer.length} bytes (${(processedBuffer.length/1024).toFixed(1)} KB) maxDim=${maxDim} resize=${needsResize} format=${needsFormatChange ? 'to-jpeg' : 'unchanged'}`);
@@ -420,7 +456,7 @@ async function gptImage(req) {
     }
     let res = await tryEdits(buildEditForm(inputImages, preparedMask));
     if (!res.ok) {
-      const bodyText = await res.text().catch(() => '');
+      const bodyText = await res.text().catch(emptyTextUnlessTimeout);
       const rejection = contentRejectionError(res, bodyText, [key]);
       console.warn(`[gpt-image] edits failed ${res.status}: ${(rejection?.upstreamError?.message ?? bodyText).slice(0, 200)}`);
       if (rejection) throw rejection;
@@ -445,7 +481,7 @@ async function gptImage(req) {
             : null;
           res = await tryEdits(buildEditForm(reducedInputs, reducedMask));
           if (!res.ok) {
-            const retryText = await res.text().catch(() => '');
+            const retryText = await res.text().catch(emptyTextUnlessTimeout);
             const rejection = contentRejectionError(res, retryText, [key]);
             if (rejection) throw rejection;
             if (qualityRejected(req, res, retryText)) throw qualityRejectionError(res.status);
@@ -480,7 +516,7 @@ async function gptImage(req) {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const errorText = await res.text().catch(() => '');
+      const errorText = await res.text().catch(emptyTextUnlessTimeout);
       const rejection = contentRejectionError(res, errorText, [key]);
       if (rejection) throw rejection;
       if (qualityRejected(req, res, errorText)) throw qualityRejectionError(res.status);
@@ -524,6 +560,7 @@ async function customUrl(req) {
       body,
     });
     if (!res.ok) {
+      void res.body?.cancel?.().catch(() => {});
       throw new UpstreamError(codeFromStatus(res.status), `自定义端点返回 ${res.status}`, res.status);
     }
     return parseJsonSafe(res);

@@ -12,6 +12,8 @@ export interface CustomProviderConfig {
 interface ProviderState {
   provider: ProviderName;
   setProvider: (p: ProviderName) => void;
+  denoiseEnabled: boolean;
+  setDenoiseEnabled: (enabled: boolean) => void;
   gptImageQuality: GptImageQuality;
   setGptImageQuality: (quality: GptImageQuality) => void;
   presetQualityOptions: readonly GptImageQuality[] | null;
@@ -56,6 +58,8 @@ let presetRequestId = 0;
 export const useProviderStore = create<ProviderState>((set, get) => ({
   provider: 'seedream',
   setProvider: (p) => set({ provider: p }),
+  denoiseEnabled: false,
+  setDenoiseEnabled: (enabled) => set({ denoiseEnabled: enabled }),
   gptImageQuality: 'auto',
   setGptImageQuality: (quality) => {
     if (gptImageQualityOptions(get())?.includes(quality)) set({ gptImageQuality: quality });

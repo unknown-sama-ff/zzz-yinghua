@@ -12,7 +12,7 @@ for (const instruction of [
     assert.ok(prompt.endsWith(instruction));
     assert.match(prompt, /每个膝盖只接一条小腿/);
     assert.match(prompt, /用户明确指定保留的分支不得删除或替换/);
-    assert.match(prompt, /删除多余分支及其脚踝、鞋袜，恢复其后方背景或支撑面/);
+    assert.match(prompt, /删除已确认的多余分支及其脚踝、鞋袜，恢复其后方背景或支撑面/);
     assert.match(prompt, /不要擅自改成删除其他位置的脚/);
     assert.match(prompt, /蒙版外的内容必须保持不变/);
   });
@@ -23,4 +23,11 @@ test('ordinary edits do not introduce leg-reconstruction instructions', () => {
   const prompt = buildContextualEditPrompt(instruction, 'smart');
   assert.ok(prompt.endsWith(instruction));
   assert.doesNotMatch(prompt, /多余腿局部修复|双腿连接校验/);
+});
+
+test('leg repair instructions protect legitimate nonhuman anatomy and uncertain branches', () => {
+  const prompt = buildContextualEditPrompt('修正人鱼角色多余腿分支，保留鱼尾。', 'smart');
+  assert.match(prompt, /无腿或其他体态不按双腿修复，不补腿、不删原生尾鳍或合法肢体/);
+  assert.match(prompt, /仅对原设定为人形双腿的角色保留正确的两条连接/);
+  assert.match(prompt, /无法确认分支多余时保留原状/);
 });

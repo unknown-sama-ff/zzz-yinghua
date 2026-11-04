@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadFrontend } from './loadFrontend.js';
 
-const { YINGHUA_STYLES, fillName, splitName, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
+const { YINGHUA_STYLES, fillName, splitName, THREE_VIEW_PROMPT, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
 const variants = [
   [1, '零命', 'promptTemplate', 'promptTemplateEn'],
   [2, '三命', 'promptTemplate', 'promptTemplateEn'],
@@ -13,6 +13,28 @@ function prompt(id, key, lang = 'zh', showText = true) {
   const style = YINGHUA_STYLES.find((candidate) => candidate.id === id);
   return fillName(style[key], 'HAMAN KARN', undefined, showText, '侧躺', '半睁眼', '沉着', lang, id);
 }
+
+test('three-view preserves accessory ownership, garment details and original markings across views', () => {
+  assert.match(THREE_VIEW_PROMPT, /角色设计保真高于补全、对称、美化和细节丰富度/);
+  assert.match(THREE_VIEW_PROMPT, /正面图为角色身份主参考/);
+  assert.match(THREE_VIEW_PROMPT, /数量、形状、颜色、材质、花纹、佩戴位置、连接方式和相对身体的尺寸比例保持一致/);
+  assert.match(THREE_VIEW_PROMPT, /左右以角色自身为准/);
+  assert.match(THREE_VIEW_PROMPT, /不把单侧配饰镜像复制到另一侧/);
+  assert.match(THREE_VIEW_PROMPT, /不改剪裁、覆盖范围、配色或材质关系/);
+  assert.match(THREE_VIEW_PROMPT, /原有的文字、标记与图案属于角色设计，须保留/);
+  assert.match(THREE_VIEW_PROMPT, /面部特写的发饰、耳饰、五官和颜色必须与三视图一致/);
+});
+
+test('three-view limits invented details and preserves nonhuman forms and natural occlusion', () => {
+  assert.match(THREE_VIEW_PROMPT, /最小必要补全，不凭空添加装饰、花纹或服装部件/);
+  assert.match(THREE_VIEW_PROMPT, /肢体类型、数量与手指数按原设定/);
+  assert.match(THREE_VIEW_PROMPT, /保留鱼尾、蛇身、多足、翼鳍/);
+  assert.match(THREE_VIEW_PROMPT, /不补不存在的手脚/);
+  assert.match(THREE_VIEW_PROMPT, /被头发、衣物或身体遮挡的部分保持合理遮挡/);
+  assert.match(THREE_VIEW_PROMPT, /不移动、复制配饰来强行露出/);
+  assert.match(THREE_VIEW_PROMPT, /纯白干净背景/);
+  assert.doesNotMatch(THREE_VIEW_PROMPT, /无任何遮挡|必须站立|两条腿、两只手|每手五指/);
+});
 
 for (const [id, label, zh, en] of variants) {
   for (const [key, lang] of [[zh, 'zh'], [en, 'en']]) {
@@ -57,18 +79,21 @@ test('foreground typography uses directional quotation marks at the lower corner
   }
 });
 
-test('zero-fate anatomy guard protects waist and legs without changing the original camera design', () => {
+test('zero-fate anatomy guard preserves canonical anatomy without changing the original camera design', () => {
   const zh = prompt(1, 'promptTemplate');
   const en = prompt(1, 'promptTemplateEn', 'en');
   assert.ok(zh.startsWith(ZERO_FATE_ANATOMY_PRIORITY_PREFIX));
-  assert.match(zh, /两条腿、两只手、每手五根/);
+  assert.match(zh, /肢体类型、数量、连接与手指数以原角色设定为准/);
+  assert.match(zh, /仅当原设定为人形双腿时/);
   assert.match(zh, /髋—大腿—膝—小腿—踝—脚/);
-  assert.match(zh, /腰部与骨盆连接自然/);
-  assert.match(zh, /第三条腿、重复膝盖、腿部粘连/);
+  assert.match(zh, /躯干与原生肢体\/尾部连接自然/);
+  assert.match(zh, /不补人腿/);
+  assert.doesNotMatch(zh, /两条手臂、两条腿|每手五根|每手五指|一副完整且连续的人体结构/);
   assert.match(zh, /不得用换镜头、换姿势、拉远、改裁切或改变透视/);
-  assert.match(en, /TWO legs|two legs/i);
+  assert.match(en, /Only for a canonically two-legged humanoid/);
   assert.match(en, /hip–thigh–knee–calf–ankle–foot/);
-  assert.match(en, /third leg|duplicate knees/i);
+  assert.match(en, /never add human legs/);
+  assert.doesNotMatch(en, /two arms, two legs|five (?:naturally separated )?fingers per hand/);
   assert.match(en, /never change the camera, pose, framing or perspective/);
   assert.ok(prompt(2, 'promptTemplate').startsWith('【角色保真】'));
   assert.ok(prompt(3, 'promptTemplateFront').startsWith(SIX_FATE_ANATOMY_PRIORITY_PREFIX));
@@ -90,13 +115,31 @@ test('both six-fate faces prioritize original perspective, correct hidden legs w
     assert.match(text, /保留原有近大远小、透视缩短及前后遮挡/);
     assert.match(text, /髋—大腿—膝—小腿—踝—脚/);
     assert.match(text, /画外\/遮挡部位不强行补全入画/);
-    assert.match(text, /重复膝盖、融合、穿插、断裂/);
+    assert.match(text, /相对原设定的额外\/缺失部件、融合、穿插、断裂/);
     assert.doesNotMatch(text, /允许手脚与表情做小幅自然调整|第3张输入图.*仅用于武器/);
   }
   assert.match(prompt(3, 'promptTemplateFront'), /第1张为三命成图/);
   assert.match(prompt(3, 'promptTemplateFront'), /服装款式、配件与花纹不改/);
   assert.match(prompt(3, 'promptTemplateBack'), /第1张为已完成的六命阳全彩成图/);
   assert.match(prompt(3, 'promptTemplateBack'), /【服装精简·必须执行】/);
+});
+
+test('every tier preserves nonhuman forms and makes actions and garments conditional on anatomy', () => {
+  for (const [id, , zhKey, enKey] of variants) {
+    const style = YINGHUA_STYLES.find((candidate) => candidate.id === id);
+    const zh = fillName(style[zhKey], 'MERMAID', undefined, false, '鱼尾自然蜷曲', '', '人鱼公主', 'zh', id);
+    const en = fillName(style[enKey], 'MERMAID', undefined, false, 'curled fish tail', '', 'mermaid princess', 'en', id);
+    assert.match(zh, /保留鱼尾、蛇身、多足、翼鳍、机械关节与外壳/);
+    assert.match(zh, /不补不存在的手脚/);
+    assert.match(zh, /动作、手势与支撑方式须适配该物种/);
+    assert.match(en, /Retain fish tails, serpentine bodies, multiple legs, wings\/fins/);
+    assert.match(en, /never add nonexistent hands\/feet/);
+    assert.match(en, /Adapt actions, gestures and support to this species/);
+    assert.doesNotMatch(zh, /角色只有两条腿|每手五指|每手五根/);
+    assert.doesNotMatch(en, /exactly two legs|five (?:naturally separated )?fingers per hand/);
+  }
+  assert.match(prompt(3, 'promptTemplateBack'), /鱼尾、鳍、鳞片、毛发及机体结构不是衣物/);
+  assert.match(prompt(3, 'promptTemplateBackEn', 'en'), /Fish tails, fins, scales, fur and mechanical structure are body parts, not garments/);
 });
 
 test('all four prompts are materially shorter than their previous production sizes', () => {

@@ -59,6 +59,7 @@ import {
 import { parseSponsorName } from './payments/sponsorName.js';
 import { GalleryStorageError, deleteGalleryItem, listGallery, saveGalleryItem } from './gallery.js';
 import { PromptGalleryError, deletePrompt, listPrompts, savePrompt } from './promptGallery.js';
+import { createImageToPromptHandler } from './imageToPrompt.js';
 
 // Load .env without a dependency: minimal parser for KEY=VALUE lines.
 loadEnv();
@@ -824,6 +825,9 @@ async function executeGeneration(body, idempotencyKey) {
   }
 }
 
+// Uploads remain private; the vision model returns text only, never a generation.
+app.post('/api/image-to-prompt', rateLimit, upload.single('image'), createImageToPromptHandler());
+
 // ── Inpaint (image + optional mask + prompt) via gpt-image ───────────────────
 app.post('/api/inpaint', rateLimit, upload.fields([
   { name: 'image', maxCount: 1 },
@@ -880,6 +884,8 @@ app.post('/api/inpaint', rateLimit, upload.fields([
     imageMime: imageFile?.mimetype,
     maskBase64,
     maskMime: maskFile?.mimetype,
+    ...(bodyFields.preserveInputQuality === true || bodyFields.preserveInputQuality === 'true' ? { preserveInputQuality: true } : {}),
+    ...(bodyFields.inputImageMaxDimension !== undefined ? { inputImageMaxDimension: Number(bodyFields.inputImageMaxDimension) } : {}),
     n: 1,
     ...(typeof model === 'string' && model ? { model } : {}),
     ...(typeof apiKey === 'string' && apiKey ? { apiKey } : {}),
@@ -977,6 +983,7 @@ app.post('/api/detect-face', rateLimit, async (req, res) => {
       body: JSON.stringify(body),
     }, 180000);
     if (!response.ok) {
+      void response.body?.cancel?.().catch(() => {});
       throw new UpstreamError(codeFromStatus(response.status), `detect-face 返回 ${response.status}`, response.status);
     }
     const json = await parseJsonSafe(response);

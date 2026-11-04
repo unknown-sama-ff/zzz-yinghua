@@ -41,6 +41,9 @@ test('one click submits once, prioritizes complete upper chains and requires exp
     assert.equal(useInpaintStore.getState().versions[0].id, originalRoot);
     assert.match(requests[0].get('prompt'), /优先保留结构完整的两条连接/);
     assert.match(requests[0].get('prompt'), /完整程度相近时，优先保留处于画面上方/);
+    assert.match(requests[0].get('prompt'), /无腿、鱼尾、蛇身、多足或其他非人形结构不按人形双腿修复/);
+    assert.match(requests[0].get('prompt'), /仅当原设定为人形双腿时/);
+    assert.match(requests[0].get('prompt'), /无法确认多余分支时保留原状/);
     assert.equal(requests[0].get('quality'), 'high');
     assert.equal(requests[0].get('model'), 'gpt-image-2.5-sunburst');
     assert.equal(requests[0].get('editMode'), 'smart');

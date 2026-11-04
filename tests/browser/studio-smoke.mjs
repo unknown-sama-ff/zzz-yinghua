@@ -35,12 +35,15 @@ try {
   const attempts = [];
   let failGallery = false;
   let completeGeneration;
+  let completeRepeat;
   await context.route('**/api/**', async (request) => {
     const pathname = new URL(request.request().url()).pathname;
     apiCalls.push(pathname);
     if (pathname === '/api/generate') {
       attempts.push(request.request().postDataJSON());
       if (attempts.length === 1) return request.fulfill({ status: 400, json: { ok: false, code: 'UPSTREAM_ERROR', message: '模拟生成失败，可原位重试' } });
+      if (attempts.length === 3) await new Promise((resolve) => { completeRepeat = resolve; });
+      if (attempts.length > 2) return request.fulfill({ json: { ok: true, images: [dataUrl] } });
       await new Promise((resolve) => { completeGeneration = resolve; });
       return request.fulfill({ json: { ok: true, images: [dataUrl] } });
     }
@@ -92,6 +95,9 @@ try {
     const { useProviderStore } = await import('/src/store/useProviderStore.ts');
     useProviderStore.getState().setCred('gpt-image', { apiKey: 'qa-placeholder', baseUrl: 'https://example.invalid/v1' });
   });
+  const settingsDenoise = settings.getByRole('checkbox', { name: '降噪模式', exact: true });
+  assert.equal(await settingsDenoise.isChecked(), false);
+  await settingsDenoise.check();
   await screenshot(page, 'settings-desktop');
   await page.keyboard.press('Escape');
   await settings.waitFor({ state: 'hidden' });
@@ -100,6 +106,8 @@ try {
 
   await page.getByRole('button', { name: '自由创作', exact: false }).first().click();
   const free = page.locator('#free-create-window');
+  const freeDenoise = free.getByRole('checkbox', { name: '降噪模式', exact: true });
+  assert.equal(await freeDenoise.isChecked(), true, 'free creation shares the global setting');
   assert.equal(await free.getByText('固定角色换画面', { exact: true }).isVisible(), false, 'batch stays collapsed');
   await free.locator('textarea').fill('保留自由创作草稿');
   await free.getByRole('button', { name: '添加参考图' }).click();
@@ -118,6 +126,7 @@ try {
   assert.equal(await free.locator('textarea').inputValue(), '雨后的城市，角色站在灯光下。');
   await free.getByRole('button', { name: '发送创作请求' }).click();
   await free.getByText('模拟生成失败，可原位重试', { exact: true }).waitFor();
+  await freeDenoise.uncheck();
   const retried = page.waitForRequest('**/api/generate');
   await free.getByRole('button', { name: '重试', exact: true }).click();
   await retried;
@@ -132,8 +141,34 @@ try {
   completeGeneration();
   await page.getByRole('button', { name: '自由创作', exact: false }).first().click();
   await free.getByText('已完成', { exact: true }).waitFor();
+  assert.equal(await free.getByRole('button', { name: '再画一次', exact: true }).count(), 1);
+  const repeated = page.waitForRequest('**/api/generate');
+  await free.getByRole('button', { name: '再画一次', exact: true }).click();
+  await repeated;
+  await free.getByRole('button', { name: '再画一次', exact: true }).and(free.locator('button:disabled')).waitFor();
+  assert.equal(await free.getByRole('img', { name: /^自由创作结果/ }).count(), 1, 'the previous result stays visible while repeating');
+  completeRepeat();
+  await page.waitForFunction(() => document.querySelectorAll('#free-create-window img[alt^="自由创作结果"]').length === 2);
+  assert.equal(attempts.length, 3);
+  assert.equal(attempts[1].prompt, attempts[2].prompt);
+  assert.deepEqual(attempts[1].refImages, attempts[2].refImages);
+  assert.equal(attempts[1].imageBase64, attempts[2].imageBase64);
+  assert.notEqual(attempts[1].idempotencyKey, attempts[2].idempotencyKey);
+  assert.equal(attempts[2].denoiseEnabled, true, 'repeat preserves the captured choice after toggling off');
+  assert.equal(attempts[2].preserveInputQuality, true);
+  assert.equal(attempts[2].prompt.split('【降噪与细节保真】').length - 1, 1);
+  assert.equal(await free.getByRole('button', { name: '再画一次', exact: true }).count(), 2);
+  await free.locator('textarea').fill('关闭降噪的新任务');
+  await free.getByRole('button', { name: '发送创作请求' }).click();
+  await page.waitForFunction(() => document.querySelectorAll('#free-create-window img[alt^="自由创作结果"]').length === 3);
+  assert.equal(attempts[3].denoiseEnabled, false);
+  assert.equal(attempts[3].prompt, '关闭降噪的新任务');
+  assert.equal(attempts[3].preserveInputQuality, undefined);
   await free.getByRole('button', { name: '收起自由创作' }).click();
-  checked('free creation: prompt handoff, draft/reference retention, confirmed failure retry, background completion across routes');
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  assert.equal(await settingsDenoise.isChecked(), false, 'changes in free creation sync back to settings');
+  await page.keyboard.press('Escape');
+  checked('free creation: prompt handoff, draft/reference retention, confirmed retry, background completion, and append-only repeat generation');
 
   await page.getByRole('link', { name: '角色工坊', exact: true }).click();
   await page.getByRole('link', { name: '影画创作', exact: true }).click();

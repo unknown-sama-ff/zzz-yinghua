@@ -33,7 +33,7 @@ interface CacheEntry {
   dataUrl: string;
   ts: number;
 }
-import { CACHE_TTL_MS, CACHE_PURGE_INTERVAL_MS, WORKER_TIMEOUT_MS } from './constants';
+import { CACHE_TTL_MS, CACHE_PURGE_INTERVAL_MS, WORKER_TIMEOUT_MS, MAX_STITCH_HEIGHT } from './constants';
 const stitchCache = new Map<StitchKey, CacheEntry>();
 const embedCache = new Map<EmbedKey, CacheEntry>();
 const structureAnchorCache = new Map<string, CacheEntry>();
@@ -52,13 +52,12 @@ let worker: Worker | null = null;
 const WORKER_TIMEOUT = WORKER_TIMEOUT_MS; // 6 min — matches generate() upstream timeout
 
 function getWorker(): Worker | null {
-  if (!worker || (worker as any)._disposed) {
+  if (!worker) {
     if (!hasOffscreenCanvas()) return null;
     try {
       worker = new Worker(new URL('../workers/imageWorker.ts', import.meta.url), {
         type: 'module',
       });
-      (worker as any)._disposed = false;
       wireWorker(worker);
     } catch {
       return null;
@@ -78,55 +77,61 @@ type EmbedPayload = {
 };
 type Msg = StitchPayload | EmbedPayload;
 
-const drainQueue: {
+interface PendingRequest {
+  worker: Worker;
   resolve: (blob: Blob) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
-}[] = [];
+}
+const pendingRequests = new Map<number, PendingRequest>();
+let nextRequestId = 0;
+
+function disposeWorker(w: Worker, error: Error) {
+  if (worker === w) worker = null;
+  w.terminate();
+  for (const [id, entry] of pendingRequests) {
+    if (entry.worker !== w) continue;
+    pendingRequests.delete(id);
+    clearTimeout(entry.timer);
+    entry.reject(error);
+  }
+}
 
 function wireWorker(w: Worker) {
   w.addEventListener('message', (e: MessageEvent) => {
-    const data = e.data as { type: string; blob?: Blob; message?: string };
-    if (!data || typeof data !== 'object') return;
-
-    if (data.type === 'result' && data.blob instanceof Blob) {
-      const entry = drainQueue.shift();
-      if (!entry) return;
-      clearTimeout(entry.timer);
-      entry.resolve(data.blob);
-    } else if (data.type === 'error') {
-      const entry = drainQueue.shift();
-      if (!entry) return;
-      clearTimeout(entry.timer);
-      entry.reject(new Error(data.message ?? 'worker error'));
-    }
+    const data = e.data as { type: string; requestId?: number; blob?: Blob; message?: string };
+    if (!data || typeof data !== 'object' || typeof data.requestId !== 'number') return;
+    const entry = pendingRequests.get(data.requestId);
+    if (!entry || entry.worker !== w) return;
+    if (data.type !== 'error' && !(data.type === 'result' && data.blob instanceof Blob)) return;
+    pendingRequests.delete(data.requestId);
+    clearTimeout(entry.timer);
+    if (data.type === 'result') entry.resolve(data.blob!);
+    else entry.reject(new Error(data.message ?? 'worker error'));
   });
 
-  w.addEventListener('error', () => {
-    // Worker crashed — drain remaining in-flight requests with an error so
-    // callers fall through to the main-thread fallback instead of hanging.
-    const err = new Error('worker crashed');
-    for (const entry of drainQueue) {
-      clearTimeout(entry.timer);
-      entry.reject(err);
-    }
-    drainQueue.length = 0;
-    worker = null;
-  });
+  w.addEventListener('error', () => disposeWorker(w, new Error('worker crashed')));
+  w.addEventListener('messageerror', () => disposeWorker(w, new Error('worker message could not be decoded')));
 }
 
 function sendToWorker(w: Worker, payload: Msg): Promise<string> {
   return new Promise((resolve, reject) => {
+    const requestId = ++nextRequestId;
     const timer = setTimeout(
-      () => reject(new Error('worker request timed out')),
+      () => disposeWorker(w, new Error('worker request timed out')),
       WORKER_TIMEOUT,
     );
-    drainQueue.push({
+    pendingRequests.set(requestId, {
+      worker: w,
       resolve: (blob) => { void blobToDataUrl(blob).then(resolve, reject); },
       reject,
       timer,
     });
-    w.postMessage(payload);
+    try {
+      w.postMessage({ ...payload, requestId });
+    } catch (error) {
+      disposeWorker(w, error instanceof Error ? error : new Error('worker postMessage failed'));
+    }
   });
 }
 
@@ -151,8 +156,9 @@ async function cachedOrRun<K extends StitchKey | EmbedKey>(
     if (prev?.dataUrl.startsWith('blob:')) URL.revokeObjectURL(prev.dataUrl);
 
     cache.set(key, { dataUrl, ts: Date.now() });
-    (cache as any)._inflight?.delete(key);
     return dataUrl;
+  }).finally(() => {
+    (cache as any)._inflight?.delete(key);
   });
 
   if (!inflight) (cache as any)._inflight = new Map<K, Promise<string>>();
@@ -176,11 +182,12 @@ async function fallbackStitch(dataUrls: string[]): Promise<string> {
   if (urls.length === 0) throw new Error('stitchImages: no images provided');
   if (urls.length === 1) {
     const img = await loadImg(urls[0]);
-    const oc = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
+    const oc = document.createElement('canvas');
+    oc.width = img.naturalWidth;
+    oc.height = img.naturalHeight;
     const ctx = oc.getContext('2d')!;
     ctx.drawImage(img, 0, 0);
-    const blob = await oc.convertToBlob({ type: 'image/png' });
-    return blobToDataUrl(blob);
+    return oc.toDataURL('image/png');
   }
 
   const imgs = await Promise.all(urls.map(loadImg));

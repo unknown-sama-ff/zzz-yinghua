@@ -1,6 +1,8 @@
 import type { ApiResponse, GenRequest, GptImageQuality, UpstreamErrorDetails } from '../types';
 import { API_BASE } from './apiBase';
 import { GENERATE_TIMEOUT_MS, JSON_WORKER_TIMEOUT_MS, POLL_DEADLINE_MS, POLL_INTERVAL_MS } from './constants';
+import { withDenoise } from './denoise';
+import { useProviderStore } from '../store/useProviderStore';
 
 let jsonWorker: Worker | null = null;
 let jsonParseRequestId = 0;
@@ -197,11 +199,12 @@ async function pollTask(taskId: string, requestId?: string): Promise<string[]> {
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export async function generate(req: GenRequest): Promise<string[]> {
+  const request = withDenoise(req, req.denoiseEnabled ?? useProviderStore.getState().denoiseEnabled);
   try {
     const data = await fetchJson(`${API_BASE}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
+      body: JSON.stringify(request),
       timeout: GENERATE_TIMEOUT_MS,
     }, req.idempotencyKey);
 
@@ -224,10 +227,11 @@ export async function generate(req: GenRequest): Promise<string[]> {
 }
 
 export async function inpaint(params: {
+  denoiseEnabled?: boolean;
   imageDataUrl: string;
   maskDataUrl?: string;
   prompt: string;
-  provider?: string;
+  provider?: GenRequest['provider'];
   quality?: GptImageQuality;
   model?: string;
   apiKey?: string;
@@ -277,7 +281,12 @@ export async function inpaint(params: {
     form.append('image', imageBlob, `image.${imageExt}`);
   }
 
-  form.append('prompt', prompt);
+  const request = withDenoise({ provider, prompt }, params.denoiseEnabled ?? useProviderStore.getState().denoiseEnabled);
+  form.append('prompt', request.prompt);
+  if (request.preserveInputQuality) {
+    form.append('preserveInputQuality', 'true');
+    form.append('inputImageMaxDimension', String(request.inputImageMaxDimension));
+  }
   form.append('provider', provider);
   if (quality !== undefined) form.append('quality', quality);
   form.append('editMode', editMode);

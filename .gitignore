@@ -3,6 +3,7 @@ node_modules/
 
 # Local Claude Code scratch (worktrees, diff drafts) — never commit
 .claude/
+/.codex-repeat-review-build/
 
 # Build output — committed for Railway deploy (avoids build timeout on free tier)
 

@@ -8,12 +8,16 @@ export type GptImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'ma
 export interface GenRequest {
   provider: ProviderName;
   prompt: string;
+  /** Captured at submission so queued requests and retries keep their choice. */
+  denoiseEnabled?: boolean;
   imageBase64?: string;
   imageMime?: string;
   /** Multiple independent reference images for GPT image-edit workflows. */
   refImages?: { base64: string; mime: string }[];
   /** Maximum long edge for all image-edit inputs; the server clamps this to safe presets. */
   inputImageMaxDimension?: number;
+  /** Keep PNG/lossless input where possible instead of converting references to JPEG. */
+  preserveInputQuality?: boolean;
   /** Generation detail level, independent of dimensions and input-image compression. */
   quality?: GptImageQuality;
   size?: string;
@@ -105,6 +109,7 @@ export interface FreeCreateUserMessage {
   targetReference?: FreeCreateReference;
   batchId?: string;
   batchIndex?: number;
+  repeatOfMessageId?: string;
   error?: string;
   errorCode?: string;
   httpStatus?: number;

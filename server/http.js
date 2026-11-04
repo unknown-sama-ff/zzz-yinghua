@@ -46,7 +46,60 @@ function toGetOptions(options) {
  */
 export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+  const timeoutError = () => new UpstreamError('UPSTREAM_TIMEOUT', `上游请求超时 (${timeout}ms)`, 504);
+  let expireBody;
+  const timer = setTimeout(() => {
+    controller.abort();
+    expireBody?.();
+  }, timeout);
+  // Once headers arrive, the response stream owns the same deadline.
+  let bodyOwnsTimer = false;
+  function boundedResponse(res) {
+    if (!res.body) return res;
+    const reader = res.body.getReader();
+    let settled = false;
+    function cleanup() {
+      settled = true;
+      clearTimeout(timer);
+    }
+    const body = new ReadableStream({
+      start(stream) {
+        expireBody = () => {
+          if (settled) return;
+          cleanup();
+          stream.error(timeoutError());
+          // A broken upstream need not acknowledge cancellation to let the
+          // caller fail promptly. Always observe the cancellation rejection.
+          void reader.cancel().catch(() => {});
+        };
+        if (controller.signal.aborted) expireBody();
+      },
+      async pull(stream) {
+        try {
+          const { done, value } = await reader.read();
+          if (settled) return;
+          if (done) {
+            cleanup();
+            stream.close();
+          } else stream.enqueue(value);
+        } catch (error) {
+          if (settled) return;
+          cleanup();
+          stream.error(controller.signal.aborted ? timeoutError() : error);
+        }
+      },
+      cancel(reason) {
+        cleanup();
+        void reader.cancel(reason).catch(() => {});
+      },
+    });
+    const response = new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+    for (const property of ['url', 'redirected', 'type']) {
+      Object.defineProperty(response, property, { value: res[property] });
+    }
+    bodyOwnsTimer = true;
+    return response;
+  }
   const started = Date.now();
   let currentUrl = url;
   let currentOptions = options;
@@ -64,16 +117,21 @@ export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIME
         console.warn('[upstream] FAILED to reach upstream endpoint');
         throw new UpstreamError('UPSTREAM_ERROR', '上游连接失败，请检查 Base URL / 端点是否正确');
       }
-      if (!isRedirectStatus(res.status)) return res;
+      if (!isRedirectStatus(res.status)) return boundedResponse(res);
 
       const location = res.headers.get('location');
-      if (!location) return res; // 3xx without a Location — surface it as-is
+      if (!location) return boundedResponse(res); // 3xx without a Location — surface it as-is
       if (++redirects > MAX_REDIRECTS) {
         await res.body?.cancel?.().catch(() => {});
         throw new UpstreamError('UPSTREAM_ERROR', `上游重定向次数过多 (${MAX_REDIRECTS})`, 502);
       }
       const next = new URL(location, currentUrl);
-      await assertSafeUrl(next.href); // the SSRF check the implicit follow skipped
+      try {
+        await assertSafeUrl(next.href); // the SSRF check the implicit follow skipped
+      } catch (error) {
+        void res.body?.cancel?.().catch(() => {});
+        throw error;
+      }
       const method = String(currentOptions.method || 'GET').toUpperCase();
       if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === 'POST')) {
         currentOptions = toGetOptions(currentOptions);
@@ -82,7 +140,7 @@ export async function fetchWithTimeout(url, options = {}, timeout = DEFAULT_TIME
       currentUrl = next.href;
     }
   } finally {
-    clearTimeout(timer);
+    if (!bodyOwnsTimer) clearTimeout(timer);
   }
 }
 

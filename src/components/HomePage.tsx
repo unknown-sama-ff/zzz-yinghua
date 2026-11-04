@@ -34,6 +34,9 @@ export function HomePage() {
           <span className="theme-swatches" aria-hidden="true"><i /><i /><i /></span>
           <span>{palette ? '已跟随角色取色' : '上传角色，让工坊染上你的颜色'} <span aria-hidden="true">↗</span></span>
         </a>
+        <a className='home-puzzle-hint' href={ROUTE_HASHES.puzzle}>
+          <span aria-hidden='true'>◇</span><span><strong>等图的时候，拼一幅美图。</strong><small>生图中可暂时离开创作页，任务会继续运行。</small></span><span aria-hidden='true'>↗</span>
+        </a>
       </div>
       <div className="hero-art">
         <div className="hero-art-word" aria-hidden="true">MIND<br />SCAPE</div>

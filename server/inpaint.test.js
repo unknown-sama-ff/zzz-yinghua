@@ -78,3 +78,32 @@ test('precise inpaint forwards the uploaded mask to the gpt-image edit request',
   assert.equal(upstreamMask.format, 'png');
   assert.equal(upstreamMask.hasAlpha, true);
 });
+test('inpaint forwards denoise input options and keeps a precise mask aligned', async (t) => {
+  const base = await startApp(t);
+  const originalFetch = globalThis.fetch;
+  let receivedImage;
+  let receivedMask;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    receivedImage = await sharp(Buffer.from(await init.body.get('image').arrayBuffer())).metadata();
+    receivedMask = await sharp(Buffer.from(await init.body.get('mask').arrayBuffer())).metadata();
+    return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), { status: 200 });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const source = await sharp({ create: { width: 1800, height: 900, channels: 3, background: '#ffffff' } }).png().toBuffer();
+  const form = new FormData();
+  form.append('image', new Blob([source], { type: 'image/png' }), 'image.png');
+  form.append('mask', await pngBlob(4), 'mask.png');
+  editFields(form, 'precise');
+  form.append('preserveInputQuality', 'true');
+  form.append('inputImageMaxDimension', '1536');
+  const response = await fetch(base + '/api/inpaint', { method: 'POST', body: form });
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  assert.equal(receivedImage.format, 'png');
+  assert.equal(receivedImage.width, 1536);
+  assert.equal(receivedImage.height, 768);
+  assert.equal(receivedMask.width, receivedImage.width);
+  assert.equal(receivedMask.height, receivedImage.height);
+  assert.equal(receivedMask.hasAlpha, true);
+});

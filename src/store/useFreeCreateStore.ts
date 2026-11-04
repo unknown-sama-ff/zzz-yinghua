@@ -54,6 +54,7 @@ interface FreeCreateState {
   enqueueBatch: (input: EnqueueBatchInput) => FreeCreateGeneration[];
   retryGeneration: (sessionId: string, messageId: string, confirmUncertain?: boolean) => FreeCreateGeneration | null;
   recheckGeneration: (sessionId: string, messageId: string) => FreeCreateGeneration | null;
+  repeatGeneration: (sessionId: string, messageId: string) => FreeCreateGeneration | null;
   resumeSession: (sessionId: string) => void;
   claimNextGeneration: () => { generation: FreeCreateGeneration; request: GenRequest } | null;
   /** Retained for older callers which run a request directly. */
@@ -82,6 +83,16 @@ export function activeSession(state: { sessions: FreeCreateSession[]; activeSess
 
 export function sessionHasPending(session: FreeCreateSession): boolean {
   return session.messages.some((message) => message.role === 'user' && (message.status === 'queued' || message.status === 'sending'));
+}
+
+/** Keep retry/recheck/repeat controls and queue admission under the same guard. */
+export function canResubmitGeneration(session: FreeCreateSession, message: FreeCreateUserMessage): boolean {
+  if (session.pausedReason || !message.requestSnapshot) return false;
+  return !session.messages.some((pending) => pending.role === 'user'
+    && (pending.status === 'queued' || pending.status === 'sending')
+    && (message.inputSnapshot.mode === 'conversation'
+      || (message.targetReference && pending.targetReference?.id === message.targetReference.id)
+      || pending.repeatOfMessageId === message.id));
 }
 
 export function sessionStatus(session: FreeCreateSession): 'idle' | 'queued' | 'sending' | 'error' | 'uncertain' | 'paused' {
@@ -124,7 +135,7 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
     const message = session?.messages.find((item): item is FreeCreateUserMessage => item.role === 'user' && item.id === messageId);
     if (!session || !message?.requestSnapshot) return null;
     if (recheck ? message.status !== 'uncertain' : message.status !== 'error' && !(message.status === 'uncertain' && confirmUncertain)) return null;
-    if (session.mode === 'conversation' && sessionHasPending(session)) return null;
+    if (!canResubmitGeneration(session, message)) return null;
     const repeated: FreeCreateUserMessage = { ...message, status: 'queued', attemptId: createId(), error: undefined, errorCode: undefined, httpStatus: undefined, requestSnapshot: { ...cloneRequest(message.requestSnapshot), idempotencyKey: recheck ? message.requestSnapshot.idempotencyKey : createId() } };
     set((state) => sessionsPatch(patchSession(state.sessions, sessionId, (current) => ({ ...current, messages: current.messages.map((item) => item.id === messageId ? repeated : item) }))));
     return generationFor(sessionId, repeated);
@@ -195,6 +206,30 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
     },
     retryGeneration: (sessionId, messageId, confirmUncertain) => repeat(sessionId, messageId, false, confirmUncertain),
     recheckGeneration: (sessionId, messageId) => repeat(sessionId, messageId, true),
+    repeatGeneration: (sessionId, messageId) => {
+      const session = get().sessions.find((item) => item.id === sessionId);
+      const message = session?.messages.find((item): item is FreeCreateUserMessage => item.role === 'user' && item.id === messageId);
+      if (!session || !message?.requestSnapshot || message.status !== 'complete') return null;
+      if (!canResubmitGeneration(session, message)) return null;
+      const repeated: FreeCreateUserMessage = {
+        ...message,
+        id: createId(),
+        references: message.references.map(cloneReference),
+        inputSnapshot: { ...message.inputSnapshot, sharedReference: message.inputSnapshot.sharedReference ? cloneReference(message.inputSnapshot.sharedReference) : null },
+        ...(message.targetReference ? { targetReference: cloneReference(message.targetReference) } : {}),
+        status: 'queued',
+        attemptId: createId(),
+        repeatOfMessageId: message.id,
+        error: undefined,
+        errorCode: undefined,
+        httpStatus: undefined,
+        requestSnapshot: { ...cloneRequest(message.requestSnapshot), idempotencyKey: createId() },
+        ...(message.batchId ? { batchId: createId() } : {}),
+        createdAt: Date.now(),
+      };
+      set((state) => sessionsPatch(patchSession(state.sessions, sessionId, (current) => ({ ...current, messages: [...current.messages, repeated] }))));
+      return generationFor(sessionId, repeated);
+    },
     resumeSession: (sessionId) => patchInput(sessionId, (session) => ({ ...session, pausedReason: undefined })),
 
     claimNextGeneration: () => {

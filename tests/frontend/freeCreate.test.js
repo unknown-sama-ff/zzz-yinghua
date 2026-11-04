@@ -114,6 +114,135 @@ test('failed retry reuses the full input snapshot and creates a new idempotency 
   assert.equal(retried.inputSnapshot.aspectRatio, '4:3');
 });
 
+test('repeat generation appends a new turn and preserves the previous result', () => {
+  const session = freshSession();
+  const photo = reference('repeat-input');
+  const request = m.buildFreeCreateRequest({ ...standardInput, references: [photo], imageCount: 1 });
+  const first = store.getState().enqueueGeneration({ prompt: 'same prompt', references: [photo], request });
+  const firstClaim = store.getState().claimNextGeneration();
+  store.getState().completeGeneration(firstClaim.generation, ['first-image']);
+  store.getState().setDraft('keep this new draft', session.id);
+  store.getState().addDraftReferences([reference('new-input')], session.id);
+  store.getState().setImageCount(5, session.id);
+  store.getState().setAspectRatio('9:16', session.id);
+  store.getState().selectContextImage('manually-selected-context', session.id);
+
+  const repeated = store.getState().repeatGeneration(session.id, first.userMessageId);
+  assert.ok(repeated);
+  assert.notEqual(repeated.userMessageId, first.userMessageId);
+  assert.equal(store.getState().repeatGeneration(session.id, first.userMessageId), null, 'does not queue duplicate repeats');
+  const queued = store.getState().sessions[0].messages.find((message) => message.role === 'user' && message.id === repeated.userMessageId);
+  const original = store.getState().sessions[0].messages.find((message) => message.role === 'user' && message.id === first.userMessageId);
+  assert.equal(queued.repeatOfMessageId, first.userMessageId);
+  assert.equal(queued.status, 'queued');
+  assert.equal(original.status, 'complete');
+  assert.equal(queued.prompt, original.prompt);
+  assert.deepEqual(queued.references, original.references);
+  assert.notEqual(queued.references[0], original.references[0]);
+  assert.deepEqual(queued.inputSnapshot, original.inputSnapshot);
+  assert.notEqual(queued.requestSnapshot.idempotencyKey, original.requestSnapshot.idempotencyKey);
+  assert.deepEqual({ ...queued.requestSnapshot, idempotencyKey: original.requestSnapshot.idempotencyKey }, original.requestSnapshot);
+
+  const secondClaim = store.getState().claimNextGeneration();
+  store.getState().completeGeneration(secondClaim.generation, ['second-image']);
+  const results = store.getState().sessions[0].messages.filter((message) => message.role === 'assistant');
+  assert.deepEqual(results.map((result) => result.images[0]), ['first-image', 'second-image']);
+  assert.deepEqual(results.map((result) => result.userMessageId), [first.userMessageId, repeated.userMessageId]);
+  const current = store.getState().sessions[0];
+  assert.equal(current.draft, 'keep this new draft');
+  assert.equal(current.draftReferences[0].id, 'new-input');
+  assert.equal(current.contextImageUrl, 'manually-selected-context');
+  assert.equal(current.imageCount, 5);
+  assert.equal(current.aspectRatio, '9:16');
+});
+
+test('batch repeats preserve each original target and allow different targets in parallel', () => {
+  for (const mode of ['fixed-character', 'fixed-scene']) {
+    const session = freshSession(mode);
+    const shared = reference('shared');
+    store.getState().setSharedReference(shared, session.id);
+    const items = m.buildFreeCreateBatchRequests({ ...standardInput, mode, sharedReference: shared, targets: [reference('a'), reference('b')] });
+    const originals = store.getState().enqueueBatch({ prompt: 'batch', items });
+    for (const original of originals) {
+      store.getState().completeGeneration(store.getState().claimNextGeneration().generation, [`original-${original.userMessageId}`]);
+    }
+    store.getState().setSharedReference(reference('changed-shared'), session.id);
+    store.getState().setMode('conversation', session.id);
+    const repeated = originals.map((original) => store.getState().repeatGeneration(session.id, original.userMessageId));
+    assert.ok(repeated.every(Boolean));
+    for (let i = 0; i < originals.length; i += 1) {
+      const messages = store.getState().sessions[0].messages;
+      const source = messages.find((message) => message.id === originals[i].userMessageId);
+      const copy = messages.find((message) => message.id === repeated[i].userMessageId);
+      assert.deepEqual(copy.targetReference, source.targetReference);
+      assert.notEqual(copy.targetReference, source.targetReference);
+      assert.deepEqual(copy.inputSnapshot, source.inputSnapshot);
+      assert.notEqual(copy.inputSnapshot.sharedReference, source.inputSnapshot.sharedReference);
+      assert.equal(copy.requestSnapshot.n, 1);
+      assert.notEqual(copy.batchId, source.batchId);
+      assert.equal(copy.batchIndex, source.batchIndex);
+      assert.deepEqual({ ...copy.requestSnapshot, idempotencyKey: source.requestSnapshot.idempotencyKey }, source.requestSnapshot);
+      assert.notEqual(copy.requestSnapshot.refImages[0], source.requestSnapshot.refImages[0]);
+      assert.equal(store.getState().repeatGeneration(session.id, originals[i].userMessageId), null);
+    }
+    const claimed = [store.getState().claimNextGeneration(), store.getState().claimNextGeneration()];
+    store.getState().completeGeneration(claimed[1].generation, ['repeat-b']);
+    store.getState().completeGeneration(claimed[0].generation, ['repeat-a']);
+    const results = store.getState().sessions[0].messages.filter((message) => message.role === 'assistant');
+    assert.equal(results.length, 4);
+    assert.equal(results.find((result) => result.userMessageId === repeated[0].userMessageId).images[0], 'repeat-a');
+    assert.equal(results.find((result) => result.userMessageId === repeated[1].userMessageId).images[0], 'repeat-b');
+  }
+});
+
+test('failed and uncertain batch repeats cannot resubmit while the same target is pending', () => {
+  for (const uncertain of [false, true]) {
+    const session = freshSession('fixed-character');
+    const target = reference('target');
+    const request = m.buildFreeCreateRequest({ ...standardInput, references: [target], imageCount: 1 });
+    const [first] = store.getState().enqueueBatch({ prompt: 'batch', items: [{ reference: target, request }] });
+    store.getState().completeGeneration(store.getState().claimNextGeneration().generation, ['first-image']);
+    const failedRepeat = store.getState().repeatGeneration(session.id, first.userMessageId);
+    store.getState().failGeneration(store.getState().claimNextGeneration().generation, 'repeat failed', { uncertain });
+    const pendingRepeat = store.getState().repeatGeneration(session.id, first.userMessageId);
+    assert.ok(pendingRepeat);
+    assert.equal(store.getState().retryGeneration(session.id, failedRepeat.userMessageId, true), null);
+    assert.equal(store.getState().recheckGeneration(session.id, failedRepeat.userMessageId), null);
+
+    store.getState().completeGeneration(store.getState().claimNextGeneration().generation, ['second-image']);
+    const recovered = uncertain
+      ? store.getState().recheckGeneration(session.id, failedRepeat.userMessageId)
+      : store.getState().retryGeneration(session.id, failedRepeat.userMessageId);
+    assert.ok(recovered, 'resubmission is available once the conflicting target finishes');
+    const results = store.getState().sessions[0].messages.filter((message) => message.role === 'assistant');
+    assert.deepEqual(results.map((result) => result.images[0]), ['first-image', 'second-image']);
+  }
+});
+
+test('retrying a conversation repeat keeps its concurrency guard after switching to batch mode', () => {
+  const session = freshSession();
+  const request = m.buildFreeCreateRequest(standardInput);
+  const first = store.getState().enqueueGeneration({ prompt: 'conversation', references: [], request });
+  store.getState().completeGeneration(store.getState().claimNextGeneration().generation, ['first-image']);
+  const repeated = store.getState().repeatGeneration(session.id, first.userMessageId);
+  store.getState().failGeneration(store.getState().claimNextGeneration().generation, 'repeat failed');
+  store.getState().setMode('fixed-character', session.id);
+  store.getState().enqueueBatch({ prompt: 'batch', items: [{ reference: reference('target'), request }] });
+  assert.equal(store.getState().retryGeneration(session.id, repeated.userMessageId), null);
+});
+
+test('paused sessions reject new repeats without changing history', () => {
+  const session = freshSession('fixed-scene');
+  const request = m.buildFreeCreateRequest(standardInput);
+  const [first] = store.getState().enqueueBatch({ prompt: 'batch', items: [{ reference: reference('first'), request }] });
+  store.getState().completeGeneration(store.getState().claimNextGeneration().generation, ['first-image']);
+  store.getState().enqueueBatch({ prompt: 'batch', items: [{ reference: reference('limited'), request }] });
+  store.getState().failGeneration(store.getState().claimNextGeneration().generation, 'rate limited', { status: 429 });
+  const before = store.getState().sessions;
+  assert.equal(store.getState().repeatGeneration(session.id, first.userMessageId), null);
+  assert.equal(store.getState().sessions, before);
+});
+
 test('uncertain result recheck keeps the key; confirmed retry changes it; 429 pauses queued work', () => {
   const session = freshSession('fixed-character');
   store.getState().setSharedReference(reference('character'), session.id);

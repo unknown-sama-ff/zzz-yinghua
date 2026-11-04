@@ -6,6 +6,7 @@ import { gptImageQualityOptionsForModel as serverOptions } from '../../server/li
 const m = await loadFrontend(`
   export * from './src/lib/gptImageCapabilities';
   export * from './src/store/useProviderStore';
+  export { useWorkbenchStore } from './src/store/useWorkbenchStore';
   export { useToast } from './src/store/useToast';
   export { buildFreeCreateRequest } from './src/lib/freeCreate';
   export { useBuildRequest } from './src/components/useBuildRequest';
@@ -43,16 +44,23 @@ function renderCurrentState(element) {
   try { return m.renderToString(element); }
   finally { Object.assign(initial, saved); }
 }
-function builtRequest() {
+function builtRequest(options) {
   let request;
   function Probe() {
     const build = m.useBuildRequest();
-    request = build('test', { size: '1536x1024' });
+    request = build('test', { size: '1536x1024', ...options });
     return null;
   }
   renderCurrentState(m.createElement(Probe));
   return request;
 }
+
+test('shared builder can request lossless high-fidelity image inputs', () => {
+  reset();
+  const request = builtRequest({ inputImageMaxDimension: 1536, preserveInputQuality: true });
+  assert.equal(request.inputImageMaxDimension, 1536);
+  assert.equal(request.preserveInputQuality, true);
+});
 
 test('frontend and server agree on 2.5 aliases, normalization, old and unknown models', () => {
   for (const model of ['gpt-image-2.5', 'gpt-image-2.5-sunburst', ' GPT-IMAGE-2.5-FLARE ', 'gpt-image-2', 'gpt-image-1', 'relay-alias', '', undefined]) {
@@ -194,7 +202,19 @@ test('quality UI offers six choices for 2.5, four for legacy, and hides for othe
   html = renderCurrentState(m.createElement(m.ProviderSelect));
   assert.equal(html.includes('value="max"'), false);
   store.getState().setProvider('seedream');
-  assert.equal(renderCurrentState(m.createElement(m.ProviderSelect)).includes('id="gpt-image-quality"'), false);
+  html = renderCurrentState(m.createElement(m.ProviderSelect));
+  assert.equal(html.includes('id="gpt-image-quality"'), false);
+  assert.equal(html.includes('id="generation-denoise"'), true);
+});
+
+test('global denoise toggle sits below GPT Image generation quality in model settings', () => {
+  reset();
+  const html = renderCurrentState(m.createElement(m.ProviderSelect));
+  const qualityIndex = html.indexOf('id="gpt-image-quality"');
+  const denoiseIndex = html.indexOf('id="generation-denoise"');
+  assert.ok(qualityIndex >= 0);
+  assert.ok(denoiseIndex > qualityIndex);
+  assert.match(html, /所有生图与图片编辑/);
 });
 
 test('generate transports quality and preserves useful HTTP error details', async (t) => {

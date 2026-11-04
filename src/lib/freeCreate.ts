@@ -1,5 +1,6 @@
 import { gptImageSizeForAspectRatio } from './gptImageCapabilities';
 import { parseDataUrl } from './validation';
+import { withDenoise } from './denoise';
 import type { FreeCreateCostumeMode, FreeCreateMode, FreeCreateReference, GenRequest, GptImageQuality } from '../types';
 
 interface GptImageCredentials {
@@ -11,6 +12,7 @@ interface GptImageCredentials {
 export interface BuildFreeCreateRequestInput {
   prompt: string;
   quality?: GptImageQuality;
+  denoiseEnabled?: boolean;
   contextImageUrl: string | null;
   references: FreeCreateReference[];
   sharedReference?: FreeCreateReference | null;
@@ -41,6 +43,7 @@ export const DEFAULT_FREE_CREATE_ASPECT_RATIO = '1:1';
 export function buildFreeCreateRequest({
   prompt,
   quality,
+  denoiseEnabled = false,
   contextImageUrl,
   references,
   sharedReference,
@@ -65,7 +68,7 @@ export function buildFreeCreateRequest({
   const primary = primaryImage && !/^https?:\/\//i.test(primaryImage) ? parseDataUrl(primaryImage) : undefined;
   const clampedCount = Math.max(MIN_FREE_CREATE_IMAGES, Math.min(MAX_FREE_CREATE_IMAGES, Math.round(imageCount)));
 
-  const request: GenRequest = {
+  const request = withDenoise({
     provider: 'gpt-image',
     ...(quality !== undefined ? { quality } : {}),
     prompt,
@@ -92,7 +95,7 @@ export function buildFreeCreateRequest({
           ...(credentials.baseUrl.trim() ? { baseUrl: credentials.baseUrl.trim() } : {}),
           ...(credentials.model.trim() ? { model: credentials.model.trim() } : {}),
         }),
-  };
+  }, denoiseEnabled);
   assertFreeCreateRequestSize(request);
   return request;
 }

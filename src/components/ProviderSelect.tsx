@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { gptImageQualityOptions, useProviderStore } from '../store/useProviderStore';
+import { DenoiseToggle } from './DenoiseToggle';
 import { GPT_IMAGE_QUALITY_LABELS, isGptImageQuality } from '../lib/gptImageCapabilities';
 import type { ProviderName } from '../types';
 import { SectionHeader } from './SectionHeader';
@@ -37,7 +38,7 @@ export const ProviderSelect = memo(function ProviderSelect() {
         : 'https://api.seedream.example/v1';
 
   return (
-    <section className="glass p-6">
+    <section className="glass provider-settings-panel p-6">
       <SectionHeader title="接口与模型" />
       <p className="mb-4 font-mono text-xs text-red-400/80">⚠ seedream效果不好，不推荐</p>
 
@@ -89,6 +90,8 @@ export const ProviderSelect = memo(function ProviderSelect() {
           )}
         </div>
       )}
+
+      <DenoiseToggle id="generation-denoise" />
 
       {isKeyed && !freeloadEnabled && (
         <div className="mt-4 space-y-3 border-t border-zzz-text/10 pt-4">
@@ -173,29 +176,29 @@ export const ProviderSelect = memo(function ProviderSelect() {
       {/* Vision model config — always shown; used for face detection clip regions */}
       {!freeloadEnabled && (
         <div className="mt-4 space-y-2 border-t border-zzz-text/10 pt-4">
-          <label className="font-mono text-xs text-zzz-text/60">视觉模型 // 人脸识别裁切</label>
+          <label className="font-mono text-xs text-zzz-text/60">视觉模型 // 看图反推与人脸裁切</label>
           <input
             type="password"
             autoComplete="off"
             value={visionCred.apiKey}
             onChange={(e) => setVisionCred({ apiKey: e.target.value })}
-            placeholder="API Key（留空则使用服务端 VISION_API_KEY）"
+            placeholder="视觉模型 API Key"
             className="glass-input w-full px-3 py-2 font-mono text-sm"
           />
           <input
             value={visionCred.baseUrl}
             onChange={(e) => setVisionCred({ baseUrl: e.target.value })}
-            placeholder="Base URL（可选，默认 api.openai.com）"
+            placeholder="Base URL，例如 https://api.openai.com/v1"
             className="glass-input w-full px-3 py-2 font-mono text-sm"
           />
           <input
             value={visionCred.model}
             onChange={(e) => setVisionCred({ model: e.target.value })}
-            placeholder="模型名称（可选，默认 gpt-4o-mini）"
+            placeholder="支持看图的模型名称，例如 gpt-4o-mini"
             className="glass-input w-full px-3 py-2 font-mono text-sm"
           />
           <p className="font-mono text-[11px] leading-relaxed text-zzz-text/50">
-            用于六命阳图片生成后自动检测人脸位置，动态计算 04–06 切割区域。Key 留空时使用服务端 .env 的 VISION_API_KEY；若均未配置则报错。
+            用于「看图反推」和影画人脸裁切。请填写支持图片输入的视觉模型；使用服务端预设时，开启上方「使用作者免费通道」。
           </p>
         </div>
       )}

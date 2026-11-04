@@ -16,10 +16,18 @@ const THEME_TRANSITION_TAU_MS = 4;
 const THEME_TRANSITION_EPSILON = 0.5;
 
 type Particle =
-  | { kind: 'trail'; x: number; y: number; r: number; life: number; maxLife: number; color: string }
-  | { kind: 'ripple'; x: number; y: number; r: number; maxR: number; life: number; maxLife: number; color: string };
+  | { kind: 'trail'; x: number; y: number; r: number; bornAt: number; maxLife: number; color: string }
+  | { kind: 'ripple'; x: number; y: number; r: number; bornAt: number; maxR: number; maxLife: number; color: string };
 
 type RGB = { r: number; g: number; b: number };
+
+function getEventTime(event: Event): number {
+  const now = performance.now();
+  // Input may wait behind a long task. Retain its original age instead of
+  // replaying the whole queue as fresh effects. Fall back for timestamps
+  // outside performance.now()'s clock (e.g. older epoch-based browsers).
+  return event.timeStamp > 0 && event.timeStamp <= now ? event.timeStamp : now;
+}
 
 function parseRgb(color: string): RGB {
   const nums = color.match(/[\d.]+/g);
@@ -129,6 +137,7 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
   enabledRef.current = enabled;
   workspaceOpenRef.current = isWorkspaceOpen;
 
+  // Reduced motion removes the canvas; rebind when a new one is mounted.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -178,9 +187,8 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
       themeColors.markDirty();
       // Waking from idle: reset the clock so the first tick's dt is a
       // normal frame interval, not however long the loop was idle for.
-      // Without this, themeColors.step(dt) and particle life both jump by
-      // that stale gap on the first frame — the color/ripple snaps straight
-      // to its end state instead of easing, which is what made switching
+      // Without this, themeColors.step(dt) jumps by that stale gap on the
+      // first frame instead of easing, which is what made switching
       // between images (a slower, often-idle-first theme change) look like
       // an instant cut rather than a transition.
       lastFrame = performance.now();
@@ -198,9 +206,12 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
 
     let lastFrame = performance.now();
-    const tick = (now: number) => {
+    const tick = () => {
       if (!enabledRef.current) { frameScheduled = false; return; }
       frameScheduled = false;
+      // RAF's frame timestamp can predate a long task in this same frame.
+      // Sample the clock when drawing so expired particles never reappear.
+      const now = performance.now();
       // Re-sync from refs so a quick disable→enable cycle picks up the
       // freshly-cleared state instead of stale closure variables.
       particles = particlesRef.current;
@@ -209,8 +220,8 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
       mouseX = mousePosRef.current.x;
       mouseY = mousePosRef.current.y;
       const elapsed = now - lastFrame;
-      // Bound theme easing after a scheduling hiccup, but age particles by
-      // real elapsed time so they cannot reappear after a main-thread pause.
+      // Bound theme easing after a scheduling hiccup. Particle age is derived
+      // from each particle's creation timestamp below.
       const dt = Math.min(elapsed, 50);
       lastFrame = now;
       themeColors.refreshIfStale(now);
@@ -218,9 +229,12 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       particles = particles.filter((p) => {
-        p.life += elapsed;
-        if (p.life >= p.maxLife) return false;
-        const t = p.life / p.maxLife;
+        // Age each particle from its own creation time. Pointer events queued
+        // behind a long click handler can arrive before this RAF; using the
+        // previous frame's elapsed time for them would expire fresh trails.
+        const life = Math.max(0, now - p.bornAt);
+        if (life >= p.maxLife) return false;
+        const t = life / p.maxLife;
 
         if (p.kind === 'trail') {
           ctx.globalAlpha = 1 - t;
@@ -285,7 +299,7 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
         x: e.clientX,
         y: e.clientY,
         r: 2 + Math.random() * 2,
-        life: 0,
+        bornAt: getEventTime(e),
         maxLife: 500 + Math.random() * 300,
         color: themeColors.random(),
       });
@@ -300,7 +314,7 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
         y: e.clientY,
         r: 0,
         maxR: 60,
-        life: 0,
+        bornAt: getEventTime(e),
         maxLife: 550,
         color: themeColors.random(),
       });
@@ -349,7 +363,7 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
         x: tx,
         y: ty,
         r: 3 + Math.random() * 3,
-        life: 0,
+        bornAt: getEventTime(e),
         maxLife: 300 + Math.random() * 200,
         color: themeColors.random(),
       });
@@ -432,7 +446,7 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       themeColors.dispose();
     };
-  }, []);
+  }, [reduced]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -457,7 +471,7 @@ export const CursorEffects = memo(function CursorEffects({ enabled, reduced }: {
     lastTrailRef.current = { x: -Infinity, y: -Infinity };
     const ctx = canvas.getContext('2d');
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }, [enabled]);
+  }, [enabled, reduced]);
 
   // When the inpaint workspace opens, clear all particles and stop the
   // animation loop so cursor effects don't waste CPU while painting.

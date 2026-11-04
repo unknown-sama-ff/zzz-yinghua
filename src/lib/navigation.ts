@@ -4,6 +4,9 @@ export const ROUTE_HASHES = {
   yinghua: '#/workshop/yinghua',
   poster: '#/workshop/poster',
   gallery: '#/gallery',
+  puzzle: '#/puzzle',
+  reverse: '#/image-to-prompt',
+  denoise: '#/denoise',
   prompts: '#/prompts',
 } as const;
 

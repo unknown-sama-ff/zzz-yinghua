@@ -2,6 +2,7 @@ import { gptImageQualityForRequest, useProviderStore } from '../store/useProvide
 import { useUploadStore } from '../store/useUploadStore';
 import { gptImageSizeForAspectRatio } from '../lib/gptImageCapabilities';
 import { parseDataUrl } from '../lib/validation';
+import { withDenoise } from '../lib/denoise';
 import type { GenRequest } from '../types';
 
 /** Parse "Key: Value" lines into a header record. */
@@ -33,6 +34,7 @@ export function useBuildRequest() {
   const custom = useProviderStore((s) => s.custom);
   const creds = useProviderStore((s) => s.creds);
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
+  const denoiseEnabled = useProviderStore((s) => s.denoiseEnabled);
 
   return (prompt: string, opts?: {
     imageOverride?: string;
@@ -40,6 +42,7 @@ export function useBuildRequest() {
     aspectRatio?: string;
     refImages?: { base64: string; mime: string }[];
     inputImageMaxDimension?: number;
+    preserveInputQuality?: boolean;
   }): GenRequest => {
     const image = opts?.imageOverride ?? uploadedImage ?? undefined;
     const parsed = image ? parseDataUrl(image) : undefined;
@@ -66,6 +69,7 @@ export function useBuildRequest() {
       ...(provider === 'gpt-image' && quality !== undefined ? { quality } : {}),
       refImages: opts?.refImages,
       inputImageMaxDimension: opts?.inputImageMaxDimension,
+      ...(opts?.preserveInputQuality ? { preserveInputQuality: true } : {}),
       ...(freeloadEnabled ? { useServerPreset: true } : {}),
     };
     if (provider === 'seedream' || provider === 'gpt-image') {
@@ -81,6 +85,6 @@ export function useBuildRequest() {
       if (c.model.trim()) req.model = c.model.trim();
       req.customBodyTemplate = custom.bodyTemplate || '{"model":"{model}","prompt":"{prompt}","n":1}';
     }
-    return req;
+    return withDenoise(req, denoiseEnabled);
   };
 }

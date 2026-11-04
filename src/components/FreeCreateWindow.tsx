@@ -3,7 +3,7 @@ import { buildFreeCreateBatchRequests, buildFreeCreateRequest, FREE_CREATE_ASPEC
 import { startFreeCreateQueue } from '../lib/freeCreateQueue';
 import { downloadImage } from '../lib/download';
 import { fileToDataUrl, validateImageFile } from '../lib/validation';
-import { activeSession, sessionHasPending, useFreeCreateStore } from '../store/useFreeCreateStore';
+import { activeSession, canResubmitGeneration, sessionHasPending, useFreeCreateStore } from '../store/useFreeCreateStore';
 import { useIdentityStore } from '../store/useIdentityStore';
 import { useInpaintStore } from '../store/useInpaintStore';
 import { gptImageQualityForRequest, useProviderStore } from '../store/useProviderStore';
@@ -11,7 +11,9 @@ import { useToast } from '../store/useToast';
 import { useViewerStore } from '../store/useViewerStore';
 import { navigateTo } from '../lib/navigation';
 import { GallerySaveButton } from './GallerySaveButton';
+import { ROUTE_HASHES } from '../lib/navigation';
 import { PromptShareButton } from './PromptShareButton';
+import { DenoiseToggle } from './DenoiseToggle';
 import { ZoomButton } from './ImageLightbox';
 import type { FreeCreateReference, FreeCreateSession, FreeCreateUserMessage } from '../types';
 
@@ -66,9 +68,11 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
   const enqueueBatch = useFreeCreateStore((state) => state.enqueueBatch);
   const retryGeneration = useFreeCreateStore((state) => state.retryGeneration);
   const recheckGeneration = useFreeCreateStore((state) => state.recheckGeneration);
+  const repeatGeneration = useFreeCreateStore((state) => state.repeatGeneration);
   const restoreDraft = useFreeCreateStore((state) => state.restoreDraft);
   const resumeSession = useFreeCreateStore((state) => state.resumeSession);
   const quality = useProviderStore(gptImageQualityForRequest);
+  const denoiseEnabled = useProviderStore((state) => state.denoiseEnabled);
   const gptCredentials = useProviderStore((state) => state.creds['gpt-image']);
   const freeloadEnabled = useProviderStore((state) => state.freeloadEnabled);
   const characterName = useIdentityStore((state) => state.characterName);
@@ -165,7 +169,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
     if (!isBatch && !prompt) { showOwnedError(ownerId, '请输入创作说明'); return; }
     if (!freeloadEnabled && !gptCredentials.apiKey.trim()) { showOwnedError(ownerId, '请先在「工坊设置 → 接口与模型」填写 gpt-image API Key'); return; }
     if (!freeloadEnabled && !gptCredentials.baseUrl.trim()) { showOwnedError(ownerId, '请先在「工坊设置 → 接口与模型」填写 gpt-image Base URL'); return; }
-    const input = { prompt, contextImageUrl, references: draftReferences, credentials: gptCredentials, quality, useServerPreset: freeloadEnabled, imageCount, aspectRatio };
+    const input = { prompt, contextImageUrl, references: draftReferences, credentials: gptCredentials, quality, denoiseEnabled, useServerPreset: freeloadEnabled, imageCount, aspectRatio };
     try {
       if (mode === 'conversation') {
         const request = buildFreeCreateRequest(input);
@@ -178,24 +182,31 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
         enqueueBatch({ sessionId: ownerId, prompt, items });
       }
     } catch (error) { showOwnedError(ownerId, error instanceof Error ? error.message : '图片准备失败'); }
-  }, [session, draft, isBatch, isReading, freeloadEnabled, gptCredentials, contextImageUrl, draftReferences, batchReferences, quality, imageCount, aspectRatio, mode, sharedReference, costumeMode, enqueueGeneration, enqueueBatch, showOwnedError]);
+  }, [session, draft, isBatch, isReading, freeloadEnabled, gptCredentials, contextImageUrl, draftReferences, batchReferences, quality, denoiseEnabled, imageCount, aspectRatio, mode, sharedReference, costumeMode, enqueueGeneration, enqueueBatch, showOwnedError]);
 
   if (!isOpen || shouldAvoidFullscreen) return null;
 
   const renderTaskActions = (message: FreeCreateUserMessage) => {
     if (message.status !== 'error' && message.status !== 'uncertain') return null;
+    const blocked = !canResubmitGeneration(session, message);
     return <div className="mt-2 flex flex-wrap items-center gap-2">
-      {message.status === 'error' ? <button type="button" onClick={() => retryGeneration(session.id, message.id)} className={`${buttonClass} text-zzz-cyan`}>重试</button> : <>
-        <button type="button" onClick={() => recheckGeneration(session.id, message.id)} className={`${buttonClass} text-zzz-cyan`}>查询原请求</button>
-        <button type="button" onClick={() => setConfirmRegenerate(message.id)} className={`${buttonClass} text-zzz-text/70`}>重新生成</button>
+      {message.status === 'error' ? <button type="button" disabled={blocked} onClick={() => retryGeneration(session.id, message.id)} className={`${buttonClass} text-zzz-cyan`}>重试</button> : <>
+        <button type="button" disabled={blocked} onClick={() => recheckGeneration(session.id, message.id)} className={`${buttonClass} text-zzz-cyan`}>查询原请求</button>
+        <button type="button" disabled={blocked} onClick={() => setConfirmRegenerate(message.id)} className={`${buttonClass} text-zzz-text/70`}>重新生成</button>
       </>}
       <button type="button" onClick={() => restoreDraft(session.id, message.id)} className={`${buttonClass} text-zzz-text/75`}>编辑后重试</button>
       {confirmRegenerate === message.id && <div role="alert" className="w-full rounded-lg border border-amber-300/25 bg-amber-200/5 p-3 text-xs leading-relaxed text-amber-100">
         原请求可能仍会完成。重新生成可能再次消耗额度。
-        <div className="mt-2 flex gap-2"><button type="button" onClick={() => { retryGeneration(session.id, message.id, true); setConfirmRegenerate(null); }} className={`${buttonClass} text-amber-100`}>确认重新生成</button><button type="button" onClick={() => setConfirmRegenerate(null)} className={`${buttonClass} text-zzz-text/65`}>返回</button></div>
+        <div className="mt-2 flex gap-2"><button type="button" disabled={blocked} onClick={() => { retryGeneration(session.id, message.id, true); setConfirmRegenerate(null); }} className={`${buttonClass} text-amber-100`}>确认重新生成</button><button type="button" onClick={() => setConfirmRegenerate(null)} className={`${buttonClass} text-zzz-text/65`}>返回</button></div>
       </div>}
       <details className="w-full text-[10px] text-zzz-text/40"><summary className="cursor-pointer">错误详情</summary><p className="mt-1 break-all">{message.errorCode || 'UPSTREAM_ERROR'}{message.httpStatus ? ` · HTTP ${message.httpStatus}` : ''} · 请求 {message.requestSnapshot?.idempotencyKey ?? message.attemptId}</p></details>
     </div>;
+  };
+
+  const renderRepeatAction = (userMessageId: string) => {
+    const source = messages.find((message): message is FreeCreateUserMessage => message.role === 'user' && message.id === userMessageId);
+    if (source?.status !== 'complete') return null;
+    return <button type="button" disabled={!canResubmitGeneration(session, source)} onClick={() => repeatGeneration(session.id, source.id)} className={`${buttonClass} text-zzz-cyan`}>再画一次</button>;
   };
 
   return <section id="free-create-window" role="dialog" aria-modal="false" aria-labelledby="free-create-title" className={`glass fixed bottom-28 right-3 top-3 z-[10002] flex w-[calc(100%-1.5rem)] flex-col overflow-hidden sm:right-6 sm:top-6 ${compact ? 'max-w-[440px]' : 'max-w-[1040px]'}`}>
@@ -208,6 +219,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
       </div>
     </header>
 
+    {runningCount > 0 && <a href={ROUTE_HASHES.puzzle} onClick={close} className='free-create-puzzle-link'>生图继续进行中，去玩美图拼图 <span aria-hidden='true'>↗</span></a>}
     <div className="flex min-h-0 flex-1">
       {!compact && <aside className="hidden w-48 shrink-0 flex-col border-r border-zzz-text/12 bg-black/15 p-3 lg:flex">
         <div className="mb-3 flex items-center justify-between font-mono text-xs text-zzz-text/45"><span>会话</span><span>{sessions.length}</span></div>
@@ -232,7 +244,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
             {message.prompt && <><p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-zzz-text/90">{message.prompt}</p><div className="mt-2 flex justify-end"><PromptShareButton prompt={message.prompt} /></div></>}
             {!message.targetReference && message.references.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{message.references.map((reference) => <ReferencePreview key={reference.id} reference={reference} />)}</div>}
             {(message.status === 'error' || message.status === 'uncertain') && <p className={`mt-2 break-words text-xs leading-relaxed ${message.status === 'uncertain' ? 'text-amber-200/85' : 'text-red-300/90'}`}>{message.error ?? '生成未完成，请重试或编辑输入。'}</p>}{renderTaskActions(message)}
-          </article> : <article key={message.id} className="mr-auto w-full"><div className="mb-2 flex items-center gap-2 font-mono text-[10px] text-zzz-cyan/80"><span className="h-px w-4 bg-zzz-cyan/50" />创作结果{message.userMessageId && (() => { const source = messages.find((item) => item.id === message.userMessageId && item.role === 'user'); return source?.role === 'user' && source.targetReference ? ` · ${source.targetReference.name}` : ''; })()}</div><div className={`grid gap-3 ${!compact && message.images.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+          </article> : <article key={message.id} className="mr-auto w-full"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><span className="flex items-center gap-2 font-mono text-[10px] text-zzz-cyan/80"><span className="h-px w-4 bg-zzz-cyan/50" />创作结果{message.userMessageId && (() => { const source = messages.find((item) => item.id === message.userMessageId && item.role === 'user'); return source?.role === 'user' && source.targetReference ? ` · ${source.targetReference.name}` : ''; })()}</span>{renderRepeatAction(message.userMessageId)}</div><div className={`grid gap-3 ${!compact && message.images.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
             {message.images.map((image, index) => { const selected = contextImageUrl === image && !isBatch; return <figure key={`${message.id}-${index}`} className={`relative overflow-hidden rounded-xl border bg-black/25 ${selected ? 'border-zzz-primary/65' : 'border-zzz-text/15'}`}><img src={image} alt={`自由创作结果 ${index + 1}`} className="max-h-80 w-full object-contain" loading="lazy" /><ZoomButton src={image} alt={`自由创作结果 ${index + 1}`} /><figcaption className="flex flex-wrap items-center justify-between gap-2 border-t border-zzz-text/10 px-3 py-2.5"><span className={`font-mono text-[10px] ${selected ? 'text-zzz-primary' : 'text-zzz-text/45'}`}>{selected ? '当前上下文' : `结果 ${index + 1}`}</span><span className="flex flex-wrap items-center gap-2"><GallerySaveButton saveInfo={{ imageUrl: image, style: '自由创作', characterName, prompt: message.prompt, provider: 'gpt-image' }} /><button type="button" onClick={() => { selectContextImage(image, session.id); setMode('conversation', session.id); }} className="glass-btn px-2 py-1 font-mono text-xs text-zzz-cyan">以此继续</button><button type="button" onClick={() => void downloadImage(image, `free-create-${index + 1}.png`)} className="glass-btn px-2 py-1 font-mono text-xs text-zzz-text/70">下载</button></span></figcaption></figure>; })}
           </div></article>)}
         </div>
@@ -249,6 +261,7 @@ export const FreeCreateWindow = memo(function FreeCreateWindow() {
               </> : <p className="text-xs leading-relaxed text-zzz-text/45">选择一种复用方式：一份共用素材，配合多张逐项素材分别生成。</p>}
             </div>}
           </div>
+          <DenoiseToggle id="free-create-denoise" compact />
           <input ref={sharedInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(event) => { consumeUpload(event.target.files); event.target.value = ''; }} />
           <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" multiple className="hidden" onChange={(event) => { consumeUpload(event.target.files); event.target.value = ''; }} />
           {!isBatch && contextImageUrl && <div className="mb-3 flex items-center gap-2 rounded-lg border border-zzz-primary/25 bg-zzz-primary/5 p-2"><img src={contextImageUrl} alt="当前创作上下文" className="h-9 w-12 rounded object-contain" /><span className="flex-1 text-xs text-zzz-text/60">这张成图是本轮主图</span><button type="button" onClick={() => selectContextImage(null, session.id)} className="text-[10px] text-zzz-text/50 hover:text-zzz-text">清除主图</button></div>}

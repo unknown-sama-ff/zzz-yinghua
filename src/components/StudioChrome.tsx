@@ -38,6 +38,9 @@ export function StudioHeader({ route, onSettings }: { route: AppRoute; onSetting
         <a href={ROUTE_HASHES.home} aria-current={route === 'home' ? 'page' : undefined}>首页</a>
         <a href={ROUTE_HASHES.assets} aria-current={isWorkshopRoute(route) ? 'page' : undefined}>角色工坊</a>
         <a href={ROUTE_HASHES.gallery} aria-current={route === 'gallery' ? 'page' : undefined}>画廊</a>
+        <a href={ROUTE_HASHES.puzzle} aria-current={route === 'puzzle' ? 'page' : undefined}>美图拼图</a>
+        <a href={ROUTE_HASHES.reverse} aria-current={route === 'reverse' ? 'page' : undefined}>看图反推</a>
+        <a href={ROUTE_HASHES.denoise} aria-current={route === 'denoise' ? 'page' : undefined}>图片降噪</a>
         <a href={ROUTE_HASHES.prompts} aria-current={route === 'prompts' ? 'page' : undefined}>提示词</a>
       </nav>
       <div className="studio-header-actions">

@@ -46,6 +46,7 @@ function loadImage(src: string): Promise<ImageBitmap> {
 
 self.onmessage = async (e: MessageEvent) => {
   const msg = e.data;
+  const requestId = msg?.requestId;
   // Cast once after the type guard — TypeScript can't narrow through try/catch.
   const isStitch = msg && typeof msg === 'object' && msg.type === 'stitch';
   const isEmbed  = msg && typeof msg === 'object' && msg.type === 'embedThumbnail';
@@ -55,7 +56,7 @@ self.onmessage = async (e: MessageEvent) => {
       const req = msg as { dataUrls: string[] };
       const urls = req.dataUrls.filter((u) => u && u.trim().length > 0);
       if (urls.length === 0) {
-        postMessage({ type: 'error', message: 'stitchImages: no images provided' });
+        postMessage({ requestId, type: 'error', message: 'stitchImages: no images provided' });
         return;
       }
       if (urls.length === 1) {
@@ -64,7 +65,7 @@ self.onmessage = async (e: MessageEvent) => {
         const ctx = oc.getContext('2d')!;
         ctx.drawImage(bmp, 0, 0);
         const blob = await oc.convertToBlob({ type: 'image/png' });
-        postMessage({ type: 'result', blob });
+        postMessage({ requestId, type: 'result', blob });
         return;
       }
 
@@ -84,7 +85,7 @@ self.onmessage = async (e: MessageEvent) => {
         x += scaledWidths[i];
       }
       const blob = await oc.convertToBlob({ type: 'image/png' });
-      postMessage({ type: 'result', blob });
+      postMessage({ requestId, type: 'result', blob });
 
     } else if (isEmbed) {
       const req = msg as { base: string; thumbs: ThumbSpec[] };
@@ -144,10 +145,11 @@ self.onmessage = async (e: MessageEvent) => {
       }
 
       const blob = await oc.convertToBlob({ type: 'image/png' });
-      postMessage({ type: 'result', blob });
+      postMessage({ requestId, type: 'result', blob });
     }
   } catch (err) {
     postMessage({
+      requestId,
       type: 'error',
       message: err instanceof Error ? err.message : 'unknown worker error',
     });

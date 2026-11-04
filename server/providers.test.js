@@ -164,6 +164,55 @@ test('gpt-image preserves the requested high-fidelity edit dimension within the 
   }
 });
 
+test('gpt-image denoise mode keeps a resized PNG input lossless', async () => {
+  const imageBase64 = (await sharp({
+    create: { width: 1800, height: 900, channels: 3, background: '#ffffff' },
+  }).png().toBuffer()).toString('base64');
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GPT_IMAGE_API_KEY;
+  const originalBase = process.env.GPT_IMAGE_BASE_URL;
+  const originalModel = process.env.GPT_IMAGE_MODEL;
+  let received;
+
+  process.env.GPT_IMAGE_API_KEY = 'test-key';
+  process.env.GPT_IMAGE_BASE_URL = 'https://openlux.invalid/v1';
+  process.env.GPT_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
+  globalThis.fetch = async (_url, init) => {
+    const image = init.body.get('image');
+    received = {
+      name: image.name,
+      metadata: await sharp(Buffer.from(await image.arrayBuffer())).metadata(),
+    };
+    return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    await providers['gpt-image']({
+      useServerPreset: true,
+      prompt: 'clean three-view sheet',
+      imageBase64,
+      imageMime: 'image/png',
+      inputImageMaxDimension: 1536,
+      preserveInputQuality: true,
+    });
+    assert.equal(received.name, 'image-0.png');
+    assert.equal(received.metadata.format, 'png');
+    assert.equal(received.metadata.width, 1536);
+    assert.equal(received.metadata.height, 768);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.GPT_IMAGE_API_KEY;
+    else process.env.GPT_IMAGE_API_KEY = originalKey;
+    if (originalBase === undefined) delete process.env.GPT_IMAGE_BASE_URL;
+    else process.env.GPT_IMAGE_BASE_URL = originalBase;
+    if (originalModel === undefined) delete process.env.GPT_IMAGE_MODEL;
+    else process.env.GPT_IMAGE_MODEL = originalModel;
+  }
+});
+
 test('gpt-image normalizes a precise mask to the processed primary image dimensions', async () => {
   const imageBase64 = (await sharp({
     create: { width: 1400, height: 700, channels: 3, background: '#ffffff' },
@@ -382,5 +431,31 @@ test('gpt-image preserves precise-mask alpha semantics for the upstream edit', a
     else process.env.GPT_IMAGE_BASE_URL = originalBase;
     if (originalModel === undefined) delete process.env.GPT_IMAGE_MODEL;
     else process.env.GPT_IMAGE_MODEL = originalModel;
+  }
+});
+test('denoise avoids another JPEG encode when resizing reference images', async (t) => {
+  const source = await sharp({ create: { width: 1800, height: 900, channels: 3, background: '#aaccee' } }).jpeg().toBuffer();
+  const originalFetch = globalThis.fetch;
+  let received;
+  globalThis.fetch = async (_url, init) => {
+    received = await Promise.all(init.body.getAll('image').map(async (image) => ({
+      name: image.name,
+      meta: await sharp(Buffer.from(await image.arrayBuffer())).metadata(),
+    })));
+    return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), { status: 200 });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  await providers['gpt-image']({
+    prompt: 'preserve details', apiKey: 'test-key', baseUrl: 'https://api.openai.com/v1', model: 'gpt-image-2',
+    imageBase64: source.toString('base64'), imageMime: 'image/jpeg',
+    refImages: [{ base64: source.toString('base64'), mime: 'image/jpeg' }],
+    inputImageMaxDimension: 1536, preserveInputQuality: true,
+  });
+  assert.equal(received.length, 2);
+  for (const [index, image] of received.entries()) {
+    assert.equal(image.meta.format, 'png', 'input ' + index + ' keeps resized pixels lossless');
+    assert.equal(image.name, 'image-' + index + '.png');
+    assert.equal(image.meta.width, 1536);
+    assert.equal(image.meta.height, 768);
   }
 });

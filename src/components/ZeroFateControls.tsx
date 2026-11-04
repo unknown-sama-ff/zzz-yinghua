@@ -24,7 +24,7 @@ export function ZeroFateControls({ isCurrent, onGenerateDraft, onConfirmDraft, o
       <div className="yinghua-stage-controls">
         <p className="yinghua-stage-eyebrow">动作与结构 / ACTION STUDY</p>
         <h3>动作底稿</h3>
-        <p className="yinghua-stage-description">先确定动作，再处理光影。生成无字全彩底稿，检查两腿连接、膝盖弯曲和前后遮挡。</p>
+        <p className="yinghua-stage-description">先确定动作，再处理光影。生成无字全彩底稿，按角色原有形态检查身体连接、支撑和前后遮挡。</p>
         <div className="yinghua-stage-note"><strong>保留完整衣装</strong><p>正常明暗、自然表情。保留原角色服装与镜头设计，便于看清动作结构。</p></div>
         <details className="yinghua-prompt-editor">
           <summary>编辑底稿提示词 <span aria-hidden="true">＋</span></summary>

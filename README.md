@@ -15,6 +15,13 @@
 
 ## 页面与设置
 
+- **看图反推**（`#/image-to-prompt`）：主导航位于「美图拼图」之后。上传 PNG/JPEG/WebP（≤10 MB），选择通用、Midjourney、SDXL 或 FLUX，用视觉模型生成中文、英文、可编辑版本及复刻建议；适用时另给负面提示词，各版本可单独复制或全部复制。复用「设置 → 接口与模型 → 视觉模型」的 API Key、Base URL 和模型；开启作者免费通道时使用服务端 `VISION_API_KEY`、`VISION_BASE_URL`、`VISION_MODEL` 并沿用额度限制。图片仅在点击反推后发送给所选模型，不保存到公共画廊。输出是可见画面的重建，不能恢复原始提示词、seed 或保证完全复刻。
+- **图片降噪**（`#/denoise`）：独立的本地像素处理工具，三档亮度/色度联合双边滤波近似，支持原图与结果比较、100% 查看、取消和 PNG 下载；不调用模型、不消耗生图额度。限制 400 万像素、单边 8192、文件≤10 MB，不自动缩图；保留解码后的尺寸与 alpha。适合轻中度颗粒和彩色杂点，较强档可能柔化纹理，无法可靠修复严重压缩块和模糊。它与生成流程中的「降噪」提示词开关独立。[研究来源与边界](docs/local-denoise-research.md)。
+
+`POST /api/image-to-prompt` 接受 multipart 字段 `image`、`target`、`focus`，以及视觉模型配置或 `useServerPreset=true`，返回 `{ ok, result, image }`。服务端校验真实图片解码、限制像素、缩放至最长边 1536、移除元数据，并通过现有 SSRF 与完整响应体超时保护访问模型。技能方法来源与 MIT 许可见 [image-to-prompt](docs/licenses/image-to-prompt.txt)。
+
+新增离线浏览器验收：`node tests/browser/image-tools-smoke.mjs`，需要本地 Playwright 与可用 Chromium；可用 `BROWSER_EXECUTABLE` 指定浏览器。反推响应使用模拟数据，降噪与 PNG 导出执行真实 Worker，无付费模型调用。
+
 - `#/`：作品展厅首页，示例点击放大。
 - `#/workshop/assets`、`#/workshop/yinghua`、`#/workshop/poster`：角色素材、影画、海报工作区。
 - `#/gallery`、`#/prompts`：公共画廊、提示词画廊。旧 `#prompt-gallery` 链接自动进入提示词页面。
