@@ -29,10 +29,15 @@ export async function loadPuzzleGallery(
   return eligiblePuzzleImages(rows);
 }
 
-export function pickPuzzleImage(rows: GalleryRow[], currentUrl?: string, random = Math.random): GalleryRow | null {
+/** An optional session history makes each image participate once before the pool repeats. */
+export function pickPuzzleImage(rows: GalleryRow[], currentUrl?: string, random = Math.random, seenUrls?: Set<string>): GalleryRow | null {
   const alternatives = rows.filter((row) => row.image_url !== currentUrl);
-  const candidates = alternatives.length ? alternatives : rows;
-  return candidates.length ? candidates[Math.floor(random() * candidates.length)] : null;
+  const available = alternatives.length ? alternatives : rows;
+  let candidates = available.filter((row) => !seenUrls?.has(row.image_url));
+  if (!candidates.length) { seenUrls?.clear(); candidates = available; }
+  const picked = candidates.length ? candidates[Math.floor(random() * candidates.length)] : null;
+  if (picked) seenUrls?.add(picked.image_url);
+  return picked;
 }
 
 export async function loadPuzzleImage(url: string): Promise<{ src: string; width: number; height: number }> {

@@ -1,18 +1,42 @@
 export const PUZZLE_DIFFICULTIES = [
-  { id: 'easy', label: '简单', target: 12 },
-  { id: 'normal', label: '普通', target: 24 },
-  { id: 'hard', label: '困难', target: 48 },
+  { id: 'easy', label: '简单', target: 12, pieceSize: 104, pieceLabel: '大块' },
+  { id: 'normal', label: '普通', target: 24, pieceSize: 80, pieceLabel: '中块' },
+  { id: 'hard', label: '困难', target: 48, pieceSize: 56, pieceLabel: '小块' },
 ] as const;
 
 export type PuzzleDifficulty = typeof PUZZLE_DIFFICULTIES[number]['id'];
-export interface PuzzleGrid { rows: number; columns: number }
+export interface PuzzleGrid { rows: number; columns: number; difficulty?: PuzzleDifficulty }
 
-export function puzzleGrid(imageWidth: number, imageHeight: number, difficulty: PuzzleDifficulty): PuzzleGrid {
-  const target = PUZZLE_DIFFICULTIES.find((level) => level.id === difficulty)!.target;
+function targetPieceSize(width: number, height: number, size: number): number {
+  return size * Math.min(1, width / 560, height / 400);
+}
+
+function puzzleImageSize(width: number, height: number, ratio: number, count: number, cellSize: number) {
+  const imageWidth = cellSize * Math.sqrt(count * ratio);
+  const imageHeight = imageWidth / ratio;
+  // Leave enough space to scatter pieces and to keep assembled groups inside the mat.
+  const scale = Math.min(
+    1, width * 0.86 / imageWidth, height * 0.8 / imageHeight,
+    Math.sqrt(width * height * 0.38 / (imageWidth * imageHeight)),
+  );
+  return { width: imageWidth * scale, height: imageHeight * scale };
+}
+
+export function puzzleGrid(imageWidth: number, imageHeight: number, difficulty: PuzzleDifficulty, viewport?: { width: number; height: number }): PuzzleGrid {
+  const level = PUZZLE_DIFFICULTIES.find((item) => item.id === difficulty)!;
   const ratio = imageWidth / imageHeight;
+  let rows = Math.sqrt(level.target / ratio);
+  let columns = Math.sqrt(level.target * ratio);
+  if (viewport) {
+    const width = Math.max(240, viewport.width); const height = Math.max(180, viewport.height);
+    const cellSize = targetPieceSize(width, height, level.pieceSize);
+    const image = puzzleImageSize(width, height, ratio, level.target, cellSize);
+    rows = image.height / cellSize; columns = image.width / cellSize;
+  }
   return {
-    rows: Math.max(2, Math.min(16, Math.round(Math.sqrt(target / ratio)))),
-    columns: Math.max(2, Math.min(16, Math.round(Math.sqrt(target * ratio)))),
+    rows: Math.max(1, Math.min(16, Math.round(rows))),
+    columns: Math.max(1, Math.min(16, Math.round(columns))),
+    difficulty,
   };
 }
 type Edge = -1 | 0 | 1;
@@ -32,16 +56,15 @@ export function puzzleLayout(width: number, imageWidth: number, imageHeight: num
   width = Math.max(240, width);
   height = Math.max(180, height);
   const ratio = imageWidth / imageHeight;
-  const maxWidth = Math.min(width * 0.6, 640);
-  const imageHeightOnMat = Math.min(maxWidth / ratio, height * 0.68, 640);
-  const imageWidthOnMat = imageHeightOnMat * ratio;
-  const cellWidth = imageWidthOnMat / grid.columns;
-  const cellHeight = imageHeightOnMat / grid.rows;
+  const level = PUZZLE_DIFFICULTIES.find((item) => item.id === (grid.difficulty ?? 'easy'))!;
+  const image = puzzleImageSize(width, height, ratio, grid.rows * grid.columns, targetPieceSize(width, height, level.pieceSize));
+  const cellWidth = image.width / grid.columns;
+  const cellHeight = image.height / grid.rows;
   const padding = Math.min(cellWidth, cellHeight) * 0.2;
   const margin = 16 + padding;
   return {
     width, height,
-    image: { width: imageWidthOnMat, height: imageHeightOnMat },
+    image,
     cellWidth, cellHeight, padding, margin,
   };
 }

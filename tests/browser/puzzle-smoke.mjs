@@ -123,7 +123,7 @@ try {
   assert.equal(offsets.length, 0, 'home does not fetch the gallery');
   await page.locator('.home-puzzle-hint').click();
   await page.locator('.puzzle-piece').first().waitFor();
-  assert.equal(layerCalls, 1, 'drawing an image starts layer analysis before any piece is joined');
+  assert.equal(layerCalls, 0, 'drawing an image leaves time to browse before starting layer analysis');
   assert.equal(await page.locator('.puzzle-piece').count(), 12);
   await page.getByText(/海报版.*3 列 × 4 行/).waitFor();
   assert.deepEqual(offsets, [0, 1], 'older gallery page participates and StrictMode shares requests');
@@ -139,6 +139,7 @@ try {
   assert.ok(matBox.y + matBox.height <= 1001, 'canvas fits the initial browser viewport');
   assert.ok(await page.locator('.puzzle-piece').evaluateAll((pieces) => new Set(pieces.map((piece) => piece.getBoundingClientRect().y.toFixed(2))).size === pieces.length), 'random scatter is not arranged in rows');
   await dragTo(page, 0, matBox.x + 151 + cw / 2, matBox.y + 121 + ch / 2);
+  assert.equal(layerCalls, 1, 'moving the first puzzle piece starts layer analysis immediately');
   let anchor = await center(page, 0);
   await dragTo(page, 11, anchor.x + cw, anchor.y);
   assert.equal(await page.locator('.puzzle-mat').getAttribute('data-group-count'), '12', 'wrong neighbors never attach');
@@ -400,6 +401,52 @@ try {
   realLayers = savedService;
   await recovery.close();
   check('layer service failure keeps the original; explicit retry restores all three assets');
+
+  const delayed = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
+  await setup(delayed);
+  const delayedPage = await delayed.newPage();
+  delayedPage.on('pageerror', (error) => errors.push(error.message));
+  await delayedPage.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
+  await delayedPage.clock.pauseAt(new Date('2026-01-01T00:01:00Z'));
+  const savedLayers = realLayers; realLayers = null;
+  const callsBeforeBrowsing = layerCalls;
+  await delayedPage.goto(base + '/#/puzzle');
+  await delayedPage.locator('.puzzle-piece').first().waitFor();
+  const refresh = delayedPage.getByRole('button', { name: '换一张', exact: true });
+  for (let i = 0; i < 2; i++) {
+    await delayedPage.clock.runFor(1000);
+    await refresh.click();
+    await delayedPage.locator('.puzzle-mat[aria-busy=false]').waitFor();
+    assert.equal(layerCalls, callsBeforeBrowsing, 'rapid redraws do not start analysis for discarded images');
+  }
+  await delayedPage.clock.runFor(4000);
+  assert.equal(layerCalls, callsBeforeBrowsing, 'the last image also waits before preloading');
+  const isLayerResponse = (response) => new URL(response.url()).pathname === '/api/puzzle-layers';
+  const delayedResponse = delayedPage.waitForResponse(isLayerResponse);
+  await delayedPage.clock.runFor(1200);
+  assert.equal((await delayedResponse).request().postDataJSON().galleryId, 4, 'only the final selected image is preloaded');
+  assert.equal(layerCalls, callsBeforeBrowsing + 1);
+
+  await refresh.click();
+  await delayedPage.locator('.puzzle-mat[aria-busy=false]').waitFor();
+  const delayedNav = delayedPage.getByRole('navigation', { name: '主导航' });
+  await delayedNav.getByRole('link', { name: '首页', exact: true }).click();
+  await delayedPage.clock.runFor(6000);
+  assert.equal(layerCalls, callsBeforeBrowsing + 1, 'leaving the puzzle cancels the pending preload');
+  await delayedNav.getByRole('link', { name: '美图拼图', exact: true }).click();
+  await delayedPage.locator('.puzzle-mat').waitFor({ state: 'visible' });
+  const stillPiece = await visiblePoint(delayedPage, 0);
+  await delayedPage.mouse.move(stillPiece.x, stillPiece.y);
+  await delayedPage.mouse.down(); await delayedPage.mouse.up();
+  assert.equal(layerCalls, callsBeforeBrowsing + 1, 'hovering and clicking without moving keep waiting');
+  const earlyResponse = delayedPage.waitForResponse(isLayerResponse);
+  await fragment(delayedPage, 0).press('ArrowRight');
+  await earlyResponse;
+  assert.equal(layerCalls, callsBeforeBrowsing + 2, 'the first keyboard movement starts preloading immediately');
+  await delayedPage.clock.runFor(6000);
+  assert.equal(layerCalls, callsBeforeBrowsing + 2, 'early preloading cancels the delayed duplicate');
+  await delayed.close(); realLayers = savedLayers;
+  check('layer preloading waits five seconds, debounces rapid redraws, pauses off-page and starts early on piece movement');
   assert.deepEqual(errors, []);
   console.log('Screenshots: ' + output);
 } finally { await browser.close(); await vite?.close(); }

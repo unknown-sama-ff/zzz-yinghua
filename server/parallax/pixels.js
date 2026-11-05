@@ -93,15 +93,12 @@ function splitMatte(mask, width, height) {
   const main = components.reduce((best, component) => component.strong > (best?.strong ?? 0) ? component : best, null);
   if (!main) throw new Error('这张图片暂时无法可靠地分离主体');
   const ownership = new Uint8Array(components.length + 1);
-  const gap = Math.max(2, Math.round(Math.min(width, height) * 0.015));
   for (const component of components) {
     if (!component.strong || component.area < Math.max(3, count * 0.000015)) continue;
-    const detached = component.maxX < main.minX - gap || component.minX > main.maxX + gap || component.maxY < main.minY - gap || component.minY > main.maxY + gap;
-    const nearEdge = component.minX <= width * 0.01 || component.maxX >= width * 0.99 - 1 || component.maxY >= height * 0.99 - 1;
-    // A binary saliency model cannot infer depth. Only detached, substantial edge scenery qualifies.
-    ownership[component.id] = component !== main && detached && nearEdge && component.maxY >= height * 0.65 && component.area >= Math.max(16, count * 0.00025) && component.area < main.area * 0.4 ? 2 : 1;
+    // Detached hands, fins and worn accessories still belong to the same character.
+    ownership[component.id] = 1;
   }
-  const subject = Buffer.alloc(count); const foreground = Buffer.alloc(count); const combined = Buffer.alloc(count);
+  const subject = Buffer.alloc(count); const combined = Buffer.alloc(count);
   let opaque = 0;
   for (let i = 0; i < count; i++) {
     const owner = ownership[labels[i]];
@@ -109,11 +106,10 @@ function splitMatte(mask, width, height) {
     const value = Math.max(0, Math.min(1, (mask[i] - 8) / 237));
     const alpha = Math.round(value * value * (3 - 2 * value) * 255);
     combined[i] = alpha;
-    if (owner === 2) foreground[i] = alpha;
-    else subject[i] = alpha;
+    subject[i] = alpha;
     if (alpha > 128) opaque++;
   }
-  return { subject, foreground, combined, coverage: opaque / count };
+  return { subject, combined, coverage: opaque / count };
 }
 
 function histogramPercentile(histogram, count, fraction) {
@@ -125,26 +121,37 @@ function histogramPercentile(histogram, count, fraction) {
   return 255;
 }
 
-async function preserveNearObjects(matte, values, rgb, reference, referenceLuminance, width, height) {
+async function preserveForegroundObjects(matte, values, rgb, reference, referenceLuminance, width, height, protectedSubject, minimumDepth) {
   const contrast = Buffer.alloc(matte.length);
-  for (let y = Math.floor(height * 0.45); y < height; y++) for (let x = 0; x < width; x++) {
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const i = y * width + x;
     const luminance = rgb[i * 3] * 0.2126 + rgb[i * 3 + 1] * 0.7152 + rgb[i * 3 + 2] * 0.0722;
-    if (values[i] >= reference - 18 && Math.abs(luminance - referenceLuminance) >= 64) contrast[i] = 255;
+    if (!protectedSubject[i] && Math.abs(luminance - referenceLuminance) >= 48) contrast[i] = 255;
   }
   const { labels, components } = matteComponents(contrast, width, height);
   const overlaps = new Uint32Array(components.length + 1);
-  for (let i = 0; i < matte.length; i++) if (matte[i] > 32) overlaps[labels[i]]++;
+  const farther = new Uint32Array(components.length + 1);
+  for (let i = 0; i < matte.length; i++) {
+    if (matte[i] >= 160 && values[i] >= reference + 24) overlaps[labels[i]]++;
+    if (values[i] < minimumDepth) farther[labels[i]]++;
+  }
+  // Follow the visible colour contour before checking depth, so a far half cannot
+  // disappear from the test and leave only the near half of the same prop floating.
+  const rejected = new Set(components.filter((component) => overlaps[component.id] && farther[component.id] > component.area * 0.05).map((component) => component.id));
+  const rejectedMatte = Buffer.alloc(matte.length);
+  for (let i = 0; i < matte.length; i++) if (rejected.has(labels[i])) rejectedMatte[i] = 255;
+  const blocked = dilateMatte(rejectedMatte, width, height, 2);
+  for (let i = 0; i < matte.length; i++) if (blocked[i]) matte[i] = 0;
   const retained = new Set(components.filter((component) => {
     const boundsArea = (component.maxX - component.minX + 1) * (component.maxY - component.minY + 1);
-    return component.area >= Math.max(6, matte.length * 0.0005)
+    return !rejected.has(component.id) && component.area >= Math.max(6, matte.length * 0.0005)
       && component.area <= matte.length * 0.08
       && component.area / boundsArea >= 0.35
       && overlaps[component.id] >= Math.max(4, component.area * 0.02);
   }).map((component) => component.id));
   if (!retained.size) return matte;
   for (let i = 0; i < contrast.length; i++) contrast[i] = retained.has(labels[i]) ? 255 : 0;
-  // Include highlights enclosed by an opaque prop, such as a ring inside its dark box.
+  // Keep enclosed highlights with the selected background detail.
   const inverse = contrast.map((value) => 255 - value);
   const holes = matteComponents(inverse, width, height);
   const enclosed = new Set(holes.components.filter((component) =>
@@ -155,7 +162,28 @@ async function preserveNearObjects(matte, values, rgb, reference, referenceLumin
   for (let i = 0; i < contrast.length; i++) if (enclosed.has(holes.labels[i])) contrast[i] = 255;
   const expanded = dilateMatte(contrast, width, height, Math.max(2, Math.round(Math.min(width, height) * 0.008)));
   const softened = await sharp(expanded, { raw: { width, height, channels: 1 } }).blur(0.6).greyscale().raw().toBuffer();
-  for (let i = 0; i < matte.length; i++) matte[i] = Math.max(matte[i], softened[i]);
+  for (let i = 0; i < matte.length; i++) matte[i] = protectedSubject[i] ? 0 : Math.max(matte[i], values[i] >= minimumDepth ? softened[i] : 0);
+  return matte;
+}
+
+function limitForegroundObjects(matte, values, characterNear, budget, width, height) {
+  const { labels, components } = matteComponents(matte, width, height);
+  const scores = new Float64Array(components.length + 1);
+  const closer = new Uint32Array(components.length + 1);
+  for (let i = 0; i < matte.length; i++) {
+    scores[labels[i]] += values[i];
+    if (matte[i] >= 160 && values[i] >= characterNear + 12) closer[labels[i]]++;
+  }
+  // Colour completion cannot promote a farther object just because a few pixels look near.
+  const ranked = components.filter((component) => component.strong >= 4 && component.area <= budget && closer[component.id] >= component.strong * 0.8)
+    .sort((a, b) => scores[b.id] / b.area - scores[a.id] / a.area || b.strong - a.strong);
+  const selected = new Set();
+  let area = 0;
+  for (const component of ranked) {
+    if (selected.size === 3 || area + component.area > budget) continue;
+    selected.add(component.id); area += component.area;
+  }
+  for (let i = 0; i < matte.length; i++) if (!selected.has(labels[i])) matte[i] = 0;
   return matte;
 }
 
@@ -166,39 +194,44 @@ async function depthForeground(depth, subject, rgb, width, height) {
     throw new Error('前景深度图尺寸无效');
   }
   const values = await sharp(depth.data, { raw: { width: depth.width, height: depth.height, channels: 1 } }).resize(width, height, { kernel: 'cubic' }).greyscale().raw().toBuffer();
-  const mainHistogram = new Uint32Array(256);
+  // Keep the entire character and a soft-edge guard band out of every foreground pass.
+  const protectedSubject = dilateMatte(subject, width, height, Math.max(2, Math.ceil(Math.min(width, height) * 0.008)));
+  const backgroundHistogram = new Uint32Array(256);
+  const characterHistogram = new Uint32Array(256);
   const luminanceHistogram = new Uint32Array(256);
-  const nearHistogram = new Uint32Array(256);
-  let mainCount = 0; let nearCount = 0;
-  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const i = y * width + x;
-    if (subject[i] >= 160 && x >= width * 0.2 && x <= width * 0.8 && y >= height * 0.12 && y <= height * 0.62) {
-      mainHistogram[values[i]]++;
-      luminanceHistogram[Math.round(rgb[i * 3] * 0.2126 + rgb[i * 3 + 1] * 0.7152 + rgb[i * 3 + 2] * 0.0722)]++;
-      mainCount++;
-    }
-    if (y >= height * 0.45) { nearHistogram[values[i]]++; nearCount++; }
+  let backgroundCount = 0;
+  let characterCount = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (subject[i] >= 224) { characterHistogram[values[i]]++; characterCount++; }
+    if (protectedSubject[i]) continue;
+    backgroundHistogram[values[i]]++;
+    luminanceHistogram[Math.round(rgb[i * 3] * 0.2126 + rgb[i * 3 + 1] * 0.7152 + rgb[i * 3 + 2] * 0.0722)]++;
+    backgroundCount++;
   }
   const matte = Buffer.alloc(width * height);
-  if (!mainCount) return matte;
-  const reference = histogramPercentile(mainHistogram, mainCount, 0.65);
-  const nearest = histogramPercentile(nearHistogram, nearCount, 0.995);
+  if (!backgroundCount || !characterCount) return matte;
+  const budget = Math.floor(Math.min(matte.length * 0.08, backgroundCount * 0.2));
+  // Rank against the nearer part of the complete role, including reaching hands and knees.
+  const characterNear = histogramPercentile(characterHistogram, characterCount, 0.9);
+  const reference = Math.max(characterNear, histogramPercentile(backgroundHistogram, backgroundCount, 0.65));
+  const nearest = histogramPercentile(backgroundHistogram, backgroundCount, 0.995);
   const separation = nearest - reference;
   if (separation < 28) return matte;
   const start = reference + separation * 0.4;
   const solid = reference + separation * 0.75;
   for (let i = 0; i < matte.length; i++) {
+    if (protectedSubject[i]) continue;
     const value = Math.max(0, Math.min(1, (values[i] - start) / (solid - start)));
     matte[i] = Math.round(value * value * (3 - 2 * value) * 255);
   }
   const { labels, components } = matteComponents(matte, width, height);
   const accepted = new Set(components.filter((component) =>
-    component.strong >= matte.length * 0.001
-    && component.area >= matte.length * 0.003 && component.area <= matte.length * 0.4
-    && component.minY >= height * 0.4 && component.maxY >= height * 0.75,
+    component.strong >= Math.max(4, matte.length * 0.0001)
+    && component.area >= Math.max(6, matte.length * 0.0005) && component.area <= budget,
   ).map((component) => component.id));
   for (let i = 0; i < matte.length; i++) if (!accepted.has(labels[i])) matte[i] = 0;
-  return preserveNearObjects(matte, values, rgb, reference, histogramPercentile(luminanceHistogram, mainCount, 0.5), width, height);
+  const details = await preserveForegroundObjects(matte, values, rgb, reference, histogramPercentile(luminanceHistogram, backgroundCount, 0.5), width, height, protectedSubject, characterNear + 12);
+  return limitForegroundObjects(details, values, characterNear, budget, width, height);
 }
 
 function layerPixels(rgb, background, alpha) {
@@ -224,14 +257,14 @@ export async function createLayerImages(image, mask, maskWidth, maskHeight, { de
   const { data: rgb, info } = await sharp(image, { limitInputPixels: 24_000_000 }).removeAlpha().toColourspace('srgb').raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
   const resized = await sharp(mask, { raw: { width: maskWidth, height: maskHeight, channels: 1 } }).resize(width, height, { kernel: 'lanczos3' }).greyscale().raw().toBuffer();
-  const { subject: subjectAlpha, foreground: isolatedAlpha, combined, coverage } = splitMatte(resized, width, height);
+  const { subject: subjectAlpha, combined, coverage } = splitMatte(resized, width, height);
   if (coverage < 0.02 || coverage > 0.9) throw new Error('这张图片暂时无法可靠地分离主体');
-  const foregroundAlpha = depth ? await depthForeground(depth, subjectAlpha, rgb, width, height) : isolatedAlpha;
+  // Depth must never split limbs, clothing or disconnected details out of the saliency matte.
+  const foregroundAlpha = depth ? await depthForeground(depth, subjectAlpha, rgb, width, height) : Buffer.alloc(width * height);
   for (let i = 0; i < combined.length; i++) combined[i] = Math.max(subjectAlpha[i], foregroundAlpha[i]);
   const hasForeground = foregroundAlpha.some((value) => value > 128);
   const backgroundPixels = fillBackground(rgb, combined, width, height);
-  const subjectPixels = depth && hasForeground ? fillBackground(rgb, foregroundAlpha, width, height) : rgb;
-  const subjectRgba = layerPixels(subjectPixels, backgroundPixels, subjectAlpha);
+  const subjectRgba = layerPixels(rgb, backgroundPixels, subjectAlpha);
   const underForeground = Buffer.from(backgroundPixels);
   for (let i = 0; i < combined.length; i++) {
     const opacity = subjectRgba[i * 4 + 3] / 255;

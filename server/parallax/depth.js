@@ -1,5 +1,6 @@
 import sharp from 'sharp';
 import * as ort from 'onnxruntime-node';
+import { inferenceOptions } from './runtime.js';
 
 const SIZE = 518;
 const MULTIPLE = 14;
@@ -51,17 +52,14 @@ export function normalizeDepthPrediction(prediction, dims) {
   return { data, width, height };
 }
 
-export async function inferRelativeDepth(image, modelPath) {
+export async function inferRelativeDepth(image, modelPath, existingSession) {
   const input = await prepareDepthInput(image);
-  const session = await ort.InferenceSession.create(modelPath, {
-    executionProviders: [{ name: 'cpu', useArena: false }], executionMode: 'sequential',
-    intraOpNumThreads: Math.min(2, Math.max(1, Number(process.env.PUZZLE_LAYER_THREADS) || 1)), interOpNumThreads: 1, enableMemPattern: false,
-  });
+  const session = existingSession ?? await ort.InferenceSession.create(modelPath, inferenceOptions());
   try {
     const results = await session.run({ [session.inputNames[0]]: new ort.Tensor('float32', input.values, [1, 3, input.height, input.width]) });
     const prediction = results[session.outputNames[0]];
     return normalizeDepthPrediction(prediction.data, prediction.dims);
   } finally {
-    await session.release();
+    if (!existingSession) await session.release();
   }
 }

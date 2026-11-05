@@ -15,7 +15,7 @@ interface Drag { groupId: number; pointerId: number; offsetX: number; offsetY: n
 interface SnapEffect { key: number; pieceIds: number[]; point: { x: number; y: number } }
 
 function freshGame(row: GalleryRow, image: { src: string; width: number; height: number }, difficulty: PuzzleDifficulty, width: number, height: number): Game {
-  const grid = puzzleGrid(image.width, image.height, difficulty);
+  const grid = puzzleGrid(image.width, image.height, difficulty, { width, height });
   const layout = puzzleLayout(width, image.width, image.height, grid, height);
   const pieces = createPuzzlePieces(grid);
   return { row, ...image, roundId: crypto.randomUUID(), layoutWidth: width, layoutHeight: height, grid, pieces, groups: createPuzzleGroups(pieces, layout) };
@@ -42,12 +42,15 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   const widthRef = useRef(width);
   const heightRef = useRef(height);
   const difficultyRef = useRef(difficulty);
-  const pool = useRef<Promise<GalleryRow[]> | null>(null);
+  const pool = useRef<{ rows: Promise<GalleryRow[]>; loadedAt: number } | null>(null);
+  const drawnImages = useRef(new Set<string>());
   const request = useRef(0);
   const z = useRef(100);
   const snapKey = useRef(0);
   const drag = useRef<Drag | null>(null);
   const dragFrame = useRef<number | null>(null);
+  const layerPrefetchTimer = useRef<number | null>(null);
+  const prefetchedImage = useRef<string | null>(null);
   const clipPrefix = useId().replace(/:/g, '');
   gameRef.current = game; widthRef.current = width; heightRef.current = height;
   const layout = useMemo(() => game ? puzzleLayout(width, game.width, game.height, game.grid, height) : null, [width, height, game?.width, game?.height, game?.grid]);
@@ -66,6 +69,17 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   const outlinePaths = useMemo(() => new WeakMap<ReadonlySet<string>, Map<number, string>>(), [layout]);
   const cancelDragFrame = useCallback(() => { if (dragFrame.current !== null) { cancelAnimationFrame(dragFrame.current); dragFrame.current = null; } }, []);
   useEffect(() => cancelDragFrame, [cancelDragFrame]);
+  const cancelLayerPrefetch = useCallback(() => {
+    if (layerPrefetchTimer.current !== null) { window.clearTimeout(layerPrefetchTimer.current); layerPrefetchTimer.current = null; }
+  }, []);
+  const prefetchLayers = useCallback((galleryId: string | number) => {
+    const id = String(galleryId);
+    if (!active || loading || String(gameRef.current?.row.id) !== id) return;
+    cancelLayerPrefetch();
+    if (prefetchedImage.current === id) return;
+    prefetchedImage.current = id;
+    void getPuzzleLayers(galleryId).catch(() => {});
+  }, [active, loading, cancelLayerPrefetch]);
   const commitGame = useCallback((next: Game) => { gameRef.current = next; setGame(next); }, []);
   const revealReady = useCallback((roundId: string) => setShowcaseRound(roundId), []);
   useEffect(() => {
@@ -76,18 +90,20 @@ export function PuzzlePanel({ active }: { active: boolean }) {
   const draw = useCallback(async () => {
     const current = ++request.current;
     setLoading(true); setError(''); setNotice(''); setSnapping(null);
+    cancelLayerPrefetch();
     cancelDragFrame(); drag.current = null; setDragging(null); setSelected(null);
     try {
-      pool.current ??= loadPuzzleGallery();
-      const rows = await pool.current;
+      if (!pool.current || Date.now() - pool.current.loadedAt >= 120000) {
+        pool.current = { rows: loadPuzzleGallery(), loadedAt: Date.now() };
+      }
+      const rows = await pool.current.rows;
       if (current !== request.current) return;
-      const row = pickPuzzleImage(rows, gameRef.current?.row.image_url);
+      const row = pickPuzzleImage(rows, gameRef.current?.row.image_url, Math.random, drawnImages.current);
       if (!row) {
         pool.current = null;
         setError('图库里还没有可用的自由创作、动作底稿或海报版图片。先保存一幅作品，再来试试。');
         return;
       }
-      void getPuzzleLayers(row.id).catch(() => {});
       const image = await loadPuzzleImage(row.image_url);
       if (current !== request.current) return;
       commitGame(freshGame(row, image, difficultyRef.current, widthRef.current, heightRef.current));
@@ -96,7 +112,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     } catch (err) {
       if (current === request.current) { pool.current = null; setError(err instanceof Error ? err.message : '抽取图片失败，请重试。'); }
     } finally { if (current === request.current) setLoading(false); }
-  }, [commitGame, cancelDragFrame]);
+  }, [commitGame, cancelDragFrame, cancelLayerPrefetch]);
 
   useEffect(() => {
     void draw();
@@ -104,6 +120,13 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     window.addEventListener(GALLERY_SAVED_EVENT, invalidate);
     return () => { ++request.current; window.removeEventListener(GALLERY_SAVED_EVENT, invalidate); };
   }, [draw]);
+
+  useEffect(() => {
+    if (!active || loading || !game || prefetchedImage.current === String(game.row.id)) return;
+    const galleryId = game.row.id;
+    layerPrefetchTimer.current = window.setTimeout(() => prefetchLayers(galleryId), 5000);
+    return cancelLayerPrefetch;
+  }, [active, loading, game?.row.id, prefetchLayers, cancelLayerPrefetch]);
 
   useEffect(() => {
     const element = mat.current;
@@ -154,8 +177,9 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     if (!moving || !bounds || !currentLayout || !current) return;
     moving.clientX = clientX; moving.clientY = clientY;
     moving.moved ||= Math.hypot(clientX - moving.startX, clientY - moving.startY) > 4;
+    if (moving.moved) prefetchLayers(current.row.id);
     commitGame({ ...current, groups: positionPuzzleGroup(current.groups, moving.groupId, clientX - bounds.left - mat.current!.clientLeft - moving.offsetX, clientY - bounds.top - mat.current!.clientTop - moving.offsetY, current.pieces, currentLayout) });
-  }, [commitGame]);
+  }, [commitGame, prefetchLayers]);
 
   const moveDrag = useCallback((clientX: number, clientY: number) => {
     const moving = drag.current;
@@ -240,6 +264,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     audio.current?.unlock();
     event.preventDefault(); setSnapping(null); setSelected(group.id);
     const current = gameRef.current; const step = event.shiftKey ? 1 : 10;
+    prefetchLayers(current.row.id);
     commitGame({ ...current, groups: positionPuzzleGroup(current.groups, group.id, group.x + direction[0] * step, group.y + direction[1] * step, current.pieces, layout) });
   };
 
@@ -256,7 +281,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
       <a href={ROUTE_HASHES.gallery} className='studio-text-link'>图片来自画廊 <span aria-hidden='true'>↗</span></a>
     </header>
     <div className='puzzle-toolbar'>
-      <fieldset className='puzzle-levels' disabled={loading}><legend>拼图难度</legend>{PUZZLE_DIFFICULTIES.map((level) => <button key={level.id} type='button' aria-pressed={difficulty === level.id} onClick={() => restart(level.id)}>{level.label}<small>约 {level.target} 块</small></button>)}</fieldset>
+      <fieldset className='puzzle-levels' disabled={loading}><legend>拼图难度</legend>{PUZZLE_DIFFICULTIES.map((level) => <button key={level.id} type='button' aria-pressed={difficulty === level.id} onClick={() => restart(level.id)}>{level.label}<small>{level.pieceLabel}</small></button>)}</fieldset>
       <div className='puzzle-tools'>
         <button type='button' className='puzzle-tool' aria-label='拼图声效' aria-pressed={soundEnabled} title='轻柔的拼接与完成声效' onClick={() => { const next = !soundEnabled; setSoundEnabled(next); writePuzzleSoundPreference(next); audio.current?.setEnabled(next && active); if (next) audio.current?.unlock(); }}>声效：{soundEnabled ? '开' : '关'}</button>
         <button type='button' className='puzzle-tool' disabled={!game || loading} aria-pressed={showGuide} onClick={() => setShowGuide((show) => !show)}>{showGuide ? '隐藏原图' : '查看原图'}</button>

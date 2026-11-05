@@ -95,8 +95,8 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
 
   const layered = mode === 2 && Boolean(layers);
   const layerStatus = layers?.hasForeground
-    ? '背景 · 主角 · 前景已分离，移动鼠标查看视差'
-    : '背景与主角已分离，未检测到明显近景';
+    ? '背景 · 完整角色 · 近处前景已分离，移动鼠标查看视差'
+    : '角色与背景已分离，前景层为空';
   const imageFailed = () => { setLayers(null); setLayerError('分层图片读取失败，原图仍可正常查看'); };
   return <div ref={root} className='puzzle-reveal' data-phase={ready ? 'ready' : 'centering'} data-mode={MODES[mode].id} data-layered={layered} data-depth-state={layers ? 'ready' : layerLoading ? 'loading' : layerError ? 'error' : 'idle'} data-flipping={flipping} onPointerMove={updatePointer} onPointerLeave={resetPointer} style={{ '--reveal-scale': scale, '--flip-direction': turn.direction } as CSSProperties}>
     <div className='puzzle-reveal-aura' aria-hidden='true' />
@@ -109,7 +109,7 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
             <span className='puzzle-reveal-layer puzzle-reveal-layer-base'><img src={layered ? layers!.background : src} alt={layered ? '补全后的背景' : '拼图完成作品'} draggable={false} onError={layered ? imageFailed : undefined} /></span>
             {layered && <>
               <span className='puzzle-reveal-layer puzzle-reveal-layer-subject'><img src={layers!.subject} alt='分离出的主角' draggable={false} onError={imageFailed} /></span>
-              <span className='puzzle-reveal-layer puzzle-reveal-layer-foreground'><img src={layers!.foreground} alt='分离出的近景' draggable={false} onError={imageFailed} /></span>
+              <span className='puzzle-reveal-layer puzzle-reveal-layer-foreground'><img src={layers!.foreground} alt='位于角色前方的独立前景' draggable={false} onError={imageFailed} /></span>
             </>}
             <span className='puzzle-reveal-gloss' aria-hidden='true' />
           </span>

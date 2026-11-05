@@ -2,6 +2,7 @@ import { useFreeCreateStore } from '../store/useFreeCreateStore';
 import { useLightboxStore } from '../store/useLightboxStore';
 import { useUploadStore } from '../store/useUploadStore';
 import { ROUTE_HASHES } from '../lib/navigation';
+import { HomeFeatures } from './HomeFeatures';
 
 const examples = [
   { title: '让角色，跳出画框。', kind: '自由版', image: '/作者推荐/自由版.webp', caption: '粗粝印刷 / 自由构图', className: 'exhibit-wide' },
@@ -53,6 +54,8 @@ export function HomePage() {
         <div className="hero-art-caption"><span>一张立绘，无限种出场方式。</span><span aria-hidden="true">↗</span></div>
       </div>
     </section>
+
+    <HomeFeatures />
 
     <section className="exhibition-capabilities" aria-labelledby="capabilities-title">
       <div className="exhibition-section-heading">

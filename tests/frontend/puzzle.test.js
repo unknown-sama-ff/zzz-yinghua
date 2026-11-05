@@ -11,8 +11,8 @@ const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 0.000
 const group = (id, pieceIds, x, y) => ({ id, pieceIds, x, y, z: id + 1 });
 
 test('adaptive grids preserve original aspect ratios and scatter every piece inside the free mat', () => {
-  assert.deepEqual(puzzleGrid(1536, 1024, 'easy'), { rows: 3, columns: 4 });
-  assert.deepEqual(puzzleGrid(1024, 1536, 'easy'), { rows: 4, columns: 3 });
+  assert.deepEqual(puzzleGrid(1536, 1024, 'easy'), { rows: 3, columns: 4, difficulty: 'easy' });
+  assert.deepEqual(puzzleGrid(1024, 1536, 'easy'), { rows: 4, columns: 3, difficulty: 'easy' });
   for (const [width, height] of [[1536, 1024], [1024, 1536], [1024, 1024], [2048, 768]]) {
     let previous = 0;
     for (const level of PUZZLE_DIFFICULTIES) {
@@ -173,4 +173,41 @@ test('older gallery pages participate and failed or repeated pages terminate', a
   await loadPuzzleGallery(async () => { calls++; return { rows: [row(1, '海报版')], hasMore: true }; });
   assert.equal(calls, 2);
   await assert.rejects(() => loadPuzzleGallery(async () => { throw new Error('offline'); }), /offline/);
+});
+
+test('draws exhaust the available images before repeating, with no repeat across cycle boundaries', () => {
+  const images = [row(1, '自由创作'), row(2, '动作底稿'), row(3, '海报版'), row(4, '自由创作')];
+  const seen = new Set();
+  let current;
+  const sequence = [];
+  for (let i = 0; i < 12; i++) {
+    const picked = pickPuzzleImage(images, current, () => 0, seen);
+    assert.notEqual(picked.image_url, current);
+    current = picked.image_url; sequence.push(picked.id);
+  }
+  for (let start = 0; start < sequence.length; start += images.length) {
+    assert.equal(new Set(sequence.slice(start, start + images.length)).size, images.length);
+  }
+  const added = row(5, '海报版');
+  assert.equal(pickPuzzleImage([...images, added], current, () => 0, seen).id, 5, 'newly loaded images join the unplayed pool');
+  assert.equal(pickPuzzleImage([], current, () => 0, seen), null);
+  assert.equal(pickPuzzleImage([images[0]], images[0].image_url, () => 0, seen).id, 1);
+});
+
+test('piece sizes stay consistent across image proportions within each viewport and difficulty', () => {
+  for (const [width, height] of [[1320, 560], [350, 420], [350, 240]]) {
+    for (const level of PUZZLE_DIFFICULTIES) {
+      const expected = { easy: 104, normal: 80, hard: 56 }[level.id] * Math.min(1, width / 560, height / 400);
+      const sizes = [];
+      for (const [imageWidth, imageHeight] of [[1536, 1024], [1024, 1536], [1024, 1024], [4096, 1024], [1024, 4096]]) {
+        const grid = puzzleGrid(imageWidth, imageHeight, level.id, { width, height });
+        const layout = puzzleLayout(width, imageWidth, imageHeight, grid, height);
+        const size = Math.sqrt(layout.cellWidth * layout.cellHeight);
+        assert.ok(size >= expected * 0.8 && size <= expected * 1.01, `${width}x${height} ${level.id} ${imageWidth}x${imageHeight} has size ${size}, target ${expected}`);
+        sizes.push(size);
+        near(layout.image.width / layout.image.height, imageWidth / imageHeight);
+      }
+      assert.ok(Math.max(...sizes) / Math.min(...sizes) < 1.25);
+    }
+  }
 });
