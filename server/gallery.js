@@ -16,6 +16,7 @@
 import crypto from 'node:crypto';
 import sharp from 'sharp';
 import { MAX_INPUT_PIXELS } from './lib/constants.js';
+import { validateGalleryGif } from './lib/galleryGif.js';
 import { createGalleryThumbnailService, encodeGalleryThumbnail, galleryThumbnailPath } from './lib/galleryThumbnails.js';
 
 const MAX_GALLERY_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -81,31 +82,36 @@ export async function saveGalleryItem({ imageBase64, style, characterName, promp
   if (!DELETE_TOKEN_RE.test(deleteToken || '')) {
     throw new GalleryStorageError('删除凭证无效');
   }
-  // Server-side decode validation + re-encode. The bytes must actually decode as
-  // an image (not arbitrary content smuggled in as image/*), and re-encoding to
-  // WebP strips any trailing polyglot payload so the public bucket only ever
-  // holds clean images. The client-supplied `mime` is no longer trusted for the
-  // stored content type.
+  // Detect the actual image format. Static images are re-encoded to WebP. GIFs
+  // receive complete structural and decoder validation before their animation
+  // bytes are preserved, including rejection of trailing polyglot payloads.
   let uploadBuffer;
+  let format = 'webp';
   try {
     const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
-    if (!meta.format || !meta.width || !meta.height || !['png', 'jpeg', 'jpg', 'webp'].includes(meta.format)) {
+    if (!meta.format || !meta.width || !meta.height || !['png', 'jpeg', 'jpg', 'webp', 'gif'].includes(meta.format)) {
       throw new Error('unsupported');
     }
-    uploadBuffer = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).webp({ quality: 90 }).toBuffer();
+    if (meta.format === 'gif') {
+      await validateGalleryGif(buffer, meta);
+      uploadBuffer = buffer;
+      format = 'gif';
+    } else {
+      uploadBuffer = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).webp({ quality: 90 }).toBuffer();
+    }
   } catch {
-    throw new GalleryStorageError('图片数据无效（仅支持 PNG/JPEG/WebP）');
+    throw new GalleryStorageError('图片数据无效（支持 PNG/JPEG/WebP/GIF，GIF 最多 64 帧且总解码像素不超过 6400 万）');
   }
 
   const thumbnail = await encodeGalleryThumbnail(uploadBuffer);
   const supabase = storageClient || await db();
-  const path = `gallery/${Date.now()}-${crypto.randomBytes(6).toString('hex')}-full.webp`;
+  const path = `gallery/${Date.now()}-${crypto.randomBytes(6).toString('hex')}-full.${format}`;
   const thumbnailPath = galleryThumbnailPath(path);
   const storage = supabase.storage.from(BUCKET);
   let row;
   try {
-    for (const [objectPath, bytes] of [[path, uploadBuffer], [thumbnailPath, thumbnail]]) {
-      const { error } = await storage.upload(objectPath, bytes, { contentType: 'image/webp', cacheControl: '31536000', upsert: false });
+    for (const [objectPath, bytes, contentType] of [[path, uploadBuffer, `image/${format}`], [thumbnailPath, thumbnail, 'image/webp']]) {
+      const { error } = await storage.upload(objectPath, bytes, { contentType, cacheControl: '31536000', upsert: false });
       if (error) throw new GalleryStorageError(`画廊图片上传失败: ${error.message}`);
     }
 

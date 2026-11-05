@@ -6,6 +6,8 @@ import { deleteGalleryItem, galleryThumbnails, saveGalleryItem } from './gallery
 
 const bytes = await sharp({ create: { width: 1200, height: 800, channels: 3, background: '#9275b0' } }).png().toBuffer();
 const input = { imageBase64: bytes.toString('base64'), style: '海报版', deleteToken: 'gallery-test-delete-token' };
+// Genuine two-frame GIF with red/blue frames and distinct 40/90ms delays.
+const animatedGif = Buffer.from('R0lGODlhAgABAIAAAExpcf8AACH/C05FVFNDQVBFMi4wAwEAAAAh+QQFBAAAACwAAAAAAgABAAACAkwKACH5BAUJAAAALAAAAAACAAEAgExpcQAA/wICTAoAOw==', 'base64');
 function storage({ uploadFailure, insertFailure } = {}) {
   const uploaded = [], removed = []; let saved;
   const bucket = { async upload(path, bytes, options) { uploaded.push({ path, bytes, options }); if (uploaded.length === 2 && uploadFailure) { if (uploadFailure === 'reject') throw new Error('network'); return { error: { message: 'storage unavailable' } }; } return { error: null }; },
@@ -37,6 +39,53 @@ test('both derivative objects are rolled back on storage errors, network rejecti
     await assert.rejects(saveGalleryItem(input, fake.client));
     assert.deepEqual(fake.removed[0], fake.uploaded.map((item) => item.path));
   }
+});
+
+test('saving detected GIF preserves every frame and timing while storing a static first-frame thumbnail', async () => {
+  const fake = storage();
+  const row = await saveGalleryItem({ ...input, imageBase64: animatedGif.toString('base64'), mime: 'image/png' }, fake.client);
+  const [full, thumb] = fake.uploaded;
+  assert.match(row.image_url, /-full\.gif$/);
+  assert.match(full.path, /-full\.gif$/);
+  assert.equal(full.options.contentType, 'image/gif');
+  assert.deepEqual(full.bytes, animatedGif);
+  const meta = await sharp(full.bytes, { animated: true }).metadata();
+  assert.equal(meta.pages, 2); assert.deepEqual(meta.delay, [40, 90]); assert.equal(meta.loop, 0);
+  assert.equal(thumb.options.contentType, 'image/webp'); assert.match(thumb.path, /-thumb\.webp$/);
+  const preview = await sharp(thumb.bytes).metadata();
+  assert.equal(preview.format, 'webp'); assert.equal(preview.pages || 1, 1);
+  assert.equal(preview.width, 2); assert.equal(preview.height, 1);
+  const { data } = await sharp(thumb.bytes).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.ok(data[0] > 240 && data[2] < 20, 'thumbnail shows the red first frame');
+  assert.equal(await galleryThumbnails.get(row.id), thumb.bytes);
+  await deleteGalleryItem({ id: row.id, deleteToken: input.deleteToken }, fake.client);
+  assert.deepEqual(fake.removed[0], [full.path, thumb.path]);
+});
+
+test('claimed MIME types cannot bypass raster validation and GIFs reject trailing data or excessive decode work', async () => {
+  const largeCanvas = Buffer.from(animatedGif);
+  largeCanvas.writeUInt16LE(6000, 6); largeCanvas.writeUInt16LE(6000, 8);
+  const corruptSecondFrame = Buffer.from(animatedGif);
+  corruptSecondFrame[corruptSecondFrame.length - 6] = 12; // Invalid LZW size after a valid first frame.
+  const framePixels = Buffer.alloc(65 * 3);
+  for (let frame = 0; frame < 65; frame++) framePixels[frame * 3 + frame % 2] = 255;
+  const tooManyFrames = await sharp(framePixels, { raw: { width: 1, height: 65, channels: 3, pageHeight: 1 } }).gif({ delay: 40 }).toBuffer();
+  assert.equal((await sharp(tooManyFrames).metadata()).pages, 65);
+  for (const invalid of [Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'),
+    Buffer.from('GIF89a<script>invalid</script>'), Buffer.concat([animatedGif, Buffer.from('<script>trailing</script>')]),
+    animatedGif.subarray(0, -1), corruptSecondFrame, largeCanvas, tooManyFrames]) {
+    const fake = storage();
+    await assert.rejects(saveGalleryItem({ ...input, imageBase64: invalid.toString('base64'), mime: 'image/gif' }, fake.client), /图片数据无效/);
+    assert.equal(fake.uploaded.length, 0);
+  }
+  const fake = storage();
+  await saveGalleryItem({ ...input, mime: 'image/gif' }, fake.client);
+  assert.match(fake.uploaded[0].path, /-full\.webp$/);
+  assert.equal(fake.uploaded[0].options.contentType, 'image/webp');
+  const maxFrames = await sharp(framePixels.subarray(0, 64 * 3), { raw: { width: 1, height: 64, channels: 3, pageHeight: 1 } }).gif({ delay: 40 }).toBuffer();
+  const maxFake = storage();
+  await saveGalleryItem({ ...input, imageBase64: maxFrames.toString('base64') }, maxFake.client);
+  assert.equal((await sharp(maxFake.uploaded[0].bytes, { animated: true }).metadata()).pages, 64);
 });
 
 test('thumbnail HTTP route serves bounded raster content and rejects invalid IDs before storage lookup', async (t) => {

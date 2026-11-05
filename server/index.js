@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { providers, registerTaskStore, capN } from './providers.js';
 import { compositeEmbed, compositeStitch } from './lib/composite.js';
-import { gptImageQualityOptionsForModel, resolveGptImageModel, validateGptImageQuality, maxInputImagesForGptModel } from './lib/gptImageCapabilities.js';
+import { gptImageQualityOptionsForModel, resolveGptImageModel, validateGptImageQuality, maxInputImagesForGptModel, supportsGptImageGif } from './lib/gptImageCapabilities.js';
+import { validateGptImageAnimation } from './lib/gptImageAnimation.js';
 import {
   UpstreamError,
   fetchWithTimeout,
@@ -752,6 +753,8 @@ async function executeGeneration(body, idempotencyKey) {
   if (qualityError) {
     return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: qualityError } };
   }
+  const animationError = validateGptImageAnimation(body);
+  if (animationError) return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: animationError } };
 
   if (body.refImages !== undefined) {
     if (!Array.isArray(body.refImages)) {
@@ -858,6 +861,9 @@ app.post('/api/inpaint', rateLimit, upload.fields([
   { name: 'mask', maxCount: 1 },
 ]), async (req, res) => {
   const bodyFields = req.body || {};
+  if (bodyFields.output_format === 'gif' || bodyFields.frame_count !== undefined || bodyFields.frame_duration_ms !== undefined) {
+    return fail(res, 400, 'INVALID_INPUT', '图片编辑不支持 GIF 输出，请使用自由创作中的文字生成 GIF');
+  }
   const useServerPreset = bodyFields.useServerPreset === true || bodyFields.useServerPreset === 'true';
   const imageFile = req.files?.image?.[0];
   const maskFile = req.files?.mask?.[0];
@@ -1084,7 +1090,8 @@ app.use('/api/puzzle-layers', createPuzzleLayersRouter({ lookupImage: getGallery
 
 app.get('/api/image-capabilities', (_req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ ok: true, presetQualityOptions: gptImageQualityOptionsForModel(resolveGptImageModel({ useServerPreset: true })) });
+  const model = resolveGptImageModel({ useServerPreset: true });
+  res.json({ ok: true, presetQualityOptions: gptImageQualityOptionsForModel(model), presetGifSupported: supportsGptImageGif(model) });
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, port: PORT }));

@@ -29,8 +29,8 @@ function mockFetch(t, fn) {
   globalThis.fetch = fn;
   t.after(() => { globalThis.fetch = original; });
 }
-function caps(options) {
-  return new Response(JSON.stringify({ ok: true, presetQualityOptions: options }));
+function caps(options, gifSupported = false) {
+  return new Response(JSON.stringify({ ok: true, presetQualityOptions: options, presetGifSupported: gifSupported }));
 }
 async function settled() {
   while (store.getState().presetQualityStatus === 'loading') await new Promise((resolve) => setImmediate(resolve));
@@ -167,6 +167,22 @@ test('preset old-model discovery resets unsupported quality with a notification'
   await settled();
   assert.equal(store.getState().gptImageQuality, 'auto');
   assert.match(m.useToast.getState().message, /已重置为自动/);
+});
+
+test('GIF availability follows the actual preset capability rather than client model credentials', async (t) => {
+  reset();
+  store.getState().setCred('gpt-image', { model: 'gpt-image-2.6-flare' });
+  assert.equal(m.gptImageGifSupported(store.getState()), true);
+  let supported = false;
+  mockFetch(t, async () => caps(six, supported));
+  store.getState().setFreeloadEnabled(true);
+  await settled();
+  assert.equal(m.gptImageGifSupported(store.getState()), false);
+  supported = true;
+  await store.getState().loadPresetQualityOptions();
+  assert.equal(m.gptImageGifSupported(store.getState()), true);
+  store.getState().setFreeloadEnabled(false);
+  assert.equal(store.getState().presetGifSupported, null);
 });
 
 test('leaving preset mode reconciles against the client model', async (t) => {

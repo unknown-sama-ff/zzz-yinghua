@@ -1,13 +1,14 @@
 import sharp from 'sharp';
 import { assertSafeUrl, fetchBufferLimited } from '../http.js';
 import { MAX_FETCH_BYTES, MAX_INPUT_PIXELS } from './constants.js';
+import { assertGalleryGifBounds } from './galleryGif.js';
 
 export class GalleryThumbnailError extends Error {
   constructor(message, status = 502) { super(message); this.status = status; }
 }
 
 export function galleryThumbnailPath(path) {
-  return path.endsWith('-full.webp') ? path.replace(/-full\.webp$/, '-thumb.webp') : null;
+  return /-full\.(?:webp|gif)$/.test(path) ? path.replace(/-full\.(?:webp|gif)$/, '-thumb.webp') : null;
 }
 
 function storedThumbnailUrl(source) {
@@ -20,9 +21,10 @@ function storedThumbnailUrl(source) {
 
 export async function encodeGalleryThumbnail(buffer) {
   try {
-    const image = sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS });
+    const image = sharp(buffer, { page: 0, pages: 1, limitInputPixels: MAX_INPUT_PIXELS });
     const meta = await image.metadata();
-    if (!['png', 'jpeg', 'webp'].includes(meta.format)) throw new Error('format');
+    if (!['png', 'jpeg', 'webp', 'gif'].includes(meta.format)) throw new Error('format');
+    if (meta.format === 'gif') assertGalleryGifBounds(meta, buffer);
     return await image.rotate().resize(640, 640, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 76 }).toBuffer();
   } catch { throw new GalleryThumbnailError('作品图片无法生成缩略图', 422); }
 }
@@ -83,7 +85,7 @@ export function createGalleryThumbnailService({ lookupImage, loadImage = loadGal
           try {
             const buffer = await loadImage(stored);
             const meta = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
-            if (meta.format === 'webp' && meta.width <= 640 && meta.height <= 640) return buffer;
+            if (meta.format === 'webp' && (meta.pages || 1) === 1 && meta.width <= 640 && meta.height <= 640) return buffer;
           } catch { /* A missing derived asset must not hide the original work. */ }
         }
         return encodeGalleryThumbnail(await loadImage(row.image_url));

@@ -10,8 +10,12 @@ const EXTENDED_QUALITY_MODELS = new Set(['gpt-image-2.5', 'gpt-image-2.5-sunburs
 
 export function gptImageQualityOptionsForModel(model?: string): readonly GptImageQuality[] {
   const normalized = normalizeModel(model);
-  return EXTENDED_QUALITY_MODELS.has(normalized) || /^gpt-image-2\.6(?:-|$)/.test(normalized)
+  return EXTENDED_QUALITY_MODELS.has(normalized) || supportsGptImageGif(normalized)
     ? EXTENDED_QUALITIES : BASE_QUALITIES;
+}
+
+export function supportsGptImageGif(model?: string): boolean {
+  return /^gpt-image-2\.6(?:-|$)/.test(normalizeModel(model));
 }
 
 export function isGptImageQuality(value: unknown): value is GptImageQuality {
@@ -19,7 +23,7 @@ export function isGptImageQuality(value: unknown): value is GptImageQuality {
 }
 
 /** Only public quality options are fetched; credentials never leave the server. */
-export async function fetchPresetImageQualityOptions(): Promise<GptImageQuality[]> {
+export async function fetchPresetImageCapabilities(): Promise<{ qualityOptions: GptImageQuality[]; gifSupported: boolean }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -34,10 +38,15 @@ export async function fetchPresetImageQualityOptions(): Promise<GptImageQuality[
       || !data.presetQualityOptions.every(isGptImageQuality) || !data.presetQualityOptions.includes('auto')) {
       throw new Error('服务器精细度选项格式无效');
     }
-    return [...new Set<GptImageQuality>(data.presetQualityOptions)];
+    return { qualityOptions: [...new Set<GptImageQuality>(data.presetQualityOptions)],
+      gifSupported: 'presetGifSupported' in data && data.presetGifSupported === true };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function fetchPresetImageQualityOptions(): Promise<GptImageQuality[]> {
+  return (await fetchPresetImageCapabilities()).qualityOptions;
 }
 
 const MAX_INPUT_IMAGES_BY_MODEL: Record<string, number> = {

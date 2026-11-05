@@ -12,8 +12,12 @@ const EXTENDED_QUALITY_MODELS = new Set(['gpt-image-2.5', 'gpt-image-2.5-sunburs
 
 export function gptImageQualityOptionsForModel(model) {
   const normalized = String(model || '').trim().toLowerCase();
-  return EXTENDED_QUALITY_MODELS.has(normalized) || /^gpt-image-2\.6(?:-|$)/.test(normalized)
+  return EXTENDED_QUALITY_MODELS.has(normalized) || supportsGptImageGif(normalized)
     ? EXTENDED_QUALITIES : BASE_QUALITIES;
+}
+
+export function supportsGptImageGif(model) {
+  return /^gpt-image-2\.6(?:-|$)/.test(String(model || '').trim().toLowerCase());
 }
 
 export function resolveGptImageModel(req) {

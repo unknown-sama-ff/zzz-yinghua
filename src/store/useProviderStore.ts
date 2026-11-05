@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GptImageQuality, ProviderName } from '../types';
-import { fetchPresetImageQualityOptions, gptImageQualityOptionsForModel } from '../lib/gptImageCapabilities';
+import { fetchPresetImageCapabilities, gptImageQualityOptionsForModel, supportsGptImageGif } from '../lib/gptImageCapabilities';
 import { useToast } from './useToast';
 
 export interface CustomProviderConfig {
@@ -17,6 +17,7 @@ interface ProviderState {
   gptImageQuality: GptImageQuality;
   setGptImageQuality: (quality: GptImageQuality) => void;
   presetQualityOptions: readonly GptImageQuality[] | null;
+  presetGifSupported: boolean | null;
   presetQualityStatus: 'idle' | 'loading' | 'ready' | 'error';
   loadPresetQualityOptions: () => Promise<void>;
   freeloadEnabled: boolean;
@@ -36,6 +37,10 @@ export function gptImageQualityOptions(state: ProviderState): readonly GptImageQ
   return state.freeloadEnabled
     ? state.presetQualityOptions
     : gptImageQualityOptionsForModel(state.creds['gpt-image'].model);
+}
+
+export function gptImageGifSupported(state: ProviderState): boolean {
+  return state.freeloadEnabled ? state.presetGifSupported === true : supportsGptImageGif(state.creds['gpt-image'].model);
 }
 
 /** During preset discovery/failure, omit quality to retain the old server behavior. */
@@ -65,18 +70,19 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     if (gptImageQualityOptions(get())?.includes(quality)) set({ gptImageQuality: quality });
   },
   presetQualityOptions: null,
+  presetGifSupported: null,
   presetQualityStatus: 'idle',
   loadPresetQualityOptions: async () => {
     const requestId = ++presetRequestId;
-    set({ presetQualityOptions: null, presetQualityStatus: 'loading' });
+    set({ presetQualityOptions: null, presetGifSupported: null, presetQualityStatus: 'loading' });
     try {
-      const options = await fetchPresetImageQualityOptions();
+      const { qualityOptions: options, gifSupported } = await fetchPresetImageCapabilities();
       if (requestId !== presetRequestId || !get().freeloadEnabled) return;
       const state = { ...get(), presetQualityOptions: options };
-      set({ presetQualityOptions: options, presetQualityStatus: 'ready', ...resetUnsupportedQuality(state) });
+      set({ presetQualityOptions: options, presetGifSupported: gifSupported, presetQualityStatus: 'ready', ...resetUnsupportedQuality(state) });
     } catch {
       if (requestId !== presetRequestId || !get().freeloadEnabled) return;
-      set({ presetQualityOptions: null, presetQualityStatus: 'error' });
+      set({ presetQualityOptions: null, presetGifSupported: null, presetQualityStatus: 'error' });
     }
   },
   freeloadEnabled: false,
@@ -85,7 +91,7 @@ export const useProviderStore = create<ProviderState>((set, get) => ({
     const state = { ...get(), freeloadEnabled: enabled };
     set({ freeloadEnabled: enabled, ...(enabled ? { provider: 'gpt-image' as const } : resetUnsupportedQuality(state)) });
     if (enabled) void get().loadPresetQualityOptions();
-    else set({ presetQualityOptions: null, presetQualityStatus: 'idle' });
+    else set({ presetQualityOptions: null, presetGifSupported: null, presetQualityStatus: 'idle' });
   },
   custom: { endpoint: '', headers: '', bodyTemplate: '' },
   setCustom: (patch) => set((s) => ({ custom: { ...s.custom, ...patch } })),

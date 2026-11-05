@@ -1,5 +1,6 @@
 import { useRef, useState, memo } from 'react';
 import { saveGalleryImage, type GalleryImageMetadata } from '../lib/gallerySave';
+import { useToast } from '../store/useToast';
 
 export interface GallerySaveInfo extends GalleryImageMetadata {
   imageUrl: string;
@@ -14,6 +15,7 @@ interface Props {
 export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: Props) {
   const [state, setState] = useState<SaveState>('idle');
   const savingRef = useRef(false);
+  const showError = useToast((state) => state.show);
 
   const handleSave = async () => {
     if (savingRef.current) return;
@@ -22,9 +24,10 @@ export const GallerySaveButton = memo(function GallerySaveButton({ saveInfo }: P
     try {
       await saveGalleryImage(saveInfo.imageUrl, saveInfo);
       setState('saved');
-    } catch {
+    } catch (error) {
       setState('error');
       savingRef.current = false;
+      showError(error instanceof Error ? error.message : '保存到画廊失败，请下载原图后重试');
       // Let the user retry after a moment.
       setTimeout(() => {
         if (!savingRef.current) setState('idle');

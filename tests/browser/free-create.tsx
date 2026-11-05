@@ -58,7 +58,9 @@ window.fetch = async (input, init) => {
       failedInputs.add(inputIdentity);
       response = { ok: false, code: 'UPSTREAM_ERROR', message: 'gpt-image 图像编辑返回 400（本地模拟）' };
     } else {
-      response = { ok: true, images: Array.from({ length: body.n ?? 1 }, (_, index) => fixture(`创作结果 ${requests.length}-${index + 1}`, '#3c4365')) };
+      response = { ok: true, images: body.output_format === 'gif'
+        ? ['data:image/gif;base64,R0lGODlhAgABAIAAAExpcf8AACH/C05FVFNDQVBFMi4wAwEAAAAh+QQFBAAAACwAAAAAAgABAAACAkwKACH5BAUJAAAALAAAAAACAAEAgExpcQAA/wICTAoAOw==']
+        : Array.from({ length: body.n ?? 1 }, (_, index) => fixture(`创作结果 ${requests.length}-${index + 1}`, '#3c4365')) };
     }
     responses.set(identity, response);
   }
@@ -66,7 +68,7 @@ window.fetch = async (input, init) => {
   return new Response(JSON.stringify(response), { status: response.ok ? 200 : 400, headers: { 'Content-Type': 'application/json' } });
 };
 
-useProviderStore.getState().setCred('gpt-image', { apiKey: 'local-test-only', baseUrl: 'https://local-test.invalid/v1', model: 'gpt-image-2.5-sunburst' });
+useProviderStore.getState().setCred('gpt-image', { apiKey: 'local-test-only', baseUrl: 'https://local-test.invalid/v1', model: 'gpt-image-2.6-flare' });
 useProviderStore.getState().setProvider('gpt-image');
 
 function loadCharacterBatch() {
@@ -100,6 +102,7 @@ declare global {
   interface Window {
     __freeCreateTest: {
       store: typeof useFreeCreateStore;
+      providerStore: typeof useProviderStore;
       requests: GenRequest[];
       fixtures: typeof fixtures;
       maxConcurrent: () => number;
@@ -108,7 +111,7 @@ declare global {
     };
   }
 }
-window.__freeCreateTest = { store: useFreeCreateStore, requests, fixtures, maxConcurrent: () => maxConcurrent, loadCharacterBatch, loadSceneBatch };
+window.__freeCreateTest = { store: useFreeCreateStore, providerStore: useProviderStore, requests, fixtures, maxConcurrent: () => maxConcurrent, loadCharacterBatch, loadSceneBatch };
 
 function TestPage() {
   const message = useToast((state) => state.message);

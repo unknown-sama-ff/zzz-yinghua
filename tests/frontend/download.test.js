@@ -1,7 +1,33 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadFrontend } from './loadFrontend.js';
-const {downloadBlob} = await loadFrontend("export {downloadBlob} from './src/lib/download';");
+const { downloadBlob, downloadImage } = await loadFrontend("export * from './src/lib/download';");
+
+test('GIF downloads keep their bytes and use .gif for data URLs and remote blobs', async () => {
+  const original = { window: globalThis.window, document: globalThis.document, fetch: globalThis.fetch,
+    create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  const gif = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const links = [];
+  let downloaded;
+  globalThis.window = { open: () => assert.fail('download should not fall back') };
+  globalThis.document = { createElement: () => { const link = { click() {}, remove() {} }; links.push(link); return link; }, body: { appendChild() {} } };
+  globalThis.fetch = async () => new Response(Buffer.from(gif, 'base64'), { headers: { 'Content-Type': 'image/gif' } });
+  URL.createObjectURL = (blob) => { downloaded = blob; return 'blob:gif'; };
+  URL.revokeObjectURL = () => {};
+  try {
+    await downloadImage('data:image/gif;base64,' + gif, 'creation-1.png');
+    assert.equal(links[0].download, 'creation-1.gif');
+    assert.equal(links[0].href, 'data:image/gif;base64,' + gif);
+    await downloadImage('https://cdn.invalid/result', 'creation-2.png');
+    assert.equal(links[1].download, 'creation-2.gif');
+    assert.equal(Buffer.from(await downloaded.arrayBuffer()).toString('base64'), gif);
+  } finally {
+    for (const key of ['window', 'document', 'fetch']) {
+      if (original[key] === undefined) delete globalThis[key]; else globalThis[key] = original[key];
+    }
+    URL.createObjectURL = original.create; URL.revokeObjectURL = original.revoke;
+  }
+});
 
 test('PNG download uses its Blob and filename, clicks and removes the link, then releases the URL', () => {
   const original={window:globalThis.window,document:globalThis.document,create:URL.createObjectURL,revoke:URL.revokeObjectURL};

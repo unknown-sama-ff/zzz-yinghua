@@ -11,6 +11,7 @@ import {
 import { formatTime } from '../lib/formatTime';
 import { SectionHeader } from './SectionHeader';
 import { ZoomButton } from './ImageLightbox';
+import { isGifImage } from '../lib/download';
 
 const TOKENS_KEY = 'yinghua_gallery_tokens';
 
@@ -179,7 +180,7 @@ export const GalleryPanel = memo(function GalleryPanel() {
             >
               <GalleryImage key={row.image_url} id={row.id} url={row.image_url} alt={row.style} />
               <div className="p-2 font-mono text-[10px] text-zzz-text/55 leading-relaxed">
-                <div className="text-zzz-primary/80 truncate">{row.style}</div>
+                <div className="text-zzz-primary/80 truncate">{row.style}{isGifImage(row.image_url) && ' · GIF 动画'}</div>
                 {row.character_name && <div>角色：{row.character_name}</div>}
                 {row.provider && <div className="text-zzz-text/35">{row.provider === 'viewer-composite' ? '来源：查看器合成' : `提供方：${row.provider}`}</div>}
                 <div className="text-zzz-text/35">{formatTime(row.created_at, 'Asia/Shanghai')}</div>

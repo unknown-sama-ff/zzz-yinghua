@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { DEFAULT_FREE_CREATE_ASPECT_RATIO, MAX_FREE_CREATE_IMAGES, MAX_FREE_CREATE_REFERENCES, assertFreeCreateRequestSize } from '../lib/freeCreate';
-import type { FreeCreateAssistantMessage, FreeCreateCostumeMode, FreeCreateInputSnapshot, FreeCreateMode, FreeCreateReference, FreeCreateSession, FreeCreateTaskStatus, FreeCreateUserMessage, GenRequest } from '../types';
+import { isGifImage } from '../lib/download';
+import type { FreeCreateAnimationSettings, FreeCreateAssistantMessage, FreeCreateCostumeMode, FreeCreateInputSnapshot, FreeCreateMode, FreeCreateReference, FreeCreateSession, FreeCreateTaskStatus, FreeCreateUserMessage, GenRequest } from '../types';
 
 export interface FreeCreateGeneration {
   sessionId: string;
@@ -49,6 +50,7 @@ interface FreeCreateState {
   selectContextImage: (imageUrl: string | null, sessionId?: string) => void;
   setImageCount: (count: number, sessionId?: string) => void;
   setAspectRatio: (aspectRatio: string, sessionId?: string) => void;
+  setAnimation: (settings: FreeCreateAnimationSettings, sessionId?: string) => void;
   restoreDraft: (sessionId: string, messageId: string) => void;
   enqueueGeneration: (input: EnqueueInput) => FreeCreateGeneration | null;
   enqueueBatch: (input: EnqueueBatchInput) => FreeCreateGeneration[];
@@ -70,7 +72,7 @@ function cloneRequest(request: GenRequest): GenRequest {
 }
 
 function createSession(): FreeCreateSession {
-  return { id: createId(), messages: [], draft: '', draftReferences: [], batchReferences: [], sharedReference: null, mode: 'conversation', costumeMode: 'character', contextImageUrl: null, contextRevision: 0, imageCount: 1, aspectRatio: DEFAULT_FREE_CREATE_ASPECT_RATIO, createdAt: Date.now() };
+  return { id: createId(), messages: [], draft: '', draftReferences: [], batchReferences: [], sharedReference: null, mode: 'conversation', costumeMode: 'character', contextImageUrl: null, contextRevision: 0, imageCount: 1, aspectRatio: DEFAULT_FREE_CREATE_ASPECT_RATIO, outputFormat: 'png', frameCount: 9, frameDurationMs: 200, createdAt: Date.now() };
 }
 
 function patchSession(sessions: FreeCreateSession[], id: string, patch: (session: FreeCreateSession) => FreeCreateSession): FreeCreateSession[] {
@@ -107,8 +109,12 @@ function sessionsPatch(sessions: FreeCreateSession[]) {
   return { sessions, isGenerating: sessions.some(sessionHasPending) };
 }
 
+function animationSettings(settings: FreeCreateAnimationSettings) {
+  return { outputFormat: settings.outputFormat ?? 'png', frameCount: settings.frameCount ?? 9, frameDurationMs: settings.frameDurationMs ?? 200 };
+}
+
 function inputSnapshot(session: FreeCreateSession): FreeCreateInputSnapshot {
-  return { mode: session.mode, sharedReference: session.sharedReference ? cloneReference(session.sharedReference) : null, contextImageUrl: session.contextImageUrl, contextRevision: session.contextRevision, imageCount: session.imageCount, aspectRatio: session.aspectRatio, costumeMode: session.costumeMode };
+  return { ...animationSettings(session), mode: session.mode, sharedReference: session.sharedReference ? cloneReference(session.sharedReference) : null, contextImageUrl: session.contextImageUrl, contextRevision: session.contextRevision, imageCount: session.imageCount, aspectRatio: session.aspectRatio, costumeMode: session.costumeMode };
 }
 
 function createMessage(session: FreeCreateSession, prompt: string, references: FreeCreateReference[], request?: GenRequest, status: FreeCreateTaskStatus = 'queued'): FreeCreateUserMessage {
@@ -156,7 +162,7 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
     copyConversation: (sessionId) => {
       const source = get().sessions.find((session) => session.id === (sessionId ?? get().activeSessionId));
       if (!source) return;
-      const next = { ...createSession(), draft: source.draft, draftReferences: source.draftReferences.map(cloneReference), batchReferences: source.batchReferences.map(cloneReference), sharedReference: source.sharedReference ? cloneReference(source.sharedReference) : null, mode: source.mode, costumeMode: source.costumeMode, contextImageUrl: source.contextImageUrl, imageCount: source.imageCount, aspectRatio: source.aspectRatio };
+      const next = { ...createSession(), ...animationSettings(source), draft: source.draft, draftReferences: source.draftReferences.map(cloneReference), batchReferences: source.batchReferences.map(cloneReference), sharedReference: source.sharedReference ? cloneReference(source.sharedReference) : null, mode: source.mode, costumeMode: source.costumeMode, contextImageUrl: source.contextImageUrl, imageCount: source.imageCount, aspectRatio: source.aspectRatio };
       set((state) => ({ sessions: [...state.sessions, next], activeSessionId: next.id }));
     },
     selectSession: (id) => { if (get().sessions.some((session) => session.id === id)) set({ activeSessionId: id }); },
@@ -166,17 +172,22 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
     addBatchReferences: (references, sessionId) => patchInput(sessionId, (session) => ({ ...session, batchReferences: [...session.batchReferences, ...references.map(cloneReference)].slice(0, MAX_FREE_CREATE_REFERENCES) })),
     removeBatchReference: (id, sessionId) => patchInput(sessionId, (session) => ({ ...session, batchReferences: session.batchReferences.filter((reference) => reference.id !== id) })),
     setSharedReference: (reference, sessionId) => patchInput(sessionId, (session) => ({ ...session, sharedReference: reference ? cloneReference(reference) : null })),
-    setMode: (mode, sessionId) => patchInput(sessionId, (session) => ({ ...session, mode })),
+    setMode: (mode, sessionId) => patchInput(sessionId, (session) => ({ ...session, mode, ...(mode !== 'conversation' ? { outputFormat: 'png' as const } : {}) })),
     setCostumeMode: (costumeMode, sessionId) => patchInput(sessionId, (session) => ({ ...session, costumeMode })),
     selectContextImage: (contextImageUrl, sessionId) => patchInput(sessionId, (session) => ({ ...session, contextImageUrl, contextRevision: session.contextRevision + 1 })),
     setImageCount: (count, sessionId) => patchInput(sessionId, (session) => ({ ...session, imageCount: Math.max(1, Math.min(MAX_FREE_CREATE_IMAGES, Math.round(count) || 1)) })),
     setAspectRatio: (aspectRatio, sessionId) => patchInput(sessionId, (session) => ({ ...session, aspectRatio })),
 
+    setAnimation: (settings, sessionId) => patchInput(sessionId, (session) => ({ ...session, ...settings,
+      frameCount: Math.max(2, Math.min(64, Math.round(settings.frameCount ?? session.frameCount ?? 9) || 9)),
+      frameDurationMs: Math.max(20, Math.min(2000, Math.round((settings.frameDurationMs ?? session.frameDurationMs ?? 200) / 10) * 10 || 200)),
+    })),
+
     restoreDraft: (sessionId, messageId) => {
       const message = get().sessions.find((session) => session.id === sessionId)?.messages.find((item): item is FreeCreateUserMessage => item.role === 'user' && item.id === messageId);
       if (!message) return;
       const snapshot = message.inputSnapshot;
-      patchInput(sessionId, (session) => ({ ...session, draft: message.prompt, mode: snapshot.mode, costumeMode: snapshot.costumeMode, sharedReference: snapshot.sharedReference ? cloneReference(snapshot.sharedReference) : null, contextImageUrl: snapshot.contextImageUrl, contextRevision: session.contextRevision + 1, imageCount: snapshot.imageCount, aspectRatio: snapshot.aspectRatio, ...(snapshot.mode === 'conversation' ? { draftReferences: message.references.map(cloneReference) } : { batchReferences: message.targetReference ? [cloneReference(message.targetReference)] : [] }) }));
+      patchInput(sessionId, (session) => ({ ...session, ...animationSettings(snapshot), draft: message.prompt, mode: snapshot.mode, costumeMode: snapshot.costumeMode, sharedReference: snapshot.sharedReference ? cloneReference(snapshot.sharedReference) : null, contextImageUrl: snapshot.contextImageUrl, contextRevision: session.contextRevision + 1, imageCount: snapshot.imageCount, aspectRatio: snapshot.aspectRatio, ...(snapshot.mode === 'conversation' ? { draftReferences: message.references.map(cloneReference) } : { batchReferences: message.targetReference ? [cloneReference(message.targetReference)] : [] }) }));
       set({ activeSessionId: sessionId });
     },
 
@@ -257,7 +268,7 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
       }
       const response: FreeCreateAssistantMessage = { id: createId(), role: 'assistant', userMessageId: message.id, images: [...images], prompt: message.prompt, createdAt: Date.now() };
       set((state) => sessionsPatch(patchSession(state.sessions, generation.sessionId, (current) => {
-        const canSelectContext = message.inputSnapshot.mode === 'conversation' && current.contextRevision === message.inputSnapshot.contextRevision;
+        const canSelectContext = message.requestSnapshot?.output_format !== 'gif' && !isGifImage(images[0]) && message.inputSnapshot.mode === 'conversation' && current.contextRevision === message.inputSnapshot.contextRevision;
         return { ...current, messages: [...current.messages.map((item) => item.id === message.id ? { ...message, status: 'complete' as const, error: undefined } : item), response], contextImageUrl: canSelectContext ? images[0] : current.contextImageUrl };
       })));
     },

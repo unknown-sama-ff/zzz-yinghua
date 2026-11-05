@@ -3,6 +3,11 @@
 export type ProviderName = 'seedream' | 'gpt-image' | 'custom-url';
 
 export type GptImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export interface FreeCreateAnimationSettings {
+  outputFormat?: 'png' | 'gif';
+  frameCount?: number;
+  frameDurationMs?: number;
+}
 
 /** Request payload the frontend sends to POST /api/generate. */
 export interface GenRequest {
@@ -20,6 +25,10 @@ export interface GenRequest {
   preserveInputQuality?: boolean;
   /** Generation detail level, independent of dimensions and input-image compression. */
   quality?: GptImageQuality;
+  output_format?: 'png' | 'jpeg' | 'webp' | 'gif';
+  frame_count?: number;
+  frame_duration_ms?: number;
+  stream?: false;
   size?: string;
   aspectRatio?: string;
   n?: number;
@@ -86,7 +95,7 @@ export type FreeCreateCostumeMode = 'character' | 'target';
 export type FreeCreateTaskStatus = 'queued' | 'sending' | 'complete' | 'error' | 'uncertain';
 
 /** Inputs as they were when the user submitted a task, independent of later edits. */
-export interface FreeCreateInputSnapshot {
+export interface FreeCreateInputSnapshot extends FreeCreateAnimationSettings {
   mode: FreeCreateMode;
   sharedReference: FreeCreateReference | null;
   contextImageUrl: string | null;
@@ -129,7 +138,7 @@ export interface FreeCreateAssistantMessage {
 export type FreeCreateMessage = FreeCreateUserMessage | FreeCreateAssistantMessage;
 
 /** One free-creation conversation. Lives in memory only; a page refresh clears it. */
-export interface FreeCreateSession {
+export interface FreeCreateSession extends FreeCreateAnimationSettings {
   id: string;
   messages: FreeCreateMessage[];
   draft: string;

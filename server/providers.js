@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { resolveGptImageModel, validateGptImageQuality } from './lib/gptImageCapabilities.js';
+import { validateGptImageAnimation } from './lib/gptImageAnimation.js';
 import {
   fetchWithTimeout,
   fetchBufferLimited,
@@ -261,6 +262,8 @@ function qualityRejectionError(status) {
 async function gptImage(req) {
   const qualityError = validateGptImageQuality({ ...req, provider: 'gpt-image' });
   if (qualityError) throw new UpstreamError('INVALID_INPUT', qualityError, 400);
+  const animationError = validateGptImageAnimation({ ...req, provider: 'gpt-image' });
+  if (animationError) throw new UpstreamError('INVALID_INPUT', animationError, 400);
   const useServerPreset = req.useServerPreset === true;
   const key = useServerPreset
     ? process.env.GPT_IMAGE_API_KEY
@@ -426,10 +429,16 @@ async function gptImage(req) {
   // No image → text-only generations.
   const body = { model, prompt: req.prompt, n };
   if (req.quality !== undefined) body.quality = req.quality;
+  if (req.output_format !== undefined) body.output_format = req.output_format;
+  if (req.output_format === 'gif') {
+    body.stream = false;
+    if (req.frame_count !== undefined) body.frame_count = req.frame_count;
+    if (req.frame_duration_ms !== undefined) body.frame_duration_ms = Math.round(req.frame_duration_ms / 10) * 10;
+  }
   if (req.aspectRatio) {
     body.aspect_ratio = req.aspectRatio;
   } else {
-    body.size = size;
+    body.size = req.output_format === 'gif' ? (req.size || 'auto') : size;
   }
   const json = await withRetry(async () => {
     const res = await fetchWithTimeout(`${root}/images/generations`, {
@@ -446,7 +455,22 @@ async function gptImage(req) {
     }
     return parseJsonSafe(res);
   });
-  return { images: pluckImages(json), raw: json };
+  const images = pluckImages(json, req.output_format);
+  if (req.output_format === 'gif') {
+    for (const [index, image] of images.entries()) {
+      if (/^https?:\/\//i.test(image)) {
+        const url = await assertSafeUrl(image);
+        const result = await fetchBufferLimited(url.toString(), {}, DEFAULT_TIMEOUT_MS, MAX_FETCH_BYTES);
+        if (!result.ok || !/^GIF8[79]a/.test(result.buffer.toString('ascii', 0, 6))) {
+          throw new UpstreamError('UPSTREAM_ERROR', '上游未返回 GIF 动画，请确认中转已支持 GIF 输出');
+        }
+        images[index] = `data:image/gif;base64,${result.buffer.toString('base64')}`;
+      } else if (!image.startsWith('data:image/gif;base64,') || !/^GIF8[79]a/.test(Buffer.from(image.split(',')[1] || '', 'base64').toString('ascii', 0, 6))) {
+        throw new UpstreamError('UPSTREAM_ERROR', '上游未返回 GIF 动画，请确认中转已支持 GIF 输出');
+      }
+    }
+  }
+  return { images, raw: json };
 }
 
 // ---------------------------------------------------------------------------

@@ -36,6 +36,26 @@ test('new images prefer the persisted thumbnail and missing derivatives fall bac
   assert.equal(galleryThumbnailPath('gallery/legacy.webp'), null);
 });
 
+test('GIF thumbnails use the first frame and stored GIF derivatives remain static WebP', async () => {
+  const gif = Buffer.from('R0lGODlhAgABAIAAAExpcf8AACH/C05FVFNDQVBFMi4wAwEAAAAh+QQFBAAAACwAAAAAAgABAAACAkwKACH5BAUJAAAALAAAAAACAAEAgExpcQAA/wICTAoAOw==', 'base64');
+  const preview = await encodeGalleryThumbnail(gif);
+  const meta = await sharp(preview).metadata();
+  assert.equal(meta.format, 'webp'); assert.equal(meta.pages || 1, 1);
+  assert.equal(meta.width, 2); assert.equal(meta.height, 1);
+  const { data } = await sharp(preview).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.ok(data[0] > 240 && data[2] < 20);
+  assert.equal(galleryThumbnailPath('gallery/123-full.gif'), 'gallery/123-thumb.webp');
+  const urls = [];
+  const persisted = createGalleryThumbnailService({ lookupImage: async () => ({ image_url: 'https://images.example/gallery/123-full.gif' }), loadImage: async (url) => { urls.push(url); return preview; } });
+  assert.deepEqual(await persisted.get(4), preview);
+  assert.deepEqual(urls, ['https://images.example/gallery/123-thumb.webp']);
+  const fallback = createGalleryThumbnailService({ lookupImage: async () => ({ image_url: 'https://images.example/gallery/123-full.gif' }), loadImage: async (url) => { if (url.endsWith('-thumb.webp')) throw new Error('404'); return gif; } });
+  assert.deepEqual(await fallback.get(5), preview);
+  const animatedWebp = await sharp(gif, { animated: true }).webp().toBuffer();
+  const unsafeDerivative = createGalleryThumbnailService({ lookupImage: async () => ({ image_url: 'https://images.example/gallery/123-full.gif' }), loadImage: async (url) => url.endsWith('-thumb.webp') ? animatedWebp : gif });
+  assert.deepEqual(await unsafeDerivative.get(6), preview, 'an animated stored derivative is regenerated as a static thumbnail');
+});
+
 test('thumbnail cache eviction and failed builds remain retryable; deletion invalidates pending cache writes', async () => {
   let downloads = 0;
   const service = createGalleryThumbnailService({ maxBytes: thumbnail.length + 1, lookupImage: async (id) => ({ image_url: 'https://images.example/' + id + '-full.webp' }), loadImage: async () => { downloads++; return thumbnail; } });

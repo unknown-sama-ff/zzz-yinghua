@@ -1,7 +1,7 @@
-import { gptImageSizeForAspectRatio } from './gptImageCapabilities';
+import { gptImageSizeForAspectRatio, supportsGptImageGif } from './gptImageCapabilities';
 import { parseDataUrl } from './validation';
 import { withDenoise } from './denoise';
-import type { FreeCreateCostumeMode, FreeCreateMode, FreeCreateReference, GenRequest, GptImageQuality } from '../types';
+import type { FreeCreateAnimationSettings, FreeCreateCostumeMode, FreeCreateMode, FreeCreateReference, GenRequest, GptImageQuality } from '../types';
 
 interface GptImageCredentials {
   apiKey: string;
@@ -9,7 +9,7 @@ interface GptImageCredentials {
   model: string;
 }
 
-export interface BuildFreeCreateRequestInput {
+export interface BuildFreeCreateRequestInput extends FreeCreateAnimationSettings {
   prompt: string;
   quality?: GptImageQuality;
   denoiseEnabled?: boolean;
@@ -51,7 +51,17 @@ export function buildFreeCreateRequest({
   useServerPreset,
   imageCount,
   aspectRatio,
+  outputFormat = 'png',
+  frameCount = 9,
+  frameDurationMs = 200,
 }: BuildFreeCreateRequestInput): GenRequest {
+  const gif = outputFormat === 'gif';
+  if (gif) {
+    if (!useServerPreset && !supportsGptImageGif(credentials.model)) throw new Error('GIF 动画需要 GPT Image 2.6 系列模型');
+    if (contextImageUrl || references.length || sharedReference) throw new Error('GIF 目前仅支持文字生成，请先清除主图和参考图');
+    if (!Number.isInteger(frameCount) || frameCount < 2 || frameCount > 64) throw new Error('GIF 帧数必须为 2～64 的整数');
+    if (!Number.isInteger(frameDurationMs) || frameDurationMs < 20 || frameDurationMs > 2000) throw new Error('GIF 每帧时长必须为 20～2000 毫秒');
+  }
   if (references.length > MAX_FREE_CREATE_REFERENCES) {
     throw new Error(`单轮最多支持 ${MAX_FREE_CREATE_REFERENCES} 张参考图`);
   }
@@ -72,11 +82,13 @@ export function buildFreeCreateRequest({
     provider: 'gpt-image',
     ...(quality !== undefined ? { quality } : {}),
     prompt,
-    n: clampedCount,
+    n: gif ? 1 : clampedCount,
+    ...(gif ? { output_format: 'gif' as const, frame_count: frameCount,
+      frame_duration_ms: Math.round(frameDurationMs / 10) * 10, stream: false as const } : {}),
     // Send only `size`, never `aspectRatio`: the server forwards aspect_ratio and
     // drops size when it sees one (server/providers.js), but the OpenAI images
     // endpoint only understands size.
-    size: gptImageSizeForAspectRatio(aspectRatio),
+    size: gif ? 'auto' : gptImageSizeForAspectRatio(aspectRatio),
     freeCreate: true,
     ...(primary ? { imageBase64: primary.base64, imageMime: primary.mime } : {}),
     ...(primaryImage && !primary ? { imageBase64: primaryImage } : {}),

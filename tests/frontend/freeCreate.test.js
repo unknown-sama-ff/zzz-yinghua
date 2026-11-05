@@ -14,6 +14,48 @@ const reference = (id, dataUrl = `data:image/png;base64,${btoa(id)}`) => ({ id, 
 const creds = { apiKey: 'key', baseUrl: 'https://example.invalid/v1', model: 'gpt-image-2.5-sunburst' };
 const standardInput = { prompt: 'replace character', contextImageUrl: null, references: [], credentials: creds, useServerPreset: false, imageCount: 3, aspectRatio: '16:9', quality: 'high' };
 
+test('GIF builder uses text generations, captures frame options and preserves reasoning defaults', () => {
+  const input = { ...standardInput, credentials: { ...creds, model: 'gpt-image-2.6-flare' }, outputFormat: 'gif' };
+  const request = m.buildFreeCreateRequest({ ...input, frameCount: 16, frameDurationMs: 95 });
+  assert.equal(request.output_format, 'gif');
+  assert.equal(request.frame_count, 16);
+  assert.equal(request.frame_duration_ms, 100);
+  assert.equal(request.size, 'auto');
+  assert.equal(request.n, 1);
+  assert.equal(request.stream, false);
+  assert.equal(Object.hasOwn(request, 'imageBase64'), false);
+  assert.equal(Object.hasOwn(request, 'complexity'), false);
+  const defaults = m.buildFreeCreateRequest(input);
+  assert.equal(defaults.frame_count, 9);
+  assert.equal(defaults.frame_duration_ms, 200);
+  for (const change of [{ references: [reference('a')] }, { contextImageUrl: 'https://cdn.invalid/a.png' },
+    { sharedReference: reference('shared') }, { credentials: creds }, { frameCount: 65 }, { frameDurationMs: 0 }]) {
+    assert.throws(() => m.buildFreeCreateRequest({ ...input, ...change }), /GIF/);
+  }
+});
+
+test('GIF options survive copying and draft restoration, while completed GIFs never become edit context', () => {
+  const session = freshSession();
+  store.getState().setAnimation({ outputFormat: 'gif', frameCount: 16, frameDurationMs: 100 }, session.id);
+  store.getState().copyConversation(session.id);
+  assert.equal(store.getState().sessions.at(-1).outputFormat, 'gif');
+  assert.equal(store.getState().sessions.at(-1).frameCount, 16);
+  const request = m.buildFreeCreateRequest({ ...standardInput, credentials: { ...creds, model: 'gpt-image-2.6-flare' },
+    outputFormat: 'gif', frameCount: 16, frameDurationMs: 100 });
+  const generation = store.getState().enqueueGeneration({ sessionId: session.id, prompt: 'cat waves, seamless loop', references: [], request });
+  const claimed = store.getState().claimNextGeneration();
+  store.getState().completeGeneration(claimed.generation, ['data:image/gif;base64,R0lGODlh']);
+  assert.equal(store.getState().sessions.find((item) => item.id === session.id).contextImageUrl, null);
+  store.getState().setAnimation({ outputFormat: 'png', frameCount: 9 }, session.id);
+  store.getState().restoreDraft(session.id, generation.userMessageId);
+  const restored = store.getState().sessions.find((item) => item.id === session.id);
+  assert.equal(restored.outputFormat, 'gif');
+  assert.equal(restored.frameCount, 16);
+  assert.equal(restored.frameDurationMs, 100);
+  store.getState().setMode('fixed-character', session.id);
+  assert.equal(store.getState().sessions.find((item) => item.id === session.id).outputFormat, 'png');
+});
+
 function freshSession(mode = 'conversation') {
   const id = crypto.randomUUID();
   const session = { id, messages: [], draft: '', draftReferences: [], batchReferences: [], sharedReference: null, mode, costumeMode: 'character', contextImageUrl: null, contextRevision: 0, imageCount: 1, aspectRatio: '1:1', createdAt: Date.now() };

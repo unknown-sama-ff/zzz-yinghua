@@ -1,5 +1,5 @@
 import { parseDataUrl } from './validation';
-import { GALLERY_SAVED_EVENT, saveToGallery, type GallerySaveInput, type GallerySaveResult } from './galleryClient';
+import { GALLERY_SAVED_EVENT, galleryImageProxyUrl, saveToGallery, type GallerySaveInput, type GallerySaveResult } from './galleryClient';
 
 export type GalleryImageMetadata = Pick<GallerySaveInput, 'style' | 'characterName' | 'prompt' | 'provider'>;
 
@@ -109,7 +109,17 @@ function blobToBase64(blob: Blob): Promise<string> {
 /** Shared upload path for generated images and locally rendered composites. */
 export async function saveGalleryImage(source: Blob | string, metadata: GalleryImageMetadata): Promise<GallerySaveResult> {
   let imageBlob: Blob;
-  if (typeof source === 'string') {
+  if (typeof source === 'string' && /^https?:\/\//i.test(source)) {
+    try {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error('图片读取失败');
+      imageBlob = await response.blob();
+    } catch {
+      const response = await fetch(galleryImageProxyUrl(source));
+      if (!response.ok) throw new Error('图片读取失败');
+      imageBlob = await response.blob();
+    }
+  } else if (typeof source === 'string') {
     const { mime, base64 } = parseDataUrl(source);
     const bytes = base64ToUint8Array(base64);
     const arrayBuffer = new Uint8Array(bytes).buffer as ArrayBuffer;
@@ -117,12 +127,15 @@ export async function saveGalleryImage(source: Blob | string, metadata: GalleryI
   } else {
     imageBlob = source;
   }
-  const webp = await convertToWebp(imageBlob);
-  const imageBase64 = await blobToBase64(webp);
+  // Canvas encoding would flatten animations. Preserve detected GIF bytes; the
+  // server validates every frame and creates its own static thumbnail.
+  const gif = /^GIF8[79]a$/.test(await imageBlob.slice(0, 6).text());
+  const upload = gif ? new Blob([imageBlob], { type: 'image/gif' }) : await convertToWebp(imageBlob);
+  const imageBase64 = await blobToBase64(upload);
   const deleteToken = generateDeleteToken();
   const row = await saveToGallery({
     imageBase64,
-    mime: webp.type || 'image/webp',
+    mime: upload.type || 'image/webp',
     style: metadata.style,
     characterName: metadata.characterName,
     prompt: metadata.prompt,

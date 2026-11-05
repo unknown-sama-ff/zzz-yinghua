@@ -54,9 +54,12 @@ test('concurrent worker results correlate by request ID even when completion ord
   const first = api.stitchImages(['first']);
   const second = api.stitchImages(['second']);
   const worker = await waitForWork(workers, 0, 2);
-  assert.notEqual(worker.messages[0].requestId, worker.messages[1].requestId);
-  worker.result(worker.messages[1], 'second-result');
-  worker.result(worker.messages[0], 'first-result');
+  // Async cache hashing may reverse submission order before either reply arrives.
+  const firstMessage = worker.messages.find((message) => message.dataUrls[0] === 'first');
+  const secondMessage = worker.messages.find((message) => message.dataUrls[0] === 'second');
+  assert.notEqual(firstMessage.requestId, secondMessage.requestId);
+  worker.result(secondMessage, 'second-result');
+  worker.result(firstMessage, 'first-result');
   assert.deepEqual(await Promise.all([first, second]), ['first-result', 'second-result']);
   assert.equal(timers.size, 0);
 });
