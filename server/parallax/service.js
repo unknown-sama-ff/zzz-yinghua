@@ -5,12 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { fork } from 'node:child_process';
 import sharp from 'sharp';
 import { assertSafeUrl, fetchBufferLimited } from '../http.js';
-import { ensureParallaxModel } from './model.js';
+import { ensureParallaxModel, ensureParallaxDepthModel } from './model.js';
 
 export class ParallaxError extends Error {
   constructor(message, status = 503) { super(message); this.status = status; }
 }
-const VERSION = 'anime-three-layer-letterbox-v2';
+const VERSION = 'anime-three-layer-relative-depth-v3';
 const ASSETS = ['background.webp', 'subject.webp', 'foreground.webp'];
 const STYLES = new Set(['自由创作', '动作底稿', '海报版']);
 export const VALID_KEY = /^[a-f0-9]{64}$/;
@@ -22,9 +22,9 @@ export async function fetchGalleryImage(url) {
   return result.buffer;
 }
 
-export function runLayerWorker({ model, input, output }) {
+export function runLayerWorker({ model, depthModel, input, output }) {
   return new Promise((resolve, reject) => {
-    const child = fork(fileURLToPath(new URL('./worker.js', import.meta.url)), [model, input, output], { execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true });
+    const child = fork(fileURLToPath(new URL('./worker.js', import.meta.url)), [model, depthModel, input, output], { execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true });
     let message = '';
     let expired = false;
     child.stderr.on('data', (bytes) => { message = (message + bytes.toString()).slice(-1000); });
@@ -38,7 +38,7 @@ export function runLayerWorker({ model, input, output }) {
   });
 }
 
-export function createParallaxService({ lookupImage, cacheDir = path.resolve('.cache/parallax'), loadImage = fetchGalleryImage, getModel = ensureParallaxModel, runWorker = runLayerWorker, availableMemory = () => process.availableMemory?.() ?? 0 }) {
+export function createParallaxService({ lookupImage, cacheDir = path.resolve('.cache/parallax'), loadImage = fetchGalleryImage, getModel = ensureParallaxModel, getDepthModel = ensureParallaxDepthModel, runWorker = runLayerWorker, availableMemory = () => process.availableMemory?.() ?? 0 }) {
   const root = path.resolve(cacheDir);
   const layerRoot = path.join(root, 'layers');
   const workRoot = path.join(root, 'work');
@@ -83,13 +83,13 @@ export function createParallaxService({ lookupImage, cacheDir = path.resolve('.c
       if (!['png', 'jpeg', 'webp'].includes(meta.format)) throw new Error('format');
       normalized = await image.rotate().resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true }).flatten({ background: '#ffffff' }).removeAlpha().png().toBuffer();
     } catch { throw new ParallaxError('图库图片格式或尺寸暂不支持分层', 422); }
-    const model = await getModel(root);
+    const [model, depthModel] = await Promise.all([getModel(root), getDepthModel(root)]);
     await fs.mkdir(workRoot, { recursive: true }); await fs.mkdir(layerRoot, { recursive: true });
     const work = await fs.mkdtemp(path.join(workRoot, 'job-'));
     try {
       const input = path.join(work, 'input.png');
       await fs.writeFile(input, normalized);
-      await runWorker({ model, input, output: work });
+      await runWorker({ model, depthModel, input, output: work });
       const result = await readPrepared(work, key);
       if (!result) throw new Error('分层结果不完整');
       await fs.unlink(input);

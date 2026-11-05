@@ -8,6 +8,7 @@ import { createLayerImages, fillBackground } from './pixels.js';
 import { createParallaxService, fetchGalleryImage } from './service.js';
 import { createPuzzleLayersRouter } from './router.js';
 import { prepareModelInput, cropPrediction, MODEL_SIZE } from './input.js';
+import { prepareDepthInput, normalizeDepthPrediction } from './depth.js';
 
 const width = 48; const height = 48;
 const pixels = Buffer.alloc(width * height * 3);
@@ -35,13 +36,28 @@ test('model preprocessing preserves portrait geometry and dark RGB values, then 
   assert.throws(() => cropPrediction(prediction, layout), /无效/);
 });
 
+test('depth inputs stay bounded for extreme ratios and output increases towards nearer surfaces', async () => {
+  for (const [w, h] of [[1024, 350], [350, 1024], [1024, 1], [1, 1024], [1, 1]]) {
+    const source = await sharp({ create: { width: w, height: h, channels: 3, background: '#ffffff' } }).png().toBuffer();
+    const input = await prepareDepthInput(source);
+    assert.ok(input.width <= 1022 && input.height <= 1022);
+    assert.equal(input.width % 14, 0); assert.equal(input.height % 14, 0);
+    assert.equal(input.values.length, input.width * input.height * 3);
+    assert.ok(Math.abs(input.values[0] - (1 - 0.485) / 0.229) < 0.00001);
+  }
+  assert.deepEqual([...normalizeDepthPrediction(new Float32Array([2, 4, 6, 8]), [1, 2, 2]).data], [0, 85, 170, 255]);
+  assert.deepEqual([...normalizeDepthPrediction(new Float32Array(4).fill(2), [1, 2, 2]).data], [0, 0, 0, 0]);
+  assert.throws(() => normalizeDepthPrediction(new Float32Array([NaN]), [1, 1]), /无效/);
+  assert.throws(() => normalizeDepthPrediction(new Float32Array(4), [1, 3, 3]), /尺寸无效/);
+});
+
 async function options(t, override = {}) {
   const root = path.resolve('node_modules/.cache/parallax-tests'); await fs.mkdir(root, { recursive: true });
   const cacheDir = await fs.mkdtemp(path.join(root, 'case-'));
   t.after(async () => { assert.ok(cacheDir.startsWith(root + path.sep)); await fs.rm(cacheDir, { recursive: true, force: true }); });
   return {
     cacheDir, lookupImage: async (id) => ({ image_url: `https://example.com/${id}.webp`, style: '海报版' }),
-    loadImage: async () => image, getModel: async () => 'fixture-model', availableMemory: () => Infinity,
+    loadImage: async () => image, getModel: async () => 'fixture-model', getDepthModel: async () => 'fixture-depth-model', availableMemory: () => Infinity,
     runWorker: async ({ output }) => {
       await fs.writeFile(path.join(output, 'foreground.webp'), fixture.foreground);
       await fs.writeFile(path.join(output, 'subject.webp'), fixture.subject);
@@ -96,6 +112,59 @@ test('three layers isolate disconnected near-edge scenery and preserve aligned s
   assert.equal(empty.some((value, i) => i % 4 === 3 && value > 0), false);
 });
 
+test('depth separates a connected camera hand and prop while repairing the subject underneath', async () => {
+  const w = 96; const h = 96;
+  const rgb = Buffer.alloc(w * h * 3);
+  const matte = Buffer.alloc(w * h);
+  const depth = Buffer.alloc(w * h, 25);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    const main = x >= 28 && x < 68 && y >= 10 && y < 84;
+    const near = x >= 36 && x < 60 && y >= 65;
+    matte[i] = main || near ? 255 : 0;
+    depth[i] = near ? 235 : main ? 120 : 25;
+    rgb.set(near ? [30, 190, 40] : main ? [240, 40, 30] : [30, 80, 180], i * 3);
+  }
+  const source = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+  const layers = await createLayerImages(source, matte, w, h, { depth: { data: depth, width: w, height: h } });
+  assert.equal(layers.hasForeground, true, 'a near prop connected to the person still needs its own layer');
+  const subject = await sharp(layers.subject).ensureAlpha().raw().toBuffer();
+  const foreground = await sharp(layers.foreground).ensureAlpha().raw().toBuffer();
+  const face = (28 * w + 48) * 4;
+  const prop = (74 * w + 48) * 4;
+  assert.equal(subject[face + 3], 255);
+  assert.equal(foreground[face + 3], 0, 'the face stays in the subject layer');
+  assert.equal(foreground[prop + 3], 255);
+  assert.ok(subject[prop] > 200 && subject[prop + 1] < 80, 'the moving foreground must not leave a copy of the green prop behind');
+  const composite = await sharp(layers.background).composite([{ input: layers.subject }, { input: layers.foreground }]).removeAlpha().raw().toBuffer();
+  let maxError = 0;
+  for (let i = 0; i < rgb.length; i++) maxError = Math.max(maxError, Math.abs(rgb[i] - composite[i]));
+  assert.ok(maxError <= 2, `aligned depth layers changed source by ${maxError}`);
+  const flat = await createLayerImages(source, matte, w, h, { depth: { data: Buffer.alloc(w * h, 120), width: w, height: h } });
+  assert.equal(flat.hasForeground, false, 'an uninformative depth map cannot invent an extra near object');
+});
+
+test('color boundaries keep a near prop whole when its top shares the face depth', async () => {
+  const w = 96; const h = 96;
+  const rgb = Buffer.alloc(w * h * 3);
+  const matte = Buffer.alloc(w * h);
+  const depth = Buffer.alloc(w * h, 25);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    const main = x >= 24 && x < 72 && y >= 8 && y < 88;
+    const prop = x >= 36 && x < 60 && y >= 56 && y < 80;
+    const hand = x >= 32 && x < 64 && y >= 80;
+    matte[i] = main || hand ? 255 : 0;
+    depth[i] = hand || prop && y >= 70 ? 235 : main ? 120 : 25;
+    rgb.set(prop ? [28, 25, 34] : main || hand ? [220, 210, 205] : [30, 80, 180], i * 3);
+  }
+  const source = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+  const layers = await createLayerImages(source, matte, w, h, { depth: { data: depth, width: w, height: h } });
+  const foreground = await sharp(layers.foreground).ensureAlpha().raw().toBuffer();
+  assert.equal(foreground[(60 * w + 48) * 4 + 3], 255, 'the top half of the near prop must move with its lower half');
+  assert.equal(foreground[(24 * w + 48) * 4 + 3], 0, 'the face remains separate');
+});
+
 test('duplicate work is coalesced, different images serialize, and disk cache survives a service restart', async (t) => {
   let calls = 0; let active = 0; let peak = 0;
   const settings = await options(t);
@@ -138,6 +207,24 @@ test('invalid images and failed inference leave no partial cache and can be retr
   assert.equal((await fs.readdir(path.join(settings.cacheDir, 'work'))).length, 0);
   assert.ok((await service.prepare(1)).key);
   await assert.rejects(() => createParallaxService({ ...settings, loadImage: async () => Buffer.from('not an image') }).prepare(2), { status: 422 });
+});
+
+test('depth model preparation failures are retryable and both validated paths reach the worker', async (t) => {
+  let attempts = 0;
+  const settings = await options(t, { getDepthModel: async () => {
+    if (++attempts === 1) throw new Error('depth download interrupted');
+    return 'fixture-depth-model';
+  } });
+  const original = settings.runWorker;
+  settings.runWorker = async (args) => {
+    assert.equal(args.model, 'fixture-model'); assert.equal(args.depthModel, 'fixture-depth-model');
+    await original(args);
+  };
+  const service = createParallaxService(settings);
+  await assert.rejects(() => service.prepare(1), /depth download interrupted/);
+  assert.equal(await fs.access(path.join(settings.cacheDir, 'work')).then(() => true, () => false), false);
+  assert.ok((await service.prepare(1)).key);
+  assert.equal(attempts, 2);
 });
 
 test('a worker returning only two assets cannot publish an incomplete three-layer cache', async (t) => {

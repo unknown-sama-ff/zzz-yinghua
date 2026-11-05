@@ -56,7 +56,7 @@
 .puzzle-snap-burst::after { inset: 13px; border-color: var(--zzz-text); animation-duration: 400ms; }
 @keyframes puzzle-snap-ring { from { transform: scale(0.25); opacity: 0.95; } to { transform: scale(1.6); opacity: 0; } }
 @keyframes puzzle-snap-glow { 0%, 20% { stroke: var(--zzz-text); stroke-width: 2.4; filter: drop-shadow(0 0 5px var(--studio-highlight)); } 60% { stroke: var(--studio-highlight); stroke-width: 1.8; filter: drop-shadow(0 0 3px var(--studio-highlight)); } 100% { filter: none; } }
-.puzzle-reveal { --tilt-x: 0deg; --tilt-y: 0deg; --pan-x: 0px; --pan-y: 0px; --focus-x: 50%; --focus-y: 50%; position: absolute; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.puzzle-reveal { --tilt-x: 0deg; --tilt-y: 0deg; --pan-x: 0px; --pan-y: 0px; --focus-x: 50%; --focus-y: 50%; position: absolute; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 40px 4% 72px; pointer-events: none; }
 .puzzle-reveal-aura { position: absolute; inset: 16%; background: radial-gradient(ellipse, color-mix(in srgb, var(--zzz-primary) 25%, transparent), transparent 68%); filter: blur(30px); opacity: 0; transition: opacity 800ms; }
 .puzzle-reveal[data-phase='ready'] .puzzle-reveal-aura { opacity: 1; }
 .puzzle-reveal-presentation { position: relative; flex-shrink: 0; transform: scale(1); transition: transform 1000ms cubic-bezier(0.22, 1, 0.36, 1); }

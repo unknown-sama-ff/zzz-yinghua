@@ -29,7 +29,7 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
   const viewed = useRef(false);
   const focused = useRef(false);
   const turning = useRef(false);
-  const scale = Math.min(Math.min(matWidth * 0.72, 820) / width, Math.max(80, matHeight - 160) / height);
+  const scale = Math.min(matWidth * 0.92 / width, Math.max(80, matHeight - 112) / height);
 
   useEffect(() => {
     if (!ready || !active) return;
@@ -96,7 +96,7 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
   const layered = mode === 2 && Boolean(layers);
   const layerStatus = layers?.hasForeground
     ? '背景 · 主角 · 前景已分离，移动鼠标查看视差'
-    : '背景与主角已分离，未检测到独立前景';
+    : '背景与主角已分离，未检测到明显近景';
   const imageFailed = () => { setLayers(null); setLayerError('分层图片读取失败，原图仍可正常查看'); };
   return <div ref={root} className='puzzle-reveal' data-phase={ready ? 'ready' : 'centering'} data-mode={MODES[mode].id} data-layered={layered} data-depth-state={layers ? 'ready' : layerLoading ? 'loading' : layerError ? 'error' : 'idle'} data-flipping={flipping} onPointerMove={updatePointer} onPointerLeave={resetPointer} style={{ '--reveal-scale': scale, '--flip-direction': turn.direction } as CSSProperties}>
     <div className='puzzle-reveal-aura' aria-hidden='true' />

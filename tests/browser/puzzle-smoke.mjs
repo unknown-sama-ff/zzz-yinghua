@@ -223,8 +223,13 @@ try {
   const card = page.getByRole('button', { name: /^切换视差效果/ });
   await page.locator('.puzzle-reveal-presentation').evaluate(async (el) => { getComputedStyle(el).transform; await Promise.all(el.getAnimations().map((animation) => animation.finished.catch(() => {}))); });
   const completedMat = await page.locator('.puzzle-mat').boundingBox(); const cardBounds = await card.boundingBox();
+  const revealBounds = await page.locator('.puzzle-reveal').boundingBox();
+  const expectedWidth = Math.min(revealBounds.width * 0.92, Math.max(80, revealBounds.height - 112) * dimensions.w / dimensions.h);
+  assert.ok(Math.abs(cardBounds.width - expectedWidth) < 1, 'completed image fills the available reveal area');
   assert.ok(Math.abs(cardBounds.x + cardBounds.width / 2 - completedMat.x - completedMat.width / 2) < 0.5);
-  assert.ok(Math.abs(cardBounds.y + cardBounds.height / 2 - completedMat.y - completedMat.height / 2) < 0.5);
+  assert.ok(Math.abs(cardBounds.y + cardBounds.height / 2 - completedMat.y - completedMat.height / 2 + 16) < 0.5);
+  const captionBounds = await page.locator('.puzzle-reveal-caption').boundingBox();
+  assert.ok(cardBounds.y + cardBounds.height <= captionBounds.y, 'the enlarged image leaves the mode controls clear');
   assert.equal(await page.locator('.puzzle-mat').getAttribute('data-showcase'), 'true');
   await page.mouse.move(cardBounds.x + cardBounds.width * 0.8, cardBounds.y + cardBounds.height * 0.35);
   assert.ok(await page.locator('.puzzle-reveal').evaluate((el) => Math.abs(parseFloat(el.style.getPropertyValue('--tilt-y'))) > 1));
@@ -258,6 +263,9 @@ try {
   await page.waitForFunction(() => document.querySelector('.puzzle-mat').getBoundingClientRect().bottom + scrollY <= innerHeight + 1);
   const mobileMat = await page.locator('.puzzle-mat').boundingBox();
   const mobileCard = await card.boundingBox();
+  const mobileReveal = await page.locator('.puzzle-reveal').boundingBox();
+  const mobileExpectedWidth = Math.min(mobileReveal.width * 0.92, Math.max(80, mobileReveal.height - 112) * dimensions.w / dimensions.h);
+  assert.ok(Math.abs(mobileCard.width - mobileExpectedWidth) < 1, 'mobile completion also uses the larger reveal area');
   assert.ok(mobileMat.height >= 240);
   assert.ok(mobileCard.y >= mobileMat.y && mobileCard.y + mobileCard.height <= mobileMat.y + mobileMat.height, 'parallax image fits the shorter canvas');
   assert.ok(await noOverflow(page));

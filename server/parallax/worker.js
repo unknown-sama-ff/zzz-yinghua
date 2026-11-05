@@ -3,8 +3,9 @@ import path from 'node:path';
 import * as ort from 'onnxruntime-node';
 import { createLayerImages } from './pixels.js';
 import { prepareModelInput, cropPrediction, MODEL_SIZE } from './input.js';
+import { inferRelativeDepth } from './depth.js';
 
-const [modelPath, inputPath, outputDir] = process.argv.slice(2);
+const [modelPath, depthModelPath, inputPath, outputDir] = process.argv.slice(2);
 process.on('disconnect', () => process.exit(1));
 let session;
 const started = Date.now();
@@ -19,7 +20,8 @@ try {
   const prediction = results[session.outputNames[0]].data;
   const mask = cropPrediction(prediction, layout);
   await session.release(); session = null;
-  const layers = await createLayerImages(image, mask, layout.width, layout.height);
+  const depth = await inferRelativeDepth(image, depthModelPath);
+  const layers = await createLayerImages(image, mask, layout.width, layout.height, { depth });
   await fs.writeFile(path.join(outputDir, 'foreground.webp'), layers.foreground);
   await fs.writeFile(path.join(outputDir, 'subject.webp'), layers.subject);
   await fs.writeFile(path.join(outputDir, 'background.webp'), layers.background);
