@@ -73,17 +73,14 @@
 .puzzle-reveal-edge { background: color-mix(in srgb, var(--zzz-primary) 12%, #11141d); border: 1px solid #ffffff20; }
 .puzzle-reveal-edge-back { transform: translateZ(-32px); box-shadow: 0 22px 45px #0007; }
 .puzzle-reveal-edge-front { transform: translateZ(-20px); }
-.puzzle-reveal-layer-lens { display: none; }
 .puzzle-reveal-gloss { transform: translateZ(2px); background: radial-gradient(ellipse at var(--focus-x) var(--focus-y), #ffffff20, #ffffff03 45%, transparent 70%); pointer-events: none; }
-.puzzle-reveal[data-mode='layers'][data-layered='true'] .puzzle-reveal-layer-base { transform: translateZ(-10px) scale(1.008333); }
-.puzzle-reveal[data-mode='layers'][data-layered='true'] .puzzle-reveal-layer-base img { transform: translate(calc(var(--pan-x) * -0.15), calc(var(--pan-y) * -0.15)) scale(1.035); }
-.puzzle-reveal-layer-subject { transform: translate3d(calc(var(--pan-x) * 0.45), calc(var(--pan-y) * 0.45), 24px) scale(0.98); filter: drop-shadow(0 3px 4px #0003); }
+.puzzle-reveal[data-mode='layers'][data-layered='true'] .puzzle-reveal-layer-base { transform: translateZ(-12px) scale(1.01); }
+.puzzle-reveal-layer-subject { transform: translate3d(calc(var(--pan-x) * 0.35), calc(var(--pan-y) * 0.35), 18px) scale(0.985); }
+.puzzle-reveal-layer-foreground { transform: translate3d(calc(var(--pan-x) * 0.85), calc(var(--pan-y) * 0.85), 42px) scale(0.965); }
 .puzzle-reveal[data-mode='layers'][data-layered='false'] .puzzle-reveal-tilt { transform: none; }
-.puzzle-reveal[data-mode='layers'] .puzzle-reveal-gloss { transform: translateZ(26px); opacity: 0.5; }
+.puzzle-reveal[data-mode='layers'] .puzzle-reveal-gloss { transform: translateZ(44px); opacity: 0.5; }
 .puzzle-layer-status { position: absolute; left: 10px; right: 10px; top: 9px; text-align: center; font-size: 10px; line-height: 1.6; color: var(--studio-secondary); }
 .puzzle-layer-status button { min-height: 32px; margin-left: 8px; padding: 4px 8px; color: var(--studio-highlight); pointer-events: auto; }
-.puzzle-reveal[data-mode='lens'] .puzzle-reveal-layer-lens { display: block; transform: translateZ(32px) scale(0.98696); mask-image: radial-gradient(ellipse 35% 40% at var(--focus-x) var(--focus-y), #000 25%, transparent 100%); }
-.puzzle-reveal[data-mode='lens'] .puzzle-reveal-gloss { transform: translateZ(36px); }
 .puzzle-reveal[data-mode='flat'] .puzzle-reveal-tilt { transform: none; }
 .puzzle-reveal[data-mode='flat'] .puzzle-reveal-edge, .puzzle-reveal[data-mode='flat'] .puzzle-reveal-gloss { display: none; }
 .puzzle-reveal[data-mode='flat'] .puzzle-reveal-layer-base { box-shadow: 0 8px 20px #0004; }

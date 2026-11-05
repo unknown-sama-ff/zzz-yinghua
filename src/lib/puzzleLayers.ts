@@ -1,6 +1,14 @@
 import { API_BASE } from './apiBase';
 
-export interface PuzzleLayers { key: string; width: number; height: number; foreground: string; background: string }
+export interface PuzzleLayers {
+  key: string;
+  width: number;
+  height: number;
+  subject: string;
+  foreground: string;
+  background: string;
+  hasForeground: boolean;
+}
 const pending = new Map<string, Promise<PuzzleLayers>>();
 
 function preload(src: string): Promise<void> {
@@ -33,8 +41,13 @@ export function getPuzzleLayers(galleryId: string | number): Promise<PuzzleLayer
     } catch { throw new Error('分层服务暂时无法连接，可继续查看原图'); }
     finally { window.clearTimeout(timer); }
     if (!response.ok || !data.ok || !/^[a-f0-9]{64}$/.test(data.key ?? '') || !Number.isFinite(data.width) || !Number.isFinite(data.height) || data.width < 1 || data.height < 1 || data.width > 1024 || data.height > 1024) throw new Error(data.message || '分层结果暂时不可用，可继续查看原图');
-    const result: PuzzleLayers = { key: data.key, width: data.width, height: data.height, foreground: `${API_BASE}/puzzle-layers/${data.key}/foreground.webp`, background: `${API_BASE}/puzzle-layers/${data.key}/background.webp` };
-    await Promise.all([preload(result.foreground), preload(result.background)]);
+    const base = `${API_BASE}/puzzle-layers/${data.key}`;
+    const result: PuzzleLayers = {
+      key: data.key, width: data.width, height: data.height,
+      subject: `${base}/subject.webp`, foreground: `${base}/foreground.webp`, background: `${base}/background.webp`,
+      hasForeground: data.hasForeground === true,
+    };
+    await Promise.all([preload(result.subject), preload(result.foreground), preload(result.background)]);
     return result;
   })();
   pending.set(id, promise);

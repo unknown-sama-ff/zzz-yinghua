@@ -10,7 +10,8 @@ import { ensureParallaxModel } from './model.js';
 export class ParallaxError extends Error {
   constructor(message, status = 503) { super(message); this.status = status; }
 }
-const VERSION = 'anime-subject-edgefill-v1';
+const VERSION = 'anime-three-layer-letterbox-v2';
+const ASSETS = ['background.webp', 'subject.webp', 'foreground.webp'];
 const STYLES = new Set(['自由创作', '动作底稿', '海报版']);
 export const VALID_KEY = /^[a-f0-9]{64}$/;
 
@@ -49,20 +50,20 @@ export function createParallaxService({ lookupImage, cacheDir = path.resolve('.c
     if (!resolved.startsWith(path.resolve(owner) + path.sep)) throw new Error('Invalid cache path');
     await fs.rm(resolved, { recursive: true, force: true });
   }
-  async function cached(key) {
+  async function readPrepared(directory, key) {
     try {
-      const directory = path.join(layerRoot, key);
       const meta = JSON.parse(await fs.readFile(path.join(directory, 'meta.json'), 'utf8'));
-      await Promise.all(['foreground.webp', 'background.webp'].map((name) => fs.access(path.join(directory, name))));
-      if (!Number.isFinite(meta.width) || !Number.isFinite(meta.height) || meta.width < 1 || meta.height < 1 || meta.width > 1024 || meta.height > 1024) return null;
-      return { key, width: meta.width, height: meta.height };
+      await Promise.all(ASSETS.map((name) => fs.access(path.join(directory, name))));
+      if (!Number.isInteger(meta.width) || !Number.isInteger(meta.height) || meta.width < 1 || meta.height < 1 || meta.width > 1024 || meta.height > 1024) return null;
+      return { key, width: meta.width, height: meta.height, hasForeground: meta.hasForeground === true };
     } catch { return null; }
   }
+  const cached = (key) => readPrepared(path.join(layerRoot, key), key);
   async function trimCache(keep) {
     const entries = await fs.readdir(layerRoot, { withFileTypes: true });
     const folders = await Promise.all(entries.filter((entry) => entry.isDirectory() && VALID_KEY.test(entry.name)).map(async (entry) => {
       const directory = path.join(layerRoot, entry.name);
-      const stats = await Promise.all(['foreground.webp', 'background.webp', 'meta.json'].map((name) => fs.stat(path.join(directory, name)).catch(() => ({ size: 0, mtimeMs: 0 }))));
+      const stats = await Promise.all([...ASSETS, 'meta.json'].map((name) => fs.stat(path.join(directory, name)).catch(() => ({ size: 0, mtimeMs: 0 }))));
       return { key: entry.name, directory, bytes: stats.reduce((sum, stat) => sum + stat.size, 0), time: Math.max(...stats.map((stat) => stat.mtimeMs)) };
     }));
     let total = folders.reduce((sum, entry) => sum + entry.bytes, 0);
@@ -89,14 +90,14 @@ export function createParallaxService({ lookupImage, cacheDir = path.resolve('.c
       const input = path.join(work, 'input.png');
       await fs.writeFile(input, normalized);
       await runWorker({ model, input, output: work });
+      const result = await readPrepared(work, key);
+      if (!result) throw new Error('分层结果不完整');
       await fs.unlink(input);
       const destination = path.resolve(layerRoot, key);
       if (!destination.startsWith(layerRoot + path.sep) || !VALID_KEY.test(key)) throw new Error('Invalid cache key');
       await removeOwnedDirectory(destination, layerRoot);
       if (!path.resolve(work).startsWith(workRoot + path.sep)) throw new Error('Invalid work path');
       await fs.rename(work, destination);
-      const result = await cached(key);
-      if (!result) throw new Error('分层结果不完整');
       await trimCache(key);
       return result;
     } finally { await removeOwnedDirectory(work, workRoot); }
@@ -120,7 +121,7 @@ export function createParallaxService({ lookupImage, cacheDir = path.resolve('.c
       return tracked;
     },
     async asset(key, name) {
-      if (!VALID_KEY.test(key) || !['foreground.webp', 'background.webp'].includes(name)) return null;
+      if (!VALID_KEY.test(key) || !ASSETS.includes(name)) return null;
       const file = path.join(layerRoot, key, name);
       try { await fs.access(file); return file; } catch { return null; }
     },

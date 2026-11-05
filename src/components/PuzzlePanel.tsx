@@ -87,6 +87,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
         setError('图库里还没有可用的自由创作、动作底稿或海报版图片。先保存一幅作品，再来试试。');
         return;
       }
+      void getPuzzleLayers(row.id).catch(() => {});
       const image = await loadPuzzleImage(row.image_url);
       if (current !== request.current) return;
       commitGame(freshGame(row, image, difficultyRef.current, widthRef.current, heightRef.current));
@@ -202,7 +203,6 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     if (!current || !currentLayout) return;
     const result = snapPuzzleGroup(current.groups, groupId, current.pieces, currentLayout);
     if (!result.point) return;
-    if (current.groups.length === current.pieces.length) void getPuzzleLayers(current.row.id).catch(() => {});
     const top = ++z.current;
     let groups = result.groups.map((group) => group.id === groupId ? { ...group, z: top } : group);
     if (groups.length === 1) groups = [centerPuzzleGroup(groups[0], current.pieces, currentLayout)];

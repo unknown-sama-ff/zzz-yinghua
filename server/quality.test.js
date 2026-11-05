@@ -49,8 +49,11 @@ function editForm(quality, precise = false, useServerPreset = true) {
 
 test('quality capabilities and validation preserve legacy requests and reject invalid values', () => {
   assert.deepEqual(gptImageQualityOptionsForModel(' GPT-IMAGE-2.5-FLARE '), six);
-  for (const model of ['gpt-image-2', 'other', undefined]) assert.deepEqual(gptImageQualityOptionsForModel(model), four);
-  for (const quality of six) assert.equal(validateGptImageQuality({ provider: 'gpt-image', model: 'gpt-image-2.5', quality }), null);
+  for (const model of ['gpt-image-2', 'gpt-image-2.60', 'gpt-image-2.6custom', 'relay-gpt-image-2.6', 'other', undefined]) assert.deepEqual(gptImageQualityOptionsForModel(model), four);
+  for (const model of ['gpt-image-2.5', 'gpt-image-2.6', 'gpt-image-2.6-sunburst', ' GPT-IMAGE-2.6-FLARE ', 'gpt-image-2.6-preview']) {
+    assert.deepEqual(gptImageQualityOptionsForModel(model), six);
+    for (const quality of six) assert.equal(validateGptImageQuality({ provider: 'gpt-image', model, quality }), null);
+  }
   for (const quality of [null, 1, {}, [], '', 'HIGH', 'ultra']) assert.match(validateGptImageQuality({ provider: 'gpt-image', model: 'gpt-image-2.5', quality }), /无效/);
   assert.match(validateGptImageQuality({ provider: 'gpt-image', model: 'gpt-image-2', quality: 'max' }), /不支持/);
   assert.equal(validateGptImageQuality({ provider: 'gpt-image' }), null);
@@ -155,7 +158,7 @@ test('invalid quality on either route is rejected before consuming public budget
 test('capability endpoint reveals only options for the actual preset model and disables caching', async (t) => {
   preset(t);
   const base = await startApp(t);
-  for (const [model, expected] of [['gpt-image-2.5-sunburst', six], ['gpt-image-2.5-flare', six], [undefined, four]]) {
+  for (const [model, expected] of [['gpt-image-2.5-sunburst', six], ['gpt-image-2.5-flare', six], ['gpt-image-2.6', six], ['gpt-image-2.6-sunburst', six], ['gpt-image-2.6-flare', six], [undefined, four]]) {
     if (model === undefined) delete process.env.GPT_IMAGE_MODEL; else process.env.GPT_IMAGE_MODEL = model;
     const response = await fetch(base + '/api/image-capabilities');
     assert.equal(response.status, 200);
@@ -164,9 +167,10 @@ test('capability endpoint reveals only options for the actual preset model and d
   }
 });
 
-test('HTTP routes forward six levels for JSON generation and smart/precise multipart edits', async (t) => {
+test('HTTP routes forward quality for 2.6 generation and smart/precise edits without overriding reasoning defaults', async (t) => {
+  const model = 'gpt-image-2.6-sunburst';
   preset(t);
-  env(t, { PRESET_DAILY_CAP: '100000' });
+  env(t, { GPT_IMAGE_MODEL: model, PRESET_DAILY_CAP: '100000' });
   const base = await startApp(t);
   const original = globalThis.fetch;
   let expected;
@@ -174,8 +178,18 @@ test('HTTP routes forward six levels for JSON generation and smart/precise multi
   mockFetch(t, async (url, init) => {
     if (String(url).startsWith(base)) return original(url, init);
     calls += 1;
-    if (init.body instanceof FormData) assert.equal(init.body.get('quality'), expected ?? null);
-    else assert.equal(JSON.parse(init.body).quality, expected);
+    if (init.body instanceof FormData) {
+      assert.equal(init.body.get('model'), model);
+      assert.equal(init.body.get('quality'), expected ?? null);
+      assert.equal(init.body.has('reasoning_effort'), false);
+      assert.equal(init.body.has('reasoning'), false);
+    } else {
+      const body = JSON.parse(init.body);
+      assert.equal(body.model, model);
+      assert.equal(body.quality, expected);
+      assert.equal(Object.hasOwn(body, 'reasoning_effort'), false);
+      assert.equal(Object.hasOwn(body, 'reasoning'), false);
+    }
     return ok();
   });
   for (expected of [...six, undefined]) {
@@ -188,7 +202,6 @@ test('HTTP routes forward six levels for JSON generation and smart/precise multi
   }
   assert.equal(calls, 21);
 });
-
 
 test('direct provider callers without a provider field still validate quality', async (t) => {
   preset(t);

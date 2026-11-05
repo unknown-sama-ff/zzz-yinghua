@@ -11,7 +11,8 @@ const EXTENDED_QUALITIES = Object.freeze([...BASE_QUALITIES, 'xhigh', 'max']);
 const EXTENDED_QUALITY_MODELS = new Set(['gpt-image-2.5', 'gpt-image-2.5-sunburst', 'gpt-image-2.5-flare']);
 
 export function gptImageQualityOptionsForModel(model) {
-  return EXTENDED_QUALITY_MODELS.has(String(model || '').trim().toLowerCase())
+  const normalized = String(model || '').trim().toLowerCase();
+  return EXTENDED_QUALITY_MODELS.has(normalized) || /^gpt-image-2\.6(?:-|$)/.test(normalized)
     ? EXTENDED_QUALITIES : BASE_QUALITIES;
 }
 

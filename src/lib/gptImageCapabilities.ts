@@ -9,7 +9,9 @@ const EXTENDED_QUALITIES: readonly GptImageQuality[] = [...BASE_QUALITIES, 'xhig
 const EXTENDED_QUALITY_MODELS = new Set(['gpt-image-2.5', 'gpt-image-2.5-sunburst', 'gpt-image-2.5-flare']);
 
 export function gptImageQualityOptionsForModel(model?: string): readonly GptImageQuality[] {
-  return EXTENDED_QUALITY_MODELS.has(normalizeModel(model)) ? EXTENDED_QUALITIES : BASE_QUALITIES;
+  const normalized = normalizeModel(model);
+  return EXTENDED_QUALITY_MODELS.has(normalized) || /^gpt-image-2\.6(?:-|$)/.test(normalized)
+    ? EXTENDED_QUALITIES : BASE_QUALITIES;
 }
 
 export function isGptImageQuality(value: unknown): value is GptImageQuality {

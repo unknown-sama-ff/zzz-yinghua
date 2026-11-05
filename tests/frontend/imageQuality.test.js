@@ -62,12 +62,39 @@ test('shared builder can request lossless high-fidelity image inputs', () => {
   assert.equal(request.preserveInputQuality, true);
 });
 
-test('frontend and server agree on 2.5 aliases, normalization, old and unknown models', () => {
-  for (const model of ['gpt-image-2.5', 'gpt-image-2.5-sunburst', ' GPT-IMAGE-2.5-FLARE ', 'gpt-image-2', 'gpt-image-1', 'relay-alias', '', undefined]) {
+test('frontend and server agree on 2.5 aliases, the 2.6 family, normalization and unsupported models', () => {
+  const extended = ['gpt-image-2.5', 'gpt-image-2.5-sunburst', ' GPT-IMAGE-2.5-FLARE ', 'gpt-image-2.6', 'gpt-image-2.6-sunburst', ' GPT-IMAGE-2.6-FLARE ', 'gpt-image-2.6-preview'];
+  const legacy = ['gpt-image-2', 'gpt-image-1', 'gpt-image-2.60', 'gpt-image-2.6custom', 'relay-gpt-image-2.6', 'relay-alias', '', undefined];
+  for (const model of [...extended, ...legacy]) {
     const actual = m.gptImageQualityOptionsForModel(model);
     assert.deepEqual(actual, serverOptions(model));
-    assert.deepEqual(actual, model?.trim().toLowerCase().startsWith('gpt-image-2.5') ? six : four);
+    assert.deepEqual(actual, extended.includes(model) ? six : four);
   }
+});
+
+test('switching between 2.5 and 2.6 retains extended quality in requests and free creation', () => {
+  reset();
+  store.getState().setGptImageQuality('max');
+  for (const model of ['gpt-image-2.6', 'gpt-image-2.6-sunburst', 'gpt-image-2.6-flare']) {
+    store.getState().setCred('gpt-image', { model });
+    assert.equal(store.getState().gptImageQuality, 'max');
+    for (const quality of six) {
+      store.getState().setGptImageQuality(quality);
+      const request = builtRequest();
+      assert.equal(request.model, model);
+      assert.equal(request.quality, quality);
+      assert.equal(Object.hasOwn(request, 'reasoning_effort'), false);
+      assert.equal(Object.hasOwn(request, 'reasoning'), false);
+      const freeCreate = m.buildFreeCreateRequest({ prompt: 'test', quality, contextImageUrl: null,
+        references: [], credentials: { apiKey: '', baseUrl: '', model }, useServerPreset: false,
+        imageCount: 1, aspectRatio: '1:1' });
+      assert.equal(freeCreate.model, model);
+      assert.equal(freeCreate.quality, quality);
+      assert.equal(Object.hasOwn(freeCreate, 'reasoning_effort'), false);
+      assert.equal(Object.hasOwn(freeCreate, 'reasoning'), false);
+    }
+  }
+  assert.equal(m.useToast.getState().message, null);
 });
 
 test('quality defaults to auto and all six values are available in memory', () => {
@@ -193,10 +220,14 @@ test('stale preset response cannot overwrite a newer discovery or a mode switch'
   assert.equal(store.getState().presetQualityStatus, 'idle');
 });
 
-test('quality UI offers six choices for 2.5, four for legacy, and hides for other providers', () => {
+test('quality UI offers auto plus five levels for 2.5 and 2.6, four for legacy, and hides for other providers', () => {
   reset();
-  let html = renderCurrentState(m.createElement(m.ProviderSelect));
-  for (const quality of six) assert.ok(html.includes('value="' + quality + '"'));
+  let html;
+  for (const model of ['gpt-image-2.5-sunburst', 'gpt-image-2.6', 'gpt-image-2.6-flare']) {
+    store.getState().setCred('gpt-image', { model });
+    html = renderCurrentState(m.createElement(m.ProviderSelect));
+    for (const quality of six) assert.ok(html.includes('value="' + quality + '"'));
+  }
   assert.match(html, /更高精细度可能增加生成耗时和费用/);
   store.getState().setCred('gpt-image', { model: 'gpt-image-2' });
   html = renderCurrentState(m.createElement(m.ProviderSelect));

@@ -11,7 +11,8 @@ await mkdir(output, { recursive: true });
 const fallback = await readFile('public/作者推荐/自由版.webp');
 const sharp = require('sharp');
 const layerKey = 'a'.repeat(64);
-const layerForeground = await sharp('public/作者推荐/海报版.webp').resize(512, 768).ensureAlpha().composite([{ input: Buffer.from('<svg width="512" height="768"><ellipse cx="256" cy="384" rx="190" ry="330" fill="white"/></svg>'), blend: 'dest-in' }]).webp().toBuffer();
+const layerSubject = await sharp('public/作者推荐/海报版.webp').resize(512, 768).ensureAlpha().composite([{ input: Buffer.from('<svg width="512" height="768"><ellipse cx="256" cy="384" rx="190" ry="330" fill="white"/></svg>'), blend: 'dest-in' }]).webp().toBuffer();
+const layerForeground = await sharp({ create: { width: 512, height: 768, channels: 4, background: '#00000000' } }).webp({ lossless: true }).toBuffer();
 const layerBackground = await sharp({ create: { width: 512, height: 768, channels: 3, background: '#253947' } }).webp().toBuffer();
 const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
 let vite;
@@ -43,12 +44,16 @@ async function setup(context) {
       layerCalls++;
       if (failLayers) return route.fulfill({ status: 503, json: { ok: false, message: '分层服务暂时不可用' } });
       const id = route.request().postDataJSON().galleryId;
-      const result = realLayers ? await realLayers.prepare(id) : { key: layerKey, width: 512, height: 768 };
-      return route.fulfill({ json: { ok: true, ...result } });
+      try {
+        const result = realLayers ? await realLayers.prepare(id) : { key: layerKey, width: 512, height: 768, hasForeground: false };
+        return route.fulfill({ json: { ok: true, ...result } });
+      } catch (error) {
+        return route.fulfill({ status: error.status || 503, json: { ok: false, message: error.message } });
+      }
     }
     if (url.pathname.startsWith('/api/puzzle-layers/')) {
       const parts = url.pathname.split('/');
-      const bytes = realLayers ? await readFile(await realLayers.asset(parts[3], parts[4])) : parts[4] === 'foreground.webp' ? layerForeground : layerBackground;
+      const bytes = realLayers ? await readFile(await realLayers.asset(parts[3], parts[4])) : parts[4] === 'foreground.webp' ? layerForeground : parts[4] === 'subject.webp' ? layerSubject : layerBackground;
       return route.fulfill({ contentType: 'image/webp', body: bytes });
     }
     if (url.pathname === '/api/gallery') {
@@ -118,6 +123,7 @@ try {
   assert.equal(offsets.length, 0, 'home does not fetch the gallery');
   await page.locator('.home-puzzle-hint').click();
   await page.locator('.puzzle-piece').first().waitFor();
+  assert.equal(layerCalls, 1, 'drawing an image starts layer analysis before any piece is joined');
   assert.equal(await page.locator('.puzzle-piece').count(), 12);
   await page.getByText(/海报版.*3 列 × 4 行/).waitFor();
   assert.deepEqual(offsets, [0, 1], 'older gallery page participates and StrictMode shares requests');
@@ -208,8 +214,11 @@ try {
   assert.equal(await page.locator('.puzzle-mat').getAttribute('data-group-count'), '1');
   await page.locator('.puzzle-reveal[data-phase=ready]').waitFor();
   await page.locator('.puzzle-reveal[data-layered=true][data-depth-state=ready]').waitFor({ timeout: 180000 });
-  assert.equal(layerCalls, 1, 'first-connection prefetch and completed reveal share one layer request');
-  assert.notEqual(await page.getByRole('img', { name: '补全后的背景', exact: true }).getAttribute('src'), await page.getByRole('img', { name: '分离出的角色前景', exact: true }).getAttribute('src'));
+  assert.equal(layerCalls, 1, 'draw prefetch and completed reveal share one layer request');
+  const layerImages = await page.locator('.puzzle-reveal-layer img').evaluateAll((images) => images.map((image) => image.getAttribute('src')));
+  assert.equal(layerImages.length, 3, 'the layered mode renders exactly background, subject and foreground');
+  assert.equal(new Set(layerImages).size, 3);
+  await page.getByRole('img', { name: '分离出的主角', exact: true }).waitFor();
   assert.equal(await page.evaluate(() => scrollY), completionScroll, 'centering keeps the fitted canvas in place');
   const card = page.getByRole('button', { name: /^切换视差效果/ });
   await page.locator('.puzzle-reveal-presentation').evaluate(async (el) => { getComputedStyle(el).transform; await Promise.all(el.getAnimations().map((animation) => animation.finished.catch(() => {}))); });
@@ -220,9 +229,11 @@ try {
   await page.mouse.move(cardBounds.x + cardBounds.width * 0.8, cardBounds.y + cardBounds.height * 0.35);
   assert.ok(await page.locator('.puzzle-reveal').evaluate((el) => Math.abs(parseFloat(el.style.getPropertyValue('--tilt-y'))) > 1));
   await page.locator('.puzzle-mat').screenshot({ path: resolve(output, 'puzzle-complete.png') });
-  for (const mode of ['lens', 'flat', 'float', 'layers']) {
+  for (const mode of ['flat', 'float', 'layers']) {
     await card.click();
     await page.locator(`.puzzle-reveal[data-mode='${mode}'][data-flipping=false]`).waitFor();
+    assert.equal(await page.locator('.puzzle-reveal-mode small').innerText(), `${['flat', 'float', 'layers'].indexOf(mode) + 1} / 3`);
+    assert.equal(await page.locator('.puzzle-reveal-layer img').count(), mode === 'layers' ? 3 : 1);
     if (mode === 'layers') await page.locator('.puzzle-mat').screenshot({ path: resolve(output, 'puzzle-parallax-layers.png') });
     if (mode === 'flat') assert.equal(await page.locator('.puzzle-reveal-tilt').evaluate((el) => getComputedStyle(el).transform), 'none');
   }
@@ -233,8 +244,14 @@ try {
   await page.locator('.puzzle-reveal[data-mode=layers][data-flipping=false]').waitFor();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await card.click();
-  await page.locator('.puzzle-reveal[data-mode=lens][data-flipping=false]').waitFor();
+  await page.locator('.puzzle-reveal[data-mode=flat][data-flipping=false]').waitFor();
   assert.equal(await page.locator('.puzzle-reveal-tilt').evaluate((el) => getComputedStyle(el).transform), 'none', 'reduced motion disables pointer tilting and page turns');
+  await card.press('ArrowLeft');
+  await page.locator('.puzzle-reveal[data-mode=layers]').waitFor();
+  await card.press('ArrowRight');
+  await page.locator('.puzzle-reveal[data-mode=flat]').waitFor();
+  await card.press('ArrowRight');
+  await page.locator('.puzzle-reveal[data-mode=float]').waitFor();
   await page.getByRole('button', { name: '切回 2D', exact: true }).click();
   await page.locator('.puzzle-reveal[data-mode=flat]').waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -374,7 +391,7 @@ try {
   await recoveryPage.locator('.puzzle-reveal[data-layered=true][data-depth-state=ready]').waitFor();
   realLayers = savedService;
   await recovery.close();
-  check('layer service failure keeps the original; explicit retry restores separate foreground/background assets');
+  check('layer service failure keeps the original; explicit retry restores all three assets');
   assert.deepEqual(errors, []);
   console.log('Screenshots: ' + output);
 } finally { await browser.close(); await vite?.close(); }

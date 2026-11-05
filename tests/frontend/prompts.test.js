@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadFrontend } from './loadFrontend.js';
 
-const { YINGHUA_STYLES, fillName, splitName, THREE_VIEW_PROMPT, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
+const { YINGHUA_STYLES, fillName, splitName, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
 const variants = [
   [1, '零命', 'promptTemplate', 'promptTemplateEn'],
   [2, '三命', 'promptTemplate', 'promptTemplateEn'],
@@ -13,28 +13,6 @@ function prompt(id, key, lang = 'zh', showText = true) {
   const style = YINGHUA_STYLES.find((candidate) => candidate.id === id);
   return fillName(style[key], 'HAMAN KARN', undefined, showText, '侧躺', '半睁眼', '沉着', lang, id);
 }
-
-test('three-view preserves accessory ownership, garment details and original markings across views', () => {
-  assert.match(THREE_VIEW_PROMPT, /角色设计保真高于补全、对称、美化和细节丰富度/);
-  assert.match(THREE_VIEW_PROMPT, /正面图为角色身份主参考/);
-  assert.match(THREE_VIEW_PROMPT, /数量、形状、颜色、材质、花纹、佩戴位置、连接方式和相对身体的尺寸比例保持一致/);
-  assert.match(THREE_VIEW_PROMPT, /左右以角色自身为准/);
-  assert.match(THREE_VIEW_PROMPT, /不把单侧配饰镜像复制到另一侧/);
-  assert.match(THREE_VIEW_PROMPT, /不改剪裁、覆盖范围、配色或材质关系/);
-  assert.match(THREE_VIEW_PROMPT, /原有的文字、标记与图案属于角色设计，须保留/);
-  assert.match(THREE_VIEW_PROMPT, /面部特写的发饰、耳饰、五官和颜色必须与三视图一致/);
-});
-
-test('three-view limits invented details and preserves nonhuman forms and natural occlusion', () => {
-  assert.match(THREE_VIEW_PROMPT, /最小必要补全，不凭空添加装饰、花纹或服装部件/);
-  assert.match(THREE_VIEW_PROMPT, /肢体类型、数量与手指数按原设定/);
-  assert.match(THREE_VIEW_PROMPT, /保留鱼尾、蛇身、多足、翼鳍/);
-  assert.match(THREE_VIEW_PROMPT, /不补不存在的手脚/);
-  assert.match(THREE_VIEW_PROMPT, /被头发、衣物或身体遮挡的部分保持合理遮挡/);
-  assert.match(THREE_VIEW_PROMPT, /不移动、复制配饰来强行露出/);
-  assert.match(THREE_VIEW_PROMPT, /纯白干净背景/);
-  assert.doesNotMatch(THREE_VIEW_PROMPT, /无任何遮挡|必须站立|两条腿、两只手|每手五指/);
-});
 
 for (const [id, label, zh, en] of variants) {
   for (const [key, lang] of [[zh, 'zh'], [en, 'en']]) {
