@@ -10,7 +10,7 @@ import { boundedInteger, resolveParallaxCacheDir } from './runtime.js';
 export class ParallaxError extends Error {
   constructor(message, status = 503) { super(message); this.status = status; }
 }
-const VERSION = 'anime-three-layer-character-depth-v5';
+const VERSION = 'anime-subject-consistency-reflection-v7';
 const ASSETS = ['background.webp', 'subject.webp', 'foreground.webp'];
 const STYLES = new Set(['自由创作', '动作底稿', '海报版']);
 export const VALID_KEY = /^[a-f0-9]{64}$/;

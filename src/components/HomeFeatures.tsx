@@ -6,7 +6,6 @@ const modes = ['原画 2D', '悬浮相片', '2.5D视觉'] as const;
 const layers = [
   { name: '背景', src: '/作品示例/mermaid-demo-background.webp' },
   { name: '角色与配饰', src: '/作品示例/mermaid-demo-subject.webp' },
-  { name: '前景', src: '/作品示例/mermaid-demo-foreground.webp' },
 ];
 
 export function HomeFeatures() {
@@ -57,8 +56,8 @@ export function HomeFeatures() {
         </div>
         <dl className="feature-layer-guide">
           <div><dt>背景</dt><dd>位于角色后方的海水、光线与环境。</dd></div>
-          <div><dt>主体</dt><dd>完整角色、身体部件和随身配饰。</dd></div>
-          <div><dt>前景</dt><dd>空间上位于角色前方的独立元素。本图前景层透明。</dd></div>
+          <div><dt>主体</dt><dd>完整角色、身体部件、随身配饰和角色附带特效。</dd></div>
+          <div><dt>前景</dt><dd>仅在存在明显位于角色前方的独立物体时分出。本图展示主体与背景两层。</dd></div>
         </dl>
         <a className="studio-text-link" href={ROUTE_HASHES.puzzle}>打开美图拼图 <span aria-hidden="true">↗</span></a>
       </div>

@@ -121,6 +121,118 @@ function histogramPercentile(histogram, count, fraction) {
   return 255;
 }
 
+export function needsSubjectChecks(mask, width, height) {
+  const border = Math.max(2, Math.ceil(Math.min(width, height) * 0.02));
+  let edgePixels = 0; let uncertain = 0; let confident = 0;
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const value = mask[y * width + x];
+    if (value >= 245) confident++;
+    if (x >= border && x < width - border && y >= border && y < height - border) continue;
+    edgePixels++;
+    if (value >= 64 && value < 224) uncertain++;
+  }
+  return confident >= mask.length * 0.01 && uncertain >= edgePixels * 0.05;
+}
+
+function refineSubjectBackground(mask, checks, width, height) {
+  if (!checks.length || !needsSubjectChecks(mask, width, height)) return;
+  const border = Math.max(2, Math.ceil(Math.min(width, height) * 0.02));
+  for (const check of checks) {
+    const disputed = Buffer.alloc(mask.length);
+    for (let i = 0; i < mask.length; i++) if (mask[i] >= 10 && check[i] < 8) disputed[i] = 255;
+    const { labels, components } = matteComponents(disputed, width, height);
+    const anchors = new Uint32Array(components.length + 1);
+    const supported = new Uint32Array(components.length + 1);
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] >= 245) anchors[labels[i]]++;
+      if (mask[i] >= 128) supported[labels[i]]++;
+    }
+    const rejected = new Set(components.filter((component) =>
+      (component.minX < border || component.minY < border || component.maxX >= width - border || component.maxY >= height - border)
+      && component.area >= mask.length * 0.002 && !anchors[component.id]
+      && Math.min(component.maxX - component.minX + 1, component.maxY - component.minY + 1) >= Math.min(width, height) * 0.02
+      && supported[component.id] >= component.area * 0.1,
+    ).map((component) => component.id));
+    if (!rejected.size) continue;
+    const protectedEdges = dilateMatte(check, width, height, Math.ceil(Math.min(width, height) * 0.03), 9);
+    // Preserve delicate translucent branches, including those adjoining rejected scenery.
+    for (let i = 0; i < mask.length; i++) if (rejected.has(labels[i]) && mask[i] >= 96 && !protectedEdges[i]) mask[i] = 0;
+  }
+}
+
+function reflectionMatch(rgb, mask, width, axis, start, end, range, shift, scale, step) {
+  let count = 0; let aboveSum = 0; let belowSum = 0; let directSum = 0;
+  let aboveSquares = 0; let belowSquares = 0; let directSquares = 0;
+  let mirroredProducts = 0; let directProducts = 0;
+  for (let y = step; y < range; y += step) for (let x = start; x < end; x += step) {
+    const shifted = x + shift;
+    if (shifted < 0 || shifted >= width) continue;
+    const below = (axis + y) * width + x;
+    const above = (axis - Math.round(y * scale)) * width + shifted;
+    const direct = (axis - range + Math.round(y * scale)) * width + shifted;
+    if (mask[below] < 10 || mask[above] < 160) continue;
+    for (let c = 0; c < 3; c++) {
+      const a = rgb[above * 3 + c]; const b = rgb[below * 3 + c]; const d = rgb[direct * 3 + c];
+      count++; aboveSum += a; belowSum += b; directSum += d;
+      aboveSquares += a * a; belowSquares += b * b; directSquares += d * d;
+      mirroredProducts += a * b; directProducts += d * b;
+    }
+  }
+  const expected = Math.ceil((end - start) / step) * (Math.ceil(range / step) - 1) * 3;
+  if (count < expected * 0.75) return 0;
+  const aboveVariance = aboveSquares - aboveSum * aboveSum / count;
+  const belowVariance = belowSquares - belowSum * belowSum / count;
+  const directVariance = directSquares - directSum * directSum / count;
+  if (aboveVariance < count * 144 || belowVariance < count * 144 || directVariance <= 0) return 0;
+  const mirrored = (mirroredProducts - aboveSum * belowSum / count) / Math.sqrt(aboveVariance * belowVariance);
+  const direct = (directProducts - directSum * belowSum / count) / Math.sqrt(directVariance * belowVariance);
+  return mirrored >= 0.75 && direct < 0.4 && mirrored - direct >= 0.45 ? mirrored : 0;
+}
+
+/** Remove a lower mirrored duplicate only when its texture matches an actual subject above it. */
+function removeSubjectReflection(mask, rgb, width, height) {
+  const step = Math.max(1, Math.round(Math.min(width, height) / 300));
+  const rowStep = Math.max(1, Math.round(height / 512));
+  const window = Math.max(8, Math.round(height * 0.04));
+  const shift = Math.max(1, Math.round(width * 0.005));
+  let best = null; let bestScore = 0;
+  for (let axis = Math.ceil(height * 0.85); axis <= height * 0.97; axis += rowStep) {
+    const range = Math.min(window, height - axis - 1);
+    if (range < 8) continue;
+    for (let x = 0; x < width;) {
+      if (mask[axis * width + x] < 100) { x++; continue; }
+      const start = x;
+      while (x < width && mask[axis * width + x] >= 100) x++;
+      const end = x;
+      if (end - start < width * 0.02 || end - start > width * 0.32) continue;
+      for (const offset of [-shift, 0, shift]) for (const scale of [0.75, 1, 1.25]) {
+        const score = reflectionMatch(rgb, mask, width, axis, start, end, range, offset, scale, step);
+        if (score > bestScore) { bestScore = score; best = { axis, start, end }; }
+      }
+    }
+  }
+  if (!best) return;
+  // Leave a margin above the reflected texture so the actual shoe or body edge stays intact.
+  const cut = best.axis + Math.max(1, Math.ceil(height * 0.004));
+  const queue = new Int32Array(mask.length);
+  const seen = new Uint8Array(mask.length);
+  let head = 0; let tail = 0; let reachesBottom = false;
+  for (let y = cut; y < Math.min(height, cut + step); y++) for (let x = best.start; x < best.end; x++) {
+    const i = y * width + x;
+    if (mask[i] >= 10) { queue[tail++] = i; seen[i] = 1; }
+  }
+  while (head < tail) {
+    const i = queue[head++]; const x = i % width; const y = Math.floor(i / width);
+    if (y >= height - 2) reachesBottom = true;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx; const yy = y + dy; const next = yy * width + xx;
+      if (xx < 0 || xx >= width || yy < cut || yy >= height || seen[next] || mask[next] < 10) continue;
+      seen[next] = 1; queue[tail++] = next;
+    }
+  }
+  if (reachesBottom) for (let i = 0; i < tail; i++) mask[queue[i]] = 0;
+}
+
 async function preserveForegroundObjects(matte, values, rgb, reference, referenceLuminance, width, height, protectedSubject, minimumDepth) {
   const contrast = Buffer.alloc(matte.length);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -166,6 +278,13 @@ async function preserveForegroundObjects(matte, values, rgb, reference, referenc
   return matte;
 }
 
+function smallEdgeObject(component, width, height) {
+  const border = Math.max(2, Math.ceil(Math.min(width, height) * 0.02));
+  const touchesEdge = component.minX <= border || component.minY <= border
+    || component.maxX >= width - 1 - border || component.maxY >= height - 1 - border;
+  return touchesEdge && component.area < width * height * 0.003;
+}
+
 function limitForegroundObjects(matte, values, characterNear, budget, width, height) {
   const { labels, components } = matteComponents(matte, width, height);
   const scores = new Float64Array(components.length + 1);
@@ -175,7 +294,12 @@ function limitForegroundObjects(matte, values, characterNear, budget, width, hei
     if (matte[i] >= 160 && values[i] >= characterNear + 12) closer[labels[i]]++;
   }
   // Colour completion cannot promote a farther object just because a few pixels look near.
-  const ranked = components.filter((component) => component.strong >= 4 && component.area <= budget && closer[component.id] >= component.strong * 0.8)
+  const ranked = components.filter((component) => {
+    // Shallow bottom-edge bands are commonly ground planes, reflections or clipped fragments.
+    const uncertainBottomBand = component.maxY >= height * 0.98 && component.maxY - component.minY + 1 < height * 0.1;
+    return !uncertainBottomBand && !smallEdgeObject(component, width, height)
+      && component.strong >= 4 && component.area <= budget && closer[component.id] >= component.strong * 0.8;
+  })
     .sort((a, b) => scores[b.id] / b.area - scores[a.id] / a.area || b.strong - a.strong);
   const selected = new Set();
   let area = 0;
@@ -227,7 +351,8 @@ async function depthForeground(depth, subject, rgb, width, height) {
   const { labels, components } = matteComponents(matte, width, height);
   const accepted = new Set(components.filter((component) =>
     component.strong >= Math.max(4, matte.length * 0.0001)
-    && component.area >= Math.max(6, matte.length * 0.0005) && component.area <= budget,
+    && component.area >= Math.max(6, matte.length * 0.0005) && component.area <= budget
+    && !smallEdgeObject(component, width, height),
   ).map((component) => component.id));
   for (let i = 0; i < matte.length; i++) if (!accepted.has(labels[i])) matte[i] = 0;
   const details = await preserveForegroundObjects(matte, values, rgb, reference, histogramPercentile(luminanceHistogram, backgroundCount, 0.5), width, height, protectedSubject, characterNear + 12);
@@ -253,10 +378,13 @@ function layerPixels(rgb, background, alpha) {
   return output;
 }
 
-export async function createLayerImages(image, mask, maskWidth, maskHeight, { depth } = {}) {
+export async function createLayerImages(image, mask, maskWidth, maskHeight, { depth, subjectChecks = [] } = {}) {
   const { data: rgb, info } = await sharp(image, { limitInputPixels: 24_000_000 }).removeAlpha().toColourspace('srgb').raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
   const resized = await sharp(mask, { raw: { width: maskWidth, height: maskHeight, channels: 1 } }).resize(width, height, { kernel: 'lanczos3' }).greyscale().raw().toBuffer();
+  const checks = await Promise.all(subjectChecks.map((check) => sharp(check, { raw: { width: maskWidth, height: maskHeight, channels: 1 } }).resize(width, height, { kernel: 'lanczos3' }).greyscale().raw().toBuffer()));
+  refineSubjectBackground(resized, checks, width, height);
+  removeSubjectReflection(resized, rgb, width, height);
   const { subject: subjectAlpha, combined, coverage } = splitMatte(resized, width, height);
   if (coverage < 0.02 || coverage > 0.9) throw new Error('这张图片暂时无法可靠地分离主体');
   // Depth must never split limbs, clothing or disconnected details out of the saliency matte.

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as ort from 'onnxruntime-node';
-import { createLayerImages } from './pixels.js';
+import { createLayerImages, needsSubjectChecks } from './pixels.js';
 import { prepareModelInput, cropPrediction, MODEL_SIZE } from './input.js';
 import { inferRelativeDepth } from './depth.js';
 import { inferenceOptions } from './runtime.js';
@@ -26,18 +26,30 @@ async function processImage(input, output) {
   }
   const image = await fs.readFile(input);
   const segmentationStarted = Date.now();
-  const segmentation = await (async () => {
-    const layout = await prepareModelInput(image);
+  const segment = async (options) => {
+    const layout = await prepareModelInput(image, options);
     const session = await getSession(modelPath);
     const results = await session.run({ [session.inputNames[0]]: new ort.Tensor('float32', layout.values, [1, 3, MODEL_SIZE, MODEL_SIZE]) });
     return { mask: cropPrediction(results[session.outputNames[0]].data, layout), width: layout.width, height: layout.height };
-  })();
+  };
+  const segmentation = await segment();
+  const subjectChecks = [];
+  let subjectCheckFailed = false;
+  if (needsSubjectChecks(segmentation.mask, segmentation.width, segmentation.height)) {
+    try {
+      for (const options of [{ flip: true }, { centered: true }]) subjectChecks.push((await segment(options)).mask);
+    } catch {
+      // A supplementary check must not discard a valid primary character mask.
+      subjectChecks.length = 0;
+      subjectCheckFailed = true;
+    }
+  }
   const segmentationMs = Date.now() - segmentationStarted;
   const depthStarted = Date.now();
   const depth = await inferRelativeDepth(image, depthModelPath, await getSession(depthModelPath));
   const depthMs = Date.now() - depthStarted;
   const layersStarted = Date.now();
-  const layers = await createLayerImages(image, segmentation.mask, segmentation.width, segmentation.height, { depth });
+  const layers = await createLayerImages(image, segmentation.mask, segmentation.width, segmentation.height, { depth, subjectChecks });
   await Promise.all([
     fs.writeFile(path.join(output, 'foreground.webp'), layers.foreground),
     fs.writeFile(path.join(output, 'subject.webp'), layers.subject),
@@ -46,6 +58,7 @@ async function processImage(input, output) {
   const cpu = process.cpuUsage(cpuStarted);
   const metrics = {
     processingMs: Date.now() - started, modelLoadMs, segmentationMs, depthMs,
+    subjectCheckCount: subjectChecks.length, subjectCheckFailed,
     cpuMs: Math.round((cpu.user + cpu.system) / 1000),
     layersMs: Date.now() - layersStarted,
     rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),

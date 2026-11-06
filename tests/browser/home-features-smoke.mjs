@@ -46,9 +46,10 @@ try {
   await features.locator('.feature-portrait.is-layered').waitFor();
   await page.waitForFunction(() => [...document.querySelectorAll('.feature-portrait-art img')].every((image) => image.complete && image.naturalWidth === 941 && image.naturalHeight === 1672));
   const sources = await features.locator('.feature-portrait-art img').evaluateAll((images) => images.map((image) => image.getAttribute('src')));
-  assert.equal(sources.length, 3); assert.ok(sources.every((source) => source.includes('mermaid-demo-')));
-  assert.match(await features.innerText(), /空间上位于角色前方/);
-  assert.match(await features.innerText(), /本图前景层透明/);
+  assert.equal(sources.length, 2); assert.ok(sources.every((source) => source.includes('mermaid-demo-')));
+  assert.match(await features.innerText(), /位于角色前方的独立物体/);
+  assert.match(await features.innerText(), /主体与背景两层/);
+  assert.match(await features.innerText(), /角色附带特效/);
   assert.match(await features.innerText(), /鱼尾/);
   assert.equal(await features.locator('.feature-play-note').count(), 0);
   assert.doesNotMatch(await features.innerText(), /停留 5 秒或开始移动碎片后准备分层/);
@@ -75,6 +76,7 @@ try {
   assert.ok(Math.abs(floatingRight.tiltY - floatingLeft.tiltY) > 0.04, 'floating photo must tilt in response to the pointer');
   assert.ok(Math.abs(floatingRight.x - floatingLeft.x) > 4, 'floating photo must move as a complete photo');
   await features.getByRole('button', { name: '2.5D视觉', exact: true }).click();
+  await page.waitForFunction(() => [...document.querySelectorAll('.feature-portrait-art img')].every((image) => image.complete && image.naturalWidth === 941));
   assert.equal(await features.locator('.feature-portrait-frame').evaluate((node) => node.style.getPropertyValue('--demo-x')), '', 'mode changes return the preview to neutral');
   assert.deepEqual(apiCalls, [], 'local showcase must not start gallery or model requests');
   assert.ok(await noOverflow(page));

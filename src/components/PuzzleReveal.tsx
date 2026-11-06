@@ -96,7 +96,7 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
   const layered = mode === 2 && Boolean(layers);
   const layerStatus = layers?.hasForeground
     ? '背景 · 完整角色 · 近处前景已分离，移动鼠标查看视差'
-    : '角色与背景已分离，前景层为空';
+    : '背景与完整角色已分为两层，移动鼠标查看视差';
   const imageFailed = () => { setLayers(null); setLayerError('分层图片读取失败，原图仍可正常查看'); };
   return <div ref={root} className='puzzle-reveal' data-phase={ready ? 'ready' : 'centering'} data-mode={MODES[mode].id} data-layered={layered} data-depth-state={layers ? 'ready' : layerLoading ? 'loading' : layerError ? 'error' : 'idle'} data-flipping={flipping} onPointerMove={updatePointer} onPointerLeave={resetPointer} style={{ '--reveal-scale': scale, '--flip-direction': turn.direction } as CSSProperties}>
     <div className='puzzle-reveal-aura' aria-hidden='true' />
@@ -109,7 +109,7 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
             <span className='puzzle-reveal-layer puzzle-reveal-layer-base'><img src={layered ? layers!.background : src} alt={layered ? '补全后的背景' : '拼图完成作品'} draggable={false} onError={layered ? imageFailed : undefined} /></span>
             {layered && <>
               <span className='puzzle-reveal-layer puzzle-reveal-layer-subject'><img src={layers!.subject} alt='分离出的主角' draggable={false} onError={imageFailed} /></span>
-              <span className='puzzle-reveal-layer puzzle-reveal-layer-foreground'><img src={layers!.foreground} alt='位于角色前方的独立前景' draggable={false} onError={imageFailed} /></span>
+              {layers!.hasForeground && <span className='puzzle-reveal-layer puzzle-reveal-layer-foreground'><img src={layers!.foreground} alt='位于角色前方的独立前景' draggable={false} onError={imageFailed} /></span>}
             </>}
             <span className='puzzle-reveal-gloss' aria-hidden='true' />
           </span>
@@ -118,7 +118,7 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
       </button>
     </div>
     {mode === 2 && ready && <div className='puzzle-layer-status' role='status'>
-      {layerLoading ? '正在分析背景、主角与前景，先显示原图…' : layerError ? <>{layerError}<button type='button' disabled={disabled} onClick={() => { forgetPuzzleLayers(galleryId); setLayerAttempt((value) => value + 1); }}>重试分层</button></> : layers ? layerStatus : ''}
+      {layerLoading ? '正在分析角色与场景，先显示原图…' : layerError ? <>{layerError}<button type='button' disabled={disabled} onClick={() => { forgetPuzzleLayers(galleryId); setLayerAttempt((value) => value + 1); }}>重试分层</button></> : layers ? layerStatus : ''}
     </div>}
     <div className='puzzle-reveal-caption'>
       <div className='puzzle-reveal-mode'><span>{mode && (mode !== 2 || layers) ? '2.5D' : '2D'}</span><strong aria-live='polite'>{MODES[mode].label}</strong><small>{mode + 1} / {MODES.length}</small><button type='button' className='puzzle-reveal-toggle' disabled={!ready || disabled || flipping} onClick={() => flip(mode ? 0 : 2)}>{mode ? '切回 2D' : '开启 2.5D'}</button></div>

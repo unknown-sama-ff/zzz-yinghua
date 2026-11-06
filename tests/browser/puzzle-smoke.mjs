@@ -23,6 +23,7 @@ let generationCalls = 0;
 let proxyCalls = 0;
 let layerCalls = 0;
 let failLayers = false;
+let hasForeground = false;
 let realLayers;
 const offsets = [];
 const row = (id, style, image_url) => ({ id, style, image_url, created_at: '', character_name: '拼图测试', prompt: '', provider: '' });
@@ -45,7 +46,7 @@ async function setup(context) {
       if (failLayers) return route.fulfill({ status: 503, json: { ok: false, message: '分层服务暂时不可用' } });
       const id = route.request().postDataJSON().galleryId;
       try {
-        const result = realLayers ? await realLayers.prepare(id) : { key: layerKey, width: 512, height: 768, hasForeground: false };
+        const result = realLayers ? await realLayers.prepare(id) : { key: layerKey, width: 512, height: 768, hasForeground };
         return route.fulfill({ json: { ok: true, ...result } });
       } catch (error) {
         return route.fulfill({ status: error.status || 503, json: { ok: false, message: error.message } });
@@ -217,8 +218,10 @@ try {
   await page.locator('.puzzle-reveal[data-layered=true][data-depth-state=ready]').waitFor({ timeout: 180000 });
   assert.equal(layerCalls, 1, 'draw prefetch and completed reveal share one layer request');
   const layerImages = await page.locator('.puzzle-reveal-layer img').evaluateAll((images) => images.map((image) => image.getAttribute('src')));
-  assert.equal(layerImages.length, 3, 'the layered mode renders exactly background, subject and foreground');
-  assert.equal(new Set(layerImages).size, 3);
+  const expectedLayerCount = layerImages.some((source) => source.endsWith('/foreground.webp')) ? 3 : 2;
+  assert.equal(layerImages.length, expectedLayerCount, 'layered mode renders background and subject, plus an identified foreground');
+  assert.equal(new Set(layerImages).size, expectedLayerCount);
+  if (!realLayers) assert.equal(expectedLayerCount, 2, 'an image without foreground renders only two layers');
   await page.getByRole('img', { name: '分离出的主角', exact: true }).waitFor();
   assert.equal(await page.evaluate(() => scrollY), completionScroll, 'centering keeps the fitted canvas in place');
   const card = page.getByRole('button', { name: /^切换视差效果/ });
@@ -242,7 +245,7 @@ try {
     await card.click();
     await page.locator(`.puzzle-reveal[data-mode='${mode}'][data-flipping=false]`).waitFor();
     assert.equal(await page.locator('.puzzle-reveal-mode small').innerText(), `${['flat', 'float', 'layers'].indexOf(mode) + 1} / 3`);
-    assert.equal(await page.locator('.puzzle-reveal-layer img').count(), mode === 'layers' ? 3 : 1);
+    assert.equal(await page.locator('.puzzle-reveal-layer img').count(), mode === 'layers' ? expectedLayerCount : 1);
     if (mode === 'layers') await page.locator('.puzzle-mat').screenshot({ path: resolve(output, 'puzzle-parallax-layers.png') });
     if (mode === 'flat') assert.equal(await page.locator('.puzzle-reveal-tilt').evaluate((el) => getComputedStyle(el).transform), 'none');
   }
@@ -398,12 +401,15 @@ try {
   assert.ok(await recoveryPage.getByRole('img', { name: '拼图完成作品', exact: true }).isVisible());
   assert.equal(await recoveryPage.locator('.puzzle-reveal').getAttribute('data-layered'), 'false');
   failLayers = false;
+  hasForeground = true;
   const savedService = realLayers; realLayers = null;
   await recoveryPage.getByRole('button', { name: '重试分层', exact: true }).click();
   await recoveryPage.locator('.puzzle-reveal[data-layered=true][data-depth-state=ready]').waitFor();
+  assert.equal(await recoveryPage.locator('.puzzle-reveal-layer img').count(), 3, 'an identified foreground restores the third displayed layer');
+  hasForeground = false;
   realLayers = savedService;
   await recovery.close();
-  check('layer service failure keeps the original; explicit retry restores all three assets');
+  check('layer service failure keeps the original; explicit retry restores three layers when foreground is identified');
 
   const delayed = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
   await setup(delayed);
@@ -434,6 +440,7 @@ try {
   await delayedPage.locator('.puzzle-mat[aria-busy=false]').waitFor();
   const delayedNav = delayedPage.getByRole('navigation', { name: '主导航' });
   await delayedNav.getByRole('link', { name: '首页', exact: true }).click();
+  await delayedPage.locator('.puzzle-mat').waitFor({ state: 'hidden' });
   await delayedPage.clock.runFor(6000);
   assert.equal(layerCalls, callsBeforeBrowsing + 1, 'leaving the puzzle cancels the pending preload');
   await delayedNav.getByRole('link', { name: '美图拼图', exact: true }).click();

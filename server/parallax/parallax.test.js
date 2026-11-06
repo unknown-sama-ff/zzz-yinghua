@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import express from 'express';
 import sharp from 'sharp';
-import { createLayerImages, fillBackground } from './pixels.js';
+import { createLayerImages, fillBackground, needsSubjectChecks } from './pixels.js';
 import { createParallaxService, fetchGalleryImage } from './service.js';
 import { createPuzzleLayersRouter } from './router.js';
 import { prepareModelInput, cropPrediction, MODEL_SIZE } from './input.js';
@@ -34,6 +34,23 @@ test('model preprocessing preserves portrait geometry and dark RGB values, then 
   assert.throws(() => cropPrediction(new Float32Array(MODEL_SIZE * MODEL_SIZE), layout), /未识别/);
   prediction[256] = NaN;
   assert.throws(() => cropPrediction(prediction, layout), /无效/);
+});
+
+test('subject checks flip back to source coordinates and change brightness only inside the image', async () => {
+  const rgb = Buffer.from([40, 20, 10, 200, 100, 50]);
+  const source = await sharp(rgb, { raw: { width: 2, height: 1, channels: 3 } }).png().toBuffer();
+  const original = await prepareModelInput(source);
+  const flipped = await prepareModelInput(source, { flip: true });
+  const centered = await prepareModelInput(source, { centered: true });
+  const offset = original.top * MODEL_SIZE + original.left;
+  assert.equal(flipped.values[offset], original.values[offset + original.width - 1]);
+  assert.ok(Math.abs(centered.values[offset] - original.values[offset] + 0.5) < 0.000001);
+  assert.equal(centered.values[0], 0, 'padding stays black during the brightness check');
+  const prediction = new Float32Array(MODEL_SIZE * MODEL_SIZE);
+  prediction[offset] = 0.75;
+  const restored = cropPrediction(prediction, flipped);
+  assert.equal(restored[original.width - 1], 191);
+  assert.equal(restored[0], 0);
 });
 
 test('depth inputs stay bounded for extreme ratios and output increases towards nearer surfaces', async () => {
@@ -215,6 +232,135 @@ test('decorations behind the character stay in the background despite strong con
     if (foreground[i * 4 + 3] >= 10) area++;
   }
   assert.ok(area <= w * h * 0.08 && area <= backgroundArea * 0.2, 'foreground only contains a small part of the background');
+});
+
+test('uncertain road reflections at the bottom stay in the background', async () => {
+  const w = 96; const h = 128;
+  const rgb = Buffer.alloc(w * h * 3);
+  const matte = Buffer.alloc(w * h);
+  const depth = Buffer.alloc(w * h, 25);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    const main = x >= 32 && x < 64 && y >= 8 && y < 112;
+    const floor = y >= 112;
+    matte[i] = main ? 255 : 0;
+    depth[i] = main ? 120 : floor ? Math.round(120 + (y - 112) / 15 * 135) : 25;
+    rgb.set(main ? [225, 60, 40] : floor ? [70, 110, 160] : [30, 80, 120], i * 3);
+  }
+  const source = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+  const layers = await createLayerImages(source, matte, w, h, { depth: { data: depth, width: w, height: h } });
+  assert.equal(layers.hasForeground, false, 'a continuous floor depth gradient is insufficient evidence for an independent foreground object');
+  const foreground = await sharp(layers.foreground).ensureAlpha().raw().toBuffer();
+  assert.equal(foreground.some((value, i) => i % 4 === 3 && value > 0), false);
+});
+
+test('attached translucent fins, bright character effects and detached ornaments stay with the role', async () => {
+  const w = 96; const h = 128;
+  const rgb = Buffer.alloc(w * h * 3);
+  const matte = Buffer.alloc(w * h);
+  const depth = Buffer.alloc(w * h, 25);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    const body = x >= 30 && x < 66 && y >= 10 && y < 110;
+    const fin = x >= 15 && x < 30 && y >= 60 && y < 100;
+    const effect = x >= 66 && x < 81 && y >= 30 && y < 36;
+    const ornament = x >= 7 && x < 13 && y >= 20 && y < 26;
+    matte[i] = body || ornament ? 255 : fin ? 60 : effect ? 80 : 0;
+    depth[i] = effect || ornament ? 240 : body ? 120 : fin ? 40 : 25;
+    rgb.set(body ? [225, 60, 40] : fin ? [40, 170, 200] : effect || ornament ? [245, 250, 255] : [30, 80, 120], i * 3);
+  }
+  const source = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+  const layers = await createLayerImages(source, matte, w, h, { depth: { data: depth, width: w, height: h } });
+  const subject = await sharp(layers.subject).ensureAlpha().raw().toBuffer();
+  const foreground = await sharp(layers.foreground).ensureAlpha().raw().toBuffer();
+  for (const [x, y] of [[20, 80], [74, 32], [9, 23], [48, 105]]) {
+    const offset = (y * w + x) * 4;
+    assert.ok(subject[offset + 3] > 0, 'role detail is retained regardless of its depth or brightness');
+    assert.equal(foreground[offset + 3], 0);
+  }
+  const composite = await sharp(layers.background).composite([{ input: layers.subject }, { input: layers.foreground }]).removeAlpha().raw().toBuffer();
+  for (let i = 0; i < rgb.length; i++) assert.ok(Math.abs(rgb[i] - composite[i]) <= 2);
+});
+
+test('small foreground fragments near every canvas edge stay in the background', async () => {
+  const w = 128; const h = 128;
+  for (const [edgeX, edgeY] of [[0, 40], [122, 40], [15, 0], [100, 120]]) {
+    const rgb = Buffer.alloc(w * h * 3);
+    const matte = Buffer.alloc(w * h);
+    const depth = Buffer.alloc(w * h, 25);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const body = x >= 42 && x < 86 && y >= 18 && y < 110;
+      const prop = x >= 12 && x < 28 && y >= 88 && y < 106;
+      const fragment = x >= edgeX && x < edgeX + 6 && y >= edgeY && y < edgeY + 8;
+      matte[i] = body ? 255 : 0;
+      depth[i] = body ? 120 : prop || fragment ? 250 : 25;
+      rgb.set(body ? [225, 60, 40] : prop || fragment ? [35, 220, 60] : [30, 80, 120], i * 3);
+    }
+    const source = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+    const layers = await createLayerImages(source, matte, w, h, { depth: { data: depth, width: w, height: h } });
+    const foreground = await sharp(layers.foreground).ensureAlpha().raw().toBuffer();
+    assert.equal(layers.hasForeground, true, 'a substantial independent foreground object is retained');
+    assert.equal(foreground[(96 * w + 20) * 4 + 3], 255);
+    assert.equal(foreground[((edgeY + 3) * w + edgeX + 2) * 4 + 3], 0, 'tiny edge details cannot be expanded into foreground');
+  }
+});
+
+test('mirrored ground reflections separate from the shoe while ordinary lower body details remain', async () => {
+  const w = 96; const h = 128;
+  for (const reflected of [true, false]) {
+    const rgb = Buffer.alloc(w * h * 3);
+    const matte = Buffer.alloc(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const body = x >= 30 && x < 66 && y >= 10 && y < 100;
+      const shoe = x >= 44 && x < 58 && y >= 96 && y <= 112;
+      const lower = x >= 44 && x < 58 && y > 112;
+      matte[i] = body || shoe ? 250 : lower ? 220 : 0;
+      for (let c = 0; c < 3; c++) {
+        const textureY = reflected && lower ? 224 - y : y;
+        rgb[i * 3 + c] = shoe || lower ? (x * 37 + textureY * 71 + c * 97) % 256 : body ? 180 : 40;
+      }
+    }
+    const source = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+    const layers = await createLayerImages(source, matte, w, h);
+    const subject = await sharp(layers.subject).ensureAlpha().raw().toBuffer();
+    assert.equal(subject[(109 * w + 50) * 4 + 3], 255, 'the actual shoe remains fully opaque');
+    assert.equal(subject[(121 * w + 50) * 4 + 3] > 0, !reflected, 'only a verified mirrored duplicate is removed');
+    const composite = await sharp(layers.background).composite([{ input: layers.subject }, { input: layers.foreground }]).removeAlpha().raw().toBuffer();
+    for (let i = 0; i < rgb.length; i++) assert.ok(Math.abs(rgb[i] - composite[i]) <= 2);
+  }
+});
+
+test('subject checks remove broad background adhesion while preserving translucent effects and body boundaries', async () => {
+  const w = 128; const h = 128;
+  const rgb = Buffer.alloc(w * h * 3);
+  const matte = Buffer.alloc(w * h);
+  const check = Buffer.alloc(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    const body = x >= 48 && x < 88 && y >= 10 && y < 116;
+    const background = x < 48 && y >= 24 && y < 100;
+    const fin = x < 48 && y >= 100 && y < 116;
+    const ornament = x >= 88 && y >= 30 && y < 50;
+    matte[i] = body ? 255 : background ? 140 : fin ? 60 : ornament ? 80 : 0;
+    check[i] = body ? 255 : 0;
+    rgb.set(body ? [225, 60, 40] : fin || ornament ? [70, 170, 200] : [30, 80, 120], i * 3);
+  }
+  const source = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+  assert.equal(needsSubjectChecks(matte, w, h), true, 'broad uncertain edge scenery triggers supplementary checks');
+  assert.equal(needsSubjectChecks(check, w, h), false, 'a clean central character needs no supplementary inference');
+  const layers = await createLayerImages(source, matte, w, h, { subjectChecks: [check, check] });
+  const subject = await sharp(layers.subject).ensureAlpha().raw().toBuffer();
+  assert.equal(subject[(50 * w + 10) * 4 + 3], 0, 'confirmed broad background remains behind the role');
+  for (const [x, y] of [[60, 50], [46, 50], [20, 108], [100, 40]]) {
+    assert.ok(subject[(y * w + x) * 4 + 3] > 0, 'body boundary, transparent fin and attached ornament remain');
+  }
+  const uncertain = matte.map((value) => value === 255 ? 210 : value);
+  assert.equal(needsSubjectChecks(uncertain, w, h), false, 'an uncertain primary role stays intact');
+  const baseline = await createLayerImages(source, uncertain, w, h);
+  const checked = await createLayerImages(source, uncertain, w, h, { subjectChecks: [Buffer.alloc(w * h)] });
+  assert.deepEqual(checked.subject, baseline.subject, 'a failed secondary interpretation cannot erase the primary role');
 });
 
 test('duplicate work is coalesced, two images run concurrently, and disk cache survives a service restart', async (t) => {

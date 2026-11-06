@@ -47,7 +47,9 @@ export function getPuzzleLayers(galleryId: string | number): Promise<PuzzleLayer
       subject: `${base}/subject.webp`, foreground: `${base}/foreground.webp`, background: `${base}/background.webp`,
       hasForeground: data.hasForeground === true,
     };
-    await Promise.all([preload(result.subject), preload(result.foreground), preload(result.background)]);
+    const assets = [result.subject, result.background];
+    if (result.hasForeground) assets.push(result.foreground);
+    await Promise.all(assets.map(preload));
     return result;
   })();
   pending.set(id, promise);

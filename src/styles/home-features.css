@@ -8,7 +8,6 @@
 .feature-portrait.is-layered .feature-portrait-art { transform: rotateX(calc(var(--demo-tilt-x, 0deg) * .55)) rotateY(calc(var(--demo-tilt-y, 0deg) * .55)) scale(.96); }
 .feature-portrait.is-layered img:first-child { transform: translate3d(calc(var(--demo-x, 0px) * -.5), calc(var(--demo-y, 0px) * -.5), -16px) scale(1.016); }
 .feature-portrait.is-layered img:nth-child(2) { transform: translate3d(calc(var(--demo-x, 0px) * .25), calc(var(--demo-y, 0px) * .25), 16px) scale(.984); }
-.feature-portrait.is-layered img:nth-child(3) { transform: translate3d(calc(var(--demo-x, 0px) * .75), calc(var(--demo-y, 0px) * .75), 36px) scale(.964); }
 .feature-portrait.is-floating .feature-portrait-art {
   transform: translate3d(calc(var(--demo-x, 0px) * .3), calc(-10px + var(--demo-y, 0px) * .3), 12px)
     rotateX(calc(3deg + var(--demo-tilt-x, 0deg))) rotateY(calc(-4deg + var(--demo-tilt-y, 0deg))) scale(.94);
