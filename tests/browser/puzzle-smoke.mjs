@@ -234,6 +234,9 @@ try {
   assert.equal(await page.locator('.puzzle-mat').getAttribute('data-showcase'), 'true');
   await page.mouse.move(cardBounds.x + cardBounds.width * 0.8, cardBounds.y + cardBounds.height * 0.35);
   assert.ok(await page.locator('.puzzle-reveal').evaluate((el) => Math.abs(parseFloat(el.style.getPropertyValue('--tilt-y'))) > 1));
+  assert.equal(await page.locator('.puzzle-reveal-mode strong').innerText(), '2.5D视觉');
+  const layerOffsets = await page.evaluate(() => ['base', 'subject'].map((name) => new DOMMatrixReadOnly(getComputedStyle(document.querySelector('.puzzle-reveal-layer-' + name)).transform).m41));
+  assert.ok(layerOffsets[0] < -1 && layerOffsets[1] > 1, 'background and character both move at different depths');
   await page.locator('.puzzle-mat').screenshot({ path: resolve(output, 'puzzle-complete.png') });
   for (const mode of ['flat', 'float', 'layers']) {
     await card.click();

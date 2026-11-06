@@ -4,7 +4,7 @@ import { forgetPuzzleLayers, getPuzzleLayers, type PuzzleLayers } from '../lib/p
 const MODES = [
   { id: 'flat', label: '原画 2D' },
   { id: 'float', label: '悬浮相片' },
-  { id: 'layers', label: '主体分层' },
+  { id: 'layers', label: '2.5D视觉' },
 ] as const;
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 

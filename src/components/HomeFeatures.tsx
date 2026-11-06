@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ROUTE_HASHES } from '../lib/navigation';
 import '../styles/home-features.css';
 
-const modes = ['原画 2D', '悬浮相片', '主体分层'] as const;
+const modes = ['原画 2D', '悬浮相片', '2.5D视觉'] as const;
 const layers = [
   { name: '背景', src: '/作品示例/mermaid-demo-background.webp' },
   { name: '角色与配饰', src: '/作品示例/mermaid-demo-subject.webp' },
@@ -10,7 +10,11 @@ const layers = [
 ];
 
 export function HomeFeatures() {
-  const [mode, setMode] = useState<(typeof modes)[number]>('主体分层');
+  const [mode, setMode] = useState<(typeof modes)[number]>('2.5D视觉');
+  const frame = useRef<HTMLDivElement>(null);
+  const resetMotion = () => {
+    for (const name of ['--demo-x', '--demo-y', '--demo-tilt-x', '--demo-tilt-y', '--demo-focus-x', '--demo-focus-y']) frame.current?.style.removeProperty(name);
+  };
 
   return <section className="home-features" aria-labelledby="home-features-title">
     <div className="exhibition-section-heading">
@@ -19,20 +23,23 @@ export function HomeFeatures() {
     </div>
     <div className="feature-exhibit">
       <div className="feature-stage">
-        <div className={`feature-portrait ${mode === '主体分层' ? 'is-layered' : mode === '悬浮相片' ? 'is-floating' : 'is-flat'}`}
+        <div className={`feature-portrait ${mode === '2.5D视觉' ? 'is-layered' : mode === '悬浮相片' ? 'is-floating' : 'is-flat'}`}
           onPointerMove={(event) => {
-            if (mode !== '主体分层' || event.pointerType === 'touch' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-            const bounds = event.currentTarget.getBoundingClientRect();
-            event.currentTarget.style.setProperty('--demo-x', `${((event.clientX - bounds.left) / bounds.width * 2 - 1) * 6}px`);
-            event.currentTarget.style.setProperty('--demo-y', `${((event.clientY - bounds.top) / bounds.height * 2 - 1) * 6}px`);
+            if (mode === '原画 2D' || event.pointerType === 'touch' || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !frame.current) return;
+            const bounds = frame.current.getBoundingClientRect();
+            const x = Math.max(-1, Math.min(1, (event.clientX - bounds.left) / bounds.width * 2 - 1));
+            const y = Math.max(-1, Math.min(1, (event.clientY - bounds.top) / bounds.height * 2 - 1));
+            const style = frame.current.style;
+            style.setProperty('--demo-x', `${x * 14}px`); style.setProperty('--demo-y', `${y * 14}px`);
+            style.setProperty('--demo-tilt-x', `${-y * 6}deg`); style.setProperty('--demo-tilt-y', `${x * 9}deg`);
+            style.setProperty('--demo-focus-x', `${50 + x * 30}%`); style.setProperty('--demo-focus-y', `${50 + y * 30}%`);
           }}
-          onPointerLeave={(event) => {
-            event.currentTarget.style.removeProperty('--demo-x');
-            event.currentTarget.style.removeProperty('--demo-y');
-          }}>
-          <div className="feature-portrait-art" role="img" aria-label="晶莹海境中的人鱼乐章，完整呈现长发、鱼尾、薄纱鳍和配饰">
-            {mode === '主体分层' ? layers.map((layer) => <img key={layer.name} src={layer.src} alt="" width="941" height="1672" loading="lazy" decoding="async" />)
-              : <img src="/作品示例/mermaid-demo-original.webp" alt="" width="941" height="1672" loading="lazy" decoding="async" />}
+          onPointerLeave={resetMotion} onPointerCancel={resetMotion}>
+          <div ref={frame} className="feature-portrait-frame">
+            <div className="feature-portrait-art" role="img" aria-label="晶莹海境中的人鱼乐章，完整呈现长发、鱼尾、薄纱鳍和配饰">
+              {mode === '2.5D视觉' ? layers.map((layer) => <img key={layer.name} src={layer.src} alt="" width="941" height="1672" loading="lazy" decoding="async" />)
+                : <img src="/作品示例/mermaid-demo-original.webp" alt="" width="941" height="1672" loading="lazy" decoding="async" />}
+            </div>
           </div>
         </div>
         <p className="feature-caption">原图角色像素合成 · 水下背景精修补全</p>
@@ -44,16 +51,15 @@ export function HomeFeatures() {
         <div className="feature-mode-block">
           <p className="feature-mode-label">切换展示模式</p>
           <div className="feature-demo-controls" role="group" aria-label="拼图展示模式">
-            {modes.map((item) => <button type="button" key={item} aria-pressed={mode === item} onClick={() => setMode(item)}>{item}</button>)}
+            {modes.map((item) => <button type="button" key={item} aria-pressed={mode === item} onClick={() => { resetMotion(); setMode(item); }}>{item}</button>)}
           </div>
-          <p className="feature-mode-description">{mode === '主体分层' ? '人鱼、长发、鱼尾、薄纱鳍与配饰整体留在主体层。水面光线和远处音符属于背景，移动鼠标可查看角色与背景的视差。' : mode === '悬浮相片' ? '以悬浮相片的方式欣赏完整画面。' : '平面呈现完整原画。'}</p>
+          <p className="feature-mode-description">{mode === '2.5D视觉' ? '人鱼、长发、鱼尾、薄纱鳍与配饰整体留在主体层。移动鼠标时，背景与角色差速移动，呈现空间层次。' : mode === '悬浮相片' ? '移动鼠标，让整张相片随指针倾斜、浮动，查看相片边框、反光与投影的变化。' : '平面呈现完整原画。'}</p>
         </div>
         <dl className="feature-layer-guide">
           <div><dt>背景</dt><dd>位于角色后方的海水、光线与环境。</dd></div>
           <div><dt>主体</dt><dd>完整角色、身体部件和随身配饰。</dd></div>
           <div><dt>前景</dt><dd>空间上位于角色前方的独立元素。本图前景层透明。</dd></div>
         </dl>
-        <p className="feature-play-note">停留 5 秒或开始移动碎片后准备分层。切换页面保留拼图进度，生图任务继续运行。</p>
         <a className="studio-text-link" href={ROUTE_HASHES.puzzle}>打开美图拼图 <span aria-hidden="true">↗</span></a>
       </div>
     </div>

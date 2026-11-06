@@ -74,7 +74,7 @@
 .puzzle-reveal-edge-back { transform: translateZ(-32px); box-shadow: 0 22px 45px #0007; }
 .puzzle-reveal-edge-front { transform: translateZ(-20px); }
 .puzzle-reveal-gloss { transform: translateZ(2px); background: radial-gradient(ellipse at var(--focus-x) var(--focus-y), #ffffff20, #ffffff03 45%, transparent 70%); pointer-events: none; }
-.puzzle-reveal[data-mode='layers'][data-layered='true'] .puzzle-reveal-layer-base { transform: translateZ(-12px) scale(1.01); }
+.puzzle-reveal[data-mode='layers'][data-layered='true'] .puzzle-reveal-layer-base { transform: translate3d(calc(var(--pan-x) * -.5), calc(var(--pan-y) * -.5), -12px) scale(1.01); }
 .puzzle-reveal-layer-subject { transform: translate3d(calc(var(--pan-x) * 0.35), calc(var(--pan-y) * 0.35), 18px) scale(0.985); }
 .puzzle-reveal-layer-foreground { transform: translate3d(calc(var(--pan-x) * 0.85), calc(var(--pan-y) * 0.85), 42px) scale(0.965); }
 .puzzle-reveal[data-mode='layers'][data-layered='false'] .puzzle-reveal-tilt { transform: none; }
