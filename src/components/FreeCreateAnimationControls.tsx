@@ -23,15 +23,15 @@ export function FreeCreateAnimationControls({ id, settings, supported, hasImages
     {gif && <div className="mt-3 space-y-2">
       <div className="flex flex-wrap items-center gap-4 text-xs text-zzz-text/70">
         <label htmlFor={`gif-frames-${id}`} className="flex items-center gap-2">总帧数
-          <input id={`gif-frames-${id}`} type="number" min={2} max={64} step={1} value={count} onChange={(event) => onChange({ frameCount: Number(event.target.value) })} className="glass-input w-20 px-2 py-1" />
+          <input id={`gif-frames-${id}`} type="number" min={2} max={16} step={1} value={count} onChange={(event) => onChange({ frameCount: Number(event.target.value) })} className="glass-input w-20 px-2 py-1" />
         </label>
         <label htmlFor={`gif-duration-${id}`} className="flex items-center gap-2">每帧时长（毫秒）
           <input id={`gif-duration-${id}`} type="number" min={20} max={2000} step={10} value={duration} onChange={(event) => onChange({ frameDurationMs: Number(event.target.value) })} className="glass-input w-24 px-2 py-1" />
         </label>
       </div>
-      <p className="text-[10px] leading-relaxed text-zzz-text/50">在提示词中写清主体、动作和循环方式，例如：猫咪挥手，耳朵轻抖，固定镜头，首尾无缝循环。</p>
+      <p className="text-[10px] leading-relaxed text-zzz-text/50">可添加静态参考图或使用当前主图，输入图合计最多 16 张。在提示词中写清主体、动作和循环方式，例如猫咪挥手，耳朵轻抖，固定镜头，首尾无缝循环。</p>
       <p className="text-[10px] leading-relaxed text-zzz-text/45">帧数越多，生成耗时与文件体积可能越大。画廊单文件上限 10 MB，超出时可直接下载保存。</p>
-      {hasImages && <p role="status" className="text-xs text-amber-200">GIF 仅支持文字生成，请先清除主图和参考图。</p>}
+      {hasImages && <p role="status" className="text-xs text-zzz-cyan">将根据当前主图和参考图生成 GIF 动画。</p>}
       {!supported && <p role="status" className="text-xs text-amber-200">当前通道不支持 GIF，请选择 GPT Image 2.6 或切回静态图片。</p>}
     </div>}
   </div>;

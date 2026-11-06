@@ -779,7 +779,7 @@ async function executeGeneration(body, idempotencyKey) {
       // Free creation is a user-driven chat: it allows its own reference ceiling
       // instead of the per-model table the yinghua pipeline relies on.
       const isFreeCreate = body.freeCreate === true || body.freeCreate === 'true';
-      const maxInputImages = isFreeCreate
+      const maxInputImages = body.output_format === 'gif' ? 16 : isFreeCreate
         ? FREE_CREATE_MAX_INPUT_IMAGES
         : maxInputImagesForGptModel(model);
       if (1 + body.refImages.length > maxInputImages) {
@@ -862,7 +862,7 @@ app.post('/api/inpaint', rateLimit, upload.fields([
 ]), async (req, res) => {
   const bodyFields = req.body || {};
   if (bodyFields.output_format === 'gif' || bodyFields.frame_count !== undefined || bodyFields.frame_duration_ms !== undefined) {
-    return fail(res, 400, 'INVALID_INPUT', '图片编辑不支持 GIF 输出，请使用自由创作中的文字生成 GIF');
+    return fail(res, 400, 'INVALID_INPUT', '局部重绘不支持 GIF 输出，请使用自由创作中的 GIF 动画');
   }
   const useServerPreset = bodyFields.useServerPreset === true || bodyFields.useServerPreset === 'true';
   const imageFile = req.files?.image?.[0];

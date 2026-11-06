@@ -110,7 +110,7 @@ function sessionsPatch(sessions: FreeCreateSession[]) {
 }
 
 function animationSettings(settings: FreeCreateAnimationSettings) {
-  return { outputFormat: settings.outputFormat ?? 'png', frameCount: settings.frameCount ?? 9, frameDurationMs: settings.frameDurationMs ?? 200 };
+  return { outputFormat: settings.outputFormat ?? 'png', frameCount: Math.min(settings.frameCount ?? 9, 16), frameDurationMs: settings.frameDurationMs ?? 200 };
 }
 
 function inputSnapshot(session: FreeCreateSession): FreeCreateInputSnapshot {
@@ -179,7 +179,7 @@ export const useFreeCreateStore = create<FreeCreateState>((set, get) => {
     setAspectRatio: (aspectRatio, sessionId) => patchInput(sessionId, (session) => ({ ...session, aspectRatio })),
 
     setAnimation: (settings, sessionId) => patchInput(sessionId, (session) => ({ ...session, ...settings,
-      frameCount: Math.max(2, Math.min(64, Math.round(settings.frameCount ?? session.frameCount ?? 9) || 9)),
+      frameCount: Math.max(2, Math.min(16, Math.round(settings.frameCount ?? session.frameCount ?? 9) || 9)),
       frameDurationMs: Math.max(20, Math.min(2000, Math.round((settings.frameDurationMs ?? session.frameDurationMs ?? 200) / 10) * 10 || 200)),
     })),
 

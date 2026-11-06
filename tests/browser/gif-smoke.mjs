@@ -29,7 +29,8 @@ try {
   await page.getByLabel('总帧数', { exact: true }).fill('16');
   await page.getByLabel('每帧时长（毫秒）', { exact: true }).fill('100');
   await page.getByText(/每轮约 1.60 秒/).waitFor();
-  assert.equal(await page.getByRole('button', { name: '添加参考图', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: '添加参考图', exact: true }).isEnabled(), true);
+  assert.equal(await page.getByLabel('总帧数', { exact: true }).getAttribute('max'), '16');
   await page.locator('textarea').fill('一只猫咪挥手，固定镜头，首尾无缝循环。');
   await page.getByRole('button', { name: '发送创作请求', exact: true }).click();
   const image = page.getByRole('img', { name: '自由创作结果 1', exact: true });
@@ -63,21 +64,40 @@ try {
   const bounds = await page.locator('#free-create-window').boundingBox();
   assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 391, 'mobile dialog fits viewport');
   await page.screenshot({ path: resolve(output, 'gif-mobile.png') });
-  await page.evaluate(() => {
+  const reference = await page.evaluate(() => window.__freeCreateTest.fixtures.character);
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: '添加参考图', exact: true }).click();
+  await (await chooser).setFiles({ name: '参考图.png', mimeType: 'image/png', buffer: Buffer.from(reference.split(',')[1], 'base64') });
+  await page.getByText('将根据当前主图和参考图生成 GIF 动画。', { exact: true }).waitFor();
+  await page.locator('textarea').fill('让参考图中的角色挥手，固定镜头，首尾无缝循环。');
+  assert.equal(await page.getByRole('button', { name: '发送创作请求', exact: true }).isEnabled(), true);
+  await page.getByRole('button', { name: '发送创作请求', exact: true }).click();
+  await page.getByRole('img', { name: '自由创作结果 1', exact: true }).nth(1).waitFor();
+  const withReference = await page.evaluate(() => window.__freeCreateTest.requests.at(-1));
+  assert.equal(withReference.imageBase64, reference.split(',')[1]);
+  assert.equal(withReference.imageMime, 'image/png');
+  assert.equal(withReference.output_format, 'gif');
+  assert.equal(withReference.frame_count, 16);
+  assert.equal(withReference.frame_duration_ms, 100);
+  const still = await page.evaluate(() => {
     const { store, fixtures } = window.__freeCreateTest;
-    const id = store.getState().activeSessionId;
-    store.getState().addDraftReferences([{ id: 'gif-reference', name: '参考图.png', dataUrl: fixtures.character }], id);
-    store.getState().setDraft('带参考图的 GIF 不应发送', id);
+    store.getState().selectContextImage(fixtures.scene);
+    return fixtures.scene;
   });
-  await page.getByText('GIF 仅支持文字生成，请先清除主图和参考图。', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: '发送创作请求', exact: true }).isDisabled(), true);
-  await page.getByRole('button', { name: '移除 参考图.png', exact: true }).click();
+  await page.locator('textarea').fill('让当前主图中的角色轻轻眨眼，循环播放。');
+  await page.getByRole('button', { name: '发送创作请求', exact: true }).click();
+  await page.getByRole('img', { name: '自由创作结果 1', exact: true }).nth(2).waitFor();
+  const withContext = await page.evaluate(() => window.__freeCreateTest.requests.at(-1));
+  assert.equal(withContext.imageBase64, still.split(',')[1]);
+  assert.equal(withContext.output_format, 'gif');
+  assert.equal(await page.getByRole('button', { name: '以此继续', exact: true }).count(), 0);
+  await page.locator('textarea').fill('继续循环播放。');
   await page.evaluate(() => window.__freeCreateTest.providerStore.getState().setCred('gpt-image', { model: 'gpt-image-2.5-flare' }));
   await page.getByText('当前通道不支持 GIF，请选择 GPT Image 2.6 或切回静态图片。', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: '发送创作请求', exact: true }).isDisabled(), true);
   await page.getByLabel('输出类型').selectOption('png');
   assert.equal(await page.getByRole('button', { name: '添加参考图', exact: true }).isEnabled(), true);
   assert.deepEqual(errors, []);
-  console.log('PASS GIF controls, generation options, animated result, lossless download/save, no edit context, incompatible input/model guards, and mobile layout');
+  console.log('PASS GIF controls, text and uploaded-reference generation, still context reuse, animation options, lossless download/save, model guard, and mobile layout');
   console.log('Screenshots: ' + output);
 } finally { await browser.close(); await vite.close(); }

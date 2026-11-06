@@ -58,8 +58,7 @@ export function buildFreeCreateRequest({
   const gif = outputFormat === 'gif';
   if (gif) {
     if (!useServerPreset && !supportsGptImageGif(credentials.model)) throw new Error('GIF 动画需要 GPT Image 2.6 系列模型');
-    if (contextImageUrl || references.length || sharedReference) throw new Error('GIF 目前仅支持文字生成，请先清除主图和参考图');
-    if (!Number.isInteger(frameCount) || frameCount < 2 || frameCount > 64) throw new Error('GIF 帧数必须为 2～64 的整数');
+    if (!Number.isInteger(frameCount) || frameCount < 2 || frameCount > 16) throw new Error('GIF 帧数必须为 2～16 的整数');
     if (!Number.isInteger(frameDurationMs) || frameDurationMs < 20 || frameDurationMs > 2000) throw new Error('GIF 每帧时长必须为 20～2000 毫秒');
   }
   if (references.length > MAX_FREE_CREATE_REFERENCES) {
@@ -70,8 +69,9 @@ export function buildFreeCreateRequest({
   const additionalReferences = contextImageUrl
     ? [...(sharedReference ? [sharedReference] : []), ...references]
     : sharedReference ? references : references.slice(1);
-  if ((primaryImage ? 1 : 0) + additionalReferences.length > MAX_FREE_CREATE_INPUT_IMAGES) {
-    throw new Error(`单轮最多支持 ${MAX_FREE_CREATE_INPUT_IMAGES} 张输入图（包含主图和共用图）`);
+  const maxInputImages = gif ? 16 : MAX_FREE_CREATE_INPUT_IMAGES;
+  if ((primaryImage ? 1 : 0) + additionalReferences.length > maxInputImages) {
+    throw new Error(`单轮最多支持 ${maxInputImages} 张输入图（包含主图和共用图）`);
   }
   // The proxy resolves a remote primary image itself; treating its URL as base64
   // would corrupt a result reused as the next turn's context.

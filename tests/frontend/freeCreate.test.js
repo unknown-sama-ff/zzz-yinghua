@@ -14,7 +14,7 @@ const reference = (id, dataUrl = `data:image/png;base64,${btoa(id)}`) => ({ id, 
 const creds = { apiKey: 'key', baseUrl: 'https://example.invalid/v1', model: 'gpt-image-2.5-sunburst' };
 const standardInput = { prompt: 'replace character', contextImageUrl: null, references: [], credentials: creds, useServerPreset: false, imageCount: 3, aspectRatio: '16:9', quality: 'high' };
 
-test('GIF builder uses text generations, captures frame options and preserves reasoning defaults', () => {
+test('GIF builder captures frame options and preserves reasoning defaults', () => {
   const input = { ...standardInput, credentials: { ...creds, model: 'gpt-image-2.6-flare' }, outputFormat: 'gif' };
   const request = m.buildFreeCreateRequest({ ...input, frameCount: 16, frameDurationMs: 95 });
   assert.equal(request.output_format, 'gif');
@@ -28,10 +28,26 @@ test('GIF builder uses text generations, captures frame options and preserves re
   const defaults = m.buildFreeCreateRequest(input);
   assert.equal(defaults.frame_count, 9);
   assert.equal(defaults.frame_duration_ms, 200);
-  for (const change of [{ references: [reference('a')] }, { contextImageUrl: 'https://cdn.invalid/a.png' },
-    { sharedReference: reference('shared') }, { credentials: creds }, { frameCount: 65 }, { frameDurationMs: 0 }]) {
+  for (const change of [{ credentials: creds }, { frameCount: 17 }, { frameDurationMs: 0 }]) {
     assert.throws(() => m.buildFreeCreateRequest({ ...input, ...change }), /GIF/);
   }
+});
+
+test('GIF builder preserves uploaded references, shared images and remote still context in order', () => {
+  const input = { ...standardInput, credentials: { ...creds, model: 'gpt-image-2.6-flare' }, outputFormat: 'gif' };
+  const uploaded = m.buildFreeCreateRequest({ ...input, references: [reference('first'), reference('second')] });
+  assert.equal(uploaded.imageBase64, btoa('first'));
+  assert.equal(uploaded.imageMime, 'image/png');
+  assert.deepEqual(uploaded.refImages, [{ base64: btoa('second'), mime: 'image/png' }]);
+  const context = m.buildFreeCreateRequest({ ...input, contextImageUrl: 'https://cdn.invalid/still.png',
+    sharedReference: reference('shared'), references: [reference('extra')] });
+  assert.equal(context.imageBase64, 'https://cdn.invalid/still.png');
+  assert.deepEqual(context.refImages.map(image => image.base64), [btoa('shared'), btoa('extra')]);
+  assert.equal(context.output_format, 'gif');
+  assert.equal(context.n, 1);
+  const references = Array.from({ length: 16 }, (_, index) => reference(String(index)));
+  assert.equal(m.buildFreeCreateRequest({ ...input, references }).refImages.length, 15);
+  assert.throws(() => m.buildFreeCreateRequest({ ...input, references, contextImageUrl: 'https://cdn.invalid/still.png' }), /最多支持 16 张/);
 });
 
 test('GIF options survive copying and draft restoration, while completed GIFs never become edit context', () => {

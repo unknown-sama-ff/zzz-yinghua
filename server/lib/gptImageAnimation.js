@@ -1,7 +1,7 @@
 import { resolveGptImageModel, supportsGptImageGif } from './gptImageCapabilities.js';
 
 /** Validate before using any public generation budget or contacting the provider. */
-export function validateGptImageAnimation(req, { editing = false } = {}) {
+export function validateGptImageAnimation(req) {
   const format = req.output_format;
   const hasFrames = req.frame_count !== undefined || req.frame_duration_ms !== undefined;
   if (format === undefined && !hasFrames) return null;
@@ -10,11 +10,11 @@ export function validateGptImageAnimation(req, { editing = false } = {}) {
   if (req.provider !== 'gpt-image' || !supportsGptImageGif(resolveGptImageModel(req))) {
     return 'GIF 动画需要 GPT Image 2.6 系列模型，请检查模型或服务器预设';
   }
-  if (editing || req.imageBase64 || req.refImages?.length || req.maskBase64 || req.image || req.mask) {
-    return 'GIF 目前仅支持文字生成，请清除主图和参考图；图片编辑不支持 GIF 输出';
+  if (req.maskBase64 || req.mask) {
+    return 'GIF 动画不支持蒙版，请使用无蒙版的主图或参考图';
   }
-  if (req.frame_count !== undefined && (!Number.isInteger(req.frame_count) || req.frame_count < 2 || req.frame_count > 64)) {
-    return 'GIF 帧数必须为 2～64 的整数';
+  if (req.frame_count !== undefined && (!Number.isInteger(req.frame_count) || req.frame_count < 2 || req.frame_count > 16)) {
+    return 'GIF 帧数必须为 2～16 的整数';
   }
   if (req.frame_duration_ms !== undefined && (!Number.isInteger(req.frame_duration_ms) || req.frame_duration_ms < 20 || req.frame_duration_ms > 2000)) {
     return 'GIF 每帧时长必须为 20～2000 毫秒的整数';

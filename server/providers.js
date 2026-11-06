@@ -290,7 +290,7 @@ async function gptImage(req) {
       : 'gpt-image 缺少模型名称（请在前端填写）', 401);
   }
   // Prefer aspectRatio when provided, otherwise use size
-  const size = req.aspectRatio ? undefined : (req.size || '1024x1024');
+  const size = req.aspectRatio ? undefined : (req.size || (req.output_format === 'gif' ? 'auto' : '1024x1024'));
   const n = capN(req);
   const root = base.replace(/\/$/, '');
 
@@ -367,6 +367,12 @@ async function gptImage(req) {
       }
       form.append('n', String(n));
       if (req.quality !== undefined) form.append('quality', req.quality);
+      if (req.output_format === 'gif') {
+        form.append('output_format', 'gif');
+        form.append('stream', 'false');
+        if (req.frame_count !== undefined) form.append('frame_count', String(req.frame_count));
+        if (req.frame_duration_ms !== undefined) form.append('frame_duration_ms', String(Math.round(req.frame_duration_ms / 10) * 10));
+      }
       for (const [index, image] of images.entries()) {
         form.append('image', new Blob([image.buffer], { type: image.mime }), `image-${index}.${image.ext}`);
       }
@@ -423,7 +429,7 @@ async function gptImage(req) {
       }
     }
     const json = await parseJsonSafe(res);
-    return { images: pluckImages(json), raw: json };
+    return gptImageResult(json, req.output_format);
   }
 
   // No image → text-only generations.
@@ -438,7 +444,7 @@ async function gptImage(req) {
   if (req.aspectRatio) {
     body.aspect_ratio = req.aspectRatio;
   } else {
-    body.size = req.output_format === 'gif' ? (req.size || 'auto') : size;
+    body.size = size;
   }
   const json = await withRetry(async () => {
     const res = await fetchWithTimeout(`${root}/images/generations`, {
@@ -455,8 +461,14 @@ async function gptImage(req) {
     }
     return parseJsonSafe(res);
   });
-  const images = pluckImages(json, req.output_format);
-  if (req.output_format === 'gif') {
+  return gptImageResult(json, req.output_format);
+}
+
+/** Both generation and edit responses must contain the requested animation bytes. */
+async function gptImageResult(json, format) {
+  const images = pluckImages(json, format);
+  if (format === 'gif') {
+    if (!images.length) throw new UpstreamError('UPSTREAM_ERROR', '上游未返回 GIF 动画，请确认中转已支持 GIF 输出');
     for (const [index, image] of images.entries()) {
       if (/^https?:\/\//i.test(image)) {
         const url = await assertSafeUrl(image);
