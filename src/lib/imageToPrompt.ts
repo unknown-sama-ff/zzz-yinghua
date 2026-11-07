@@ -10,7 +10,7 @@ export interface ImagePromptResult {
 }
 export interface ImagePromptResponse { result: ImagePromptResult; image: { width: number; height: number; aspectRatio: string } }
 export function formatImagePrompt(result: ImagePromptResult): string {
-  return [['中文 Prompt', result.promptZh], ['English Prompt', result.promptEn], ['Negative Prompt', result.negativePrompt], ['可编辑版本', result.editablePrompt], ['复刻建议', result.tips]]
+  return [['中文 Prompt', result.promptZh], ['English Prompt', result.promptEn], ['Negative Prompt', result.negativePrompt], ['可复用模板', result.editablePrompt], ['复刻建议', result.tips]]
     .filter(([, text]) => text.trim()).map(([title, text]) => `${title}\n${text}`).join('\n\n');
 }
 

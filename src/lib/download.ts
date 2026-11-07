@@ -1,3 +1,5 @@
+import { detectAnimationMime, isAnimatedWebpUrl } from './animation';
+
 export function isGifImage(src: string): boolean {
   return /^data:image\/gif[;,]/i.test(src) || /\.gif(?:[?#]|$)/i.test(src);
 }
@@ -9,16 +11,24 @@ export async function downloadImage(src: string, filename: string): Promise<void
     // the download attribute is honored cross-origin where CORS allows.
     let href = src;
     let gif = isGifImage(src);
+    let webp = isAnimatedWebpUrl(src);
+    if (/^data:image\/webp;base64,/i.test(src)) {
+      const prefix = src.slice(src.indexOf(',') + 1, src.indexOf(',') + 29);
+      webp = detectAnimationMime(Uint8Array.from(atob(prefix), (character) => character.charCodeAt(0))) === 'image/webp';
+    }
     if (!src.startsWith('data:')) {
       const res = await fetch(src);
       if (!res.ok) throw new Error('图片下载失败');
       const blob = await res.blob();
-      gif = gif || blob.type === 'image/gif' || /^GIF8[79]a/.test(await blob.slice(0, 6).text());
+      const animation = detectAnimationMime(new Uint8Array(await blob.slice(0, 21).arrayBuffer()));
+      gif = animation ? animation === 'image/gif' : gif || blob.type === 'image/gif';
+      webp = animation ? animation === 'image/webp' : webp;
       href = URL.createObjectURL(blob);
     }
     const a = document.createElement('a');
     a.href = href;
-    a.download = gif ? filename.replace(/\.[^.\/]+$/, '') + '.gif' : filename;
+    const extension = gif ? 'gif' : webp ? 'webp' : '';
+    a.download = extension ? filename.replace(/\.[^.\/]+$/, '') + '.' + extension : filename;
     document.body.appendChild(a);
     a.click();
     a.remove();

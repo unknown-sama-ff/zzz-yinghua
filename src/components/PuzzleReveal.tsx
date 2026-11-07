@@ -29,6 +29,8 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
   const viewed = useRef(false);
   const focused = useRef(false);
   const turning = useRef(false);
+  const ignoreTouchClick = useRef(false);
+  const touchGesture = useRef<{ pointerId: number | null; startX: number; startY: number; moved: boolean }>({ pointerId: null, startX: 0, startY: 0, moved: false });
   const scale = Math.min(matWidth * 0.92 / width, Math.max(80, matHeight - 112) / height);
 
   useEffect(() => {
@@ -70,8 +72,44 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
     style?.setProperty('--focus-x', '50%'); style?.setProperty('--focus-y', '50%');
   }, []);
 
+  useEffect(() => {
+    if (active) return;
+    const pointerId = touchGesture.current.pointerId;
+    touchGesture.current.pointerId = null;
+    touchGesture.current.moved = false;
+    if (pointerId !== null && card.current?.hasPointerCapture(pointerId)) card.current.releasePointerCapture(pointerId);
+    resetPointer();
+  }, [active, resetPointer]);
+
+  const startTouch = (event: PointerEvent<HTMLButtonElement>) => {
+    ignoreTouchClick.current = event.pointerType === 'touch';
+    if (event.pointerType !== 'touch') { touchGesture.current.moved = false; return; }
+    if (!event.isPrimary || !ready || !active || disabled || turning.current || touchGesture.current.pointerId !== null) return;
+    touchGesture.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
+  };
+
+  const endTouch = (event: PointerEvent<HTMLButtonElement>) => {
+    const gesture = touchGesture.current;
+    if (gesture.pointerId !== event.pointerId) return;
+    gesture.pointerId = null;
+    resetPointer();
+    // Transformed touch targets can omit the compatibility click, so activate taps here.
+    if (event.type === 'pointerup' && !gesture.moved) {
+      const bounds = event.currentTarget.getBoundingClientRect();
+      flip((mode + 1) % MODES.length, event.clientX < bounds.left + bounds.width / 2 ? -1 : 1);
+    }
+  };
+
   const updatePointer = (event: PointerEvent<HTMLDivElement>) => {
-    if (!ready || event.pointerType === 'touch' || reducedMotion() || !card.current) return;
+    if (event.pointerType === 'touch') {
+      const gesture = touchGesture.current;
+      if (gesture.pointerId !== event.pointerId) return;
+      gesture.moved ||= Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 4;
+      if (!gesture.moved) return;
+      if (card.current && !card.current.hasPointerCapture(event.pointerId)) card.current.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    }
+    if (!ready || !active || disabled || turning.current || reducedMotion() || !card.current) return;
     const bounds = card.current.getBoundingClientRect();
     const x = Math.max(-1, Math.min(1, (event.clientX - bounds.left) / bounds.width * 2 - 1));
     const y = Math.max(-1, Math.min(1, (event.clientY - bounds.top) / bounds.height * 2 - 1));
@@ -82,7 +120,7 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
   };
 
   const flip = (next: number, direction = 1) => {
-    if (!ready || disabled || turning.current || next === mode) return;
+    if (!ready || !active || disabled || turning.current || next === mode) return;
     resetPointer();
     if (reducedMotion()) { setMode(next); return; }
     turning.current = true; setFlipping(true); setTurn((previous) => ({ key: previous.key + 1, direction }));
@@ -95,13 +133,21 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
 
   const layered = mode === 2 && Boolean(layers);
   const layerStatus = layers?.hasForeground
-    ? '背景 · 完整角色 · 近处前景已分离，移动鼠标查看视差'
-    : '背景与完整角色已分为两层，移动鼠标查看视差';
+    ? '背景 · 完整角色 · 近处前景已分离，拖动或移动鼠标查看视差'
+    : '背景与完整角色已分为两层，拖动或移动鼠标查看视差';
   const imageFailed = () => { setLayers(null); setLayerError('分层图片读取失败，原图仍可正常查看'); };
   return <div ref={root} className='puzzle-reveal' data-phase={ready ? 'ready' : 'centering'} data-mode={MODES[mode].id} data-layered={layered} data-depth-state={layers ? 'ready' : layerLoading ? 'loading' : layerError ? 'error' : 'idle'} data-flipping={flipping} onPointerMove={updatePointer} onPointerLeave={resetPointer} style={{ '--reveal-scale': scale, '--flip-direction': turn.direction } as CSSProperties}>
     <div className='puzzle-reveal-aura' aria-hidden='true' />
     <div className='puzzle-reveal-presentation' style={{ width, height }}>
-      <button ref={card} type='button' className='puzzle-reveal-card' disabled={disabled || !ready} aria-label={`切换视差效果，当前：${MODES[mode].label}`} aria-describedby={`${roundId}-reveal-help`} onClick={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); flip((mode + 1) % MODES.length, event.detail && event.clientX < bounds.left + bounds.width / 2 ? -1 : 1); }} onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); flip((mode + (event.key === 'ArrowLeft' ? MODES.length - 1 : 1)) % MODES.length, event.key === 'ArrowLeft' ? -1 : 1); } }}>
+      <button ref={card} type='button' className='puzzle-reveal-card' disabled={disabled || !ready} aria-label={`切换视差效果，当前：${MODES[mode].label}`} aria-describedby={`${roundId}-reveal-help`}
+        onPointerDown={startTouch} onPointerUp={endTouch} onPointerCancel={endTouch}
+        onLostPointerCapture={(event) => { if (event.target === event.currentTarget) endTouch(event); }}
+        onClick={(event) => {
+          if (ignoreTouchClick.current && event.detail > 0) { event.preventDefault(); return; }
+          const bounds = event.currentTarget.getBoundingClientRect();
+          flip((mode + 1) % MODES.length, event.detail && event.clientX < bounds.left + bounds.width / 2 ? -1 : 1);
+        }}
+        onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); flip((mode + (event.key === 'ArrowLeft' ? MODES.length - 1 : 1)) % MODES.length, event.key === 'ArrowLeft' ? -1 : 1); } }}>
         <span key={turn.key} className='puzzle-reveal-page' data-turning={flipping}>
           <span className='puzzle-reveal-tilt'>
             <span className='puzzle-reveal-edge puzzle-reveal-edge-back' aria-hidden='true' />
@@ -122,7 +168,7 @@ export function PuzzleReveal({ src, galleryId, width, height, matWidth, matHeigh
     </div>}
     <div className='puzzle-reveal-caption'>
       <div className='puzzle-reveal-mode'><span>{mode && (mode !== 2 || layers) ? '2.5D' : '2D'}</span><strong aria-live='polite'>{MODES[mode].label}</strong><small>{mode + 1} / {MODES.length}</small><button type='button' className='puzzle-reveal-toggle' disabled={!ready || disabled || flipping} onClick={() => flip(mode ? 0 : 2)}>{mode ? '切回 2D' : '开启 2.5D'}</button></div>
-      <p id={`${roundId}-reveal-help`}>{mode ? '移动鼠标查看视差 · 左键翻页切换效果' : '欣赏完整原画 · 左键翻页开启视差'}</p>
+      <p id={`${roundId}-reveal-help`}>{mode ? '拖动画面或移动鼠标查看视差 · 轻点画面切换效果' : '欣赏完整原画 · 轻点画面切换效果'}</p>
     </div>
   </div>;
 }

@@ -382,11 +382,36 @@ test('duplicate work is coalesced, two images run concurrently, and disk cache s
   assert.equal(calls, 3);
 });
 
-test('ids and public source styles are checked before loading any image', async (t) => {
-  let loaded = false;
-  const service = createParallaxService(await options(t, { lookupImage: async () => ({ image_url: 'https://example.com/x', style: '三视图' }), loadImage: async () => { loaded = true; return image; } }));
+test('all gallery styles can be layered while invalid ids and missing images still reject', async (t) => {
+  let loaded = 0;
+  const styles = ['三视图', '剪影版', '新增类型', '', undefined];
+  const service = createParallaxService(await options(t, {
+    lookupImage: async (id) => id === 9 ? null : { image_url: id === 10 ? '' : `https://example.com/${id}.webp`, style: styles[id - 3] },
+    loadImage: async () => { loaded++; return image; },
+  }));
   for (const id of [-1, {}, 'http://127.0.0.1', '../private', '']) await assert.rejects(() => service.prepare(id), { status: 400 });
-  await assert.rejects(() => service.prepare(3), { status: 404 }); assert.equal(loaded, false);
+  assert.equal(loaded, 0);
+  for (let id = 3; id < 8; id++) assert.ok((await service.prepare(id)).key);
+  assert.equal(loaded, 5);
+  for (const id of [9, 10]) await assert.rejects(() => service.prepare(id), { status: 404 });
+  assert.equal(loaded, 5, 'invalid gallery rows never reach image loading');
+});
+
+test('gallery GIF images can be loaded and layer preparation uses their first frame', async (t) => {
+  const gif = await sharp(Buffer.concat([pixels, Buffer.alloc(pixels.length, 18)]), {
+    raw: { width, height: height * 2, channels: 3, pageHeight: height },
+  }).gif({ delay: [40, 90] }).toBuffer();
+  t.mock.method(globalThis, 'fetch', async () => new Response(gif, { headers: { 'Content-Type': 'image/gif' } }));
+  assert.deepEqual(await fetchGalleryImage('https://93.184.215.14/gallery.gif'), gif);
+  const settings = await options(t, { loadImage: async () => gif });
+  const write = settings.runWorker;
+  settings.runWorker = async (args) => {
+    const prepared = await sharp(await fs.readFile(args.input)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    assert.equal(prepared.info.width, width); assert.equal(prepared.info.height, height);
+    assert.deepEqual(prepared.data, pixels, 'the red/blue first frame is used instead of the grey second frame');
+    await write(args);
+  };
+  assert.ok((await createParallaxService(settings).prepare(1)).key);
 });
 
 test('insufficient memory fails safely without downloading a model or reading images', async (t) => {

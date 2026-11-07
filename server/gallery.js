@@ -16,7 +16,7 @@
 import crypto from 'node:crypto';
 import sharp from 'sharp';
 import { MAX_INPUT_PIXELS } from './lib/constants.js';
-import { validateGalleryGif } from './lib/galleryGif.js';
+import { prepareGalleryAnimation } from './lib/galleryGif.js';
 import { createGalleryThumbnailService, encodeGalleryThumbnail, galleryThumbnailPath } from './lib/galleryThumbnails.js';
 
 const MAX_GALLERY_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -82,30 +82,30 @@ export async function saveGalleryItem({ imageBase64, style, characterName, promp
   if (!DELETE_TOKEN_RE.test(deleteToken || '')) {
     throw new GalleryStorageError('删除凭证无效');
   }
-  // Detect the actual image format. Static images are re-encoded to WebP. GIFs
-  // receive complete structural and decoder validation before their animation
-  // bytes are preserved, including rejection of trailing polyglot payloads.
+  // Detect actual bytes. Animation is fully validated before adaptive WebP encoding.
   let uploadBuffer;
   let format = 'webp';
+  let animated = false;
   try {
     const meta = await sharp(buffer, { failOnError: false, limitInputPixels: MAX_INPUT_PIXELS }).metadata();
     if (!meta.format || !meta.width || !meta.height || !['png', 'jpeg', 'jpg', 'webp', 'gif'].includes(meta.format)) {
       throw new Error('unsupported');
     }
-    if (meta.format === 'gif') {
-      await validateGalleryGif(buffer, meta);
-      uploadBuffer = buffer;
-      format = 'gif';
+    if (meta.format === 'gif' || meta.format === 'webp' && (meta.pages || 1) > 1) {
+      const prepared = await prepareGalleryAnimation(buffer, meta);
+      uploadBuffer = prepared.buffer;
+      format = prepared.format;
+      animated = prepared.animated;
     } else {
       uploadBuffer = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).webp({ quality: 90 }).toBuffer();
     }
   } catch {
-    throw new GalleryStorageError('图片数据无效（支持 PNG/JPEG/WebP/GIF，GIF 最多 64 帧且总解码像素不超过 6400 万）');
+    throw new GalleryStorageError('图片数据无效（支持 PNG/JPEG/WebP/GIF，动画最多 64 帧且总解码像素不超过 6400 万）');
   }
 
   const thumbnail = await encodeGalleryThumbnail(uploadBuffer);
   const supabase = storageClient || await db();
-  const path = `gallery/${Date.now()}-${crypto.randomBytes(6).toString('hex')}-full.${format}`;
+  const path = `gallery/${Date.now()}-${crypto.randomBytes(6).toString('hex')}${animated && format === 'webp' ? '-animated' : ''}-full.${format}`;
   const thumbnailPath = galleryThumbnailPath(path);
   const storage = supabase.storage.from(BUCKET);
   let row;
@@ -156,7 +156,7 @@ export async function listGallery(limit = 20, offset = 0) {
   return rows;
 }
 
-/** Public metadata only; the layer service validates the id and eligible source style. */
+/** Public metadata only; the layer service validates the id and image URL. */
 export async function getGalleryImage(id) {
   const supabase = await db();
   return ensureOk(await supabase.from('gallery').select('image_url, style').eq('id', id).maybeSingle(), '查询画廊作品失败');

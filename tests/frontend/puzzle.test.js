@@ -155,9 +155,9 @@ test('cascading connections complete one freely movable image, and resize preser
 });
 
 const row = (id, style, image_url = `https://example.invalid/${id}.webp`) => ({ id, style, image_url, created_at: '', character_name: '', prompt: '', provider: '' });
-test('draws only requested sources, deduplicates images and avoids the current image', () => {
-  const images = eligiblePuzzleImages([row(1, '自由创作'), row(2, '动作底稿'), row(3, '海报版'), row(4, '三视图'), row(5, '剪影版'), row(6, '自由创作', ''), row(7, '海报版', 'https://example.invalid/1.webp')]);
-  assert.deepEqual(images.map((image) => image.id), [1, 2, 3]);
+test('every gallery style participates, duplicate and missing images are excluded', () => {
+  const images = eligiblePuzzleImages([row(1, '自由创作'), row(2, '动作底稿'), row(3, '海报版'), row(4, '三视图'), row(5, '剪影版'), row(6, '自由创作', ''), row(7, '海报版', 'https://example.invalid/1.webp'), row(8, '新增类型'), row(9, ''), row(10, '三视图', '   ')]);
+  assert.deepEqual(images.map((image) => image.id), [1, 2, 3, 4, 5, 8, 9]);
   assert.equal(pickPuzzleImage(images, images[0].image_url, () => 0).id, 2);
   assert.equal(pickPuzzleImage([images[0]], images[0].image_url).id, 1);
   assert.equal(pickPuzzleImage([]), null);
@@ -168,7 +168,7 @@ test('older gallery pages participate and failed or repeated pages terminate', a
     assert.equal(limit, 200); offsets.push(offset);
     return offset === 0 ? { rows: [row(1, '三视图'), row(2, '剪影版')], hasMore: true } : { rows: [row(3, '自由创作')], hasMore: false };
   });
-  assert.deepEqual(offsets, [0, 2]); assert.equal(images[0].id, 3);
+  assert.deepEqual(offsets, [0, 2]); assert.deepEqual(images.map((image) => image.id), [1, 2, 3]);
   let calls = 0;
   await loadPuzzleGallery(async () => { calls++; return { rows: [row(1, '海报版')], hasMore: true }; });
   assert.equal(calls, 2);

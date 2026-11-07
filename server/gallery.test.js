@@ -62,6 +62,53 @@ test('saving detected GIF preserves every frame and timing while storing a stati
   assert.deepEqual(fake.removed[0], [full.path, thumb.path]);
 });
 
+test('large GIF uploads use a smaller animated WebP with proportional dimensions and original timing', async () => {
+  const width = 1600, height = 900;
+  const frameBytes = width * height * 3;
+  const frames = Buffer.alloc(frameBytes * 2);
+  frames.fill(Buffer.from([240, 40, 30]), 0, frameBytes);
+  frames.fill(Buffer.from([30, 80, 180]), frameBytes);
+  const gif = await sharp(frames, { raw: { width, height: height * 2, channels: 3, pageHeight: height } })
+    .gif({ delay: [40, 90], loop: 2, keepDuplicateFrames: true }).toBuffer();
+  const fake = storage();
+  const row = await saveGalleryItem({ ...input, imageBase64: gif.toString('base64') }, fake.client);
+  const [full, thumb] = fake.uploaded;
+  assert.match(row.image_url, /-animated-full\.webp$/);
+  assert.equal(full.options.contentType, 'image/webp');
+  assert.ok(full.bytes.length < gif.length, 'gallery animation must be smaller than the uploaded GIF');
+  const meta = await sharp(full.bytes, { animated: true }).metadata();
+  assert.equal(meta.format, 'webp'); assert.equal(meta.width, 1024); assert.equal(meta.pageHeight, 576);
+  assert.equal(meta.pages, 2); assert.deepEqual(meta.delay, [40, 90]); assert.equal(meta.loop, 2);
+  assert.match(thumb.path, /-animated-thumb\.webp$/);
+  const thumbnail = await sharp(thumb.bytes).metadata();
+  assert.equal(thumbnail.pages || 1, 1); assert.equal(thumbnail.width, 640); assert.equal(thumbnail.height, 360);
+});
+
+test('animated WebP encoding preserves visible pixels and alpha when resizing is unnecessary, including resaves', async () => {
+  const width = 256, height = 128, pages = 3;
+  const frames = Buffer.alloc(width * height * pages * 4);
+  for (let frame = 0; frame < pages; frame++) for (let y = 20; y < 90; y++) for (let x = 10 + frame * 35; x < 100 + frame * 35; x++) {
+    frames.set([240, 40 + frame * 30, 70, 255], ((frame * height + y) * width + x) * 4);
+  }
+  const gif = await sharp(frames, { raw: { width, height: height * pages, channels: 4, pageHeight: height } })
+    .gif({ delay: [40, 90, 150], loop: 0, keepDuplicateFrames: true }).toBuffer();
+  const fake = storage();
+  await saveGalleryItem({ ...input, imageBase64: gif.toString('base64') }, fake.client);
+  const full = fake.uploaded[0];
+  assert.equal((await sharp(full.bytes).metadata()).format, 'webp');
+  const before = await sharp(gif, { animated: true }).ensureAlpha().raw().toBuffer();
+  const after = await sharp(full.bytes, { animated: true }).ensureAlpha().raw().toBuffer();
+  assert.equal(after.length, before.length);
+  for (let i = 0; i < before.length; i += 4) {
+    assert.equal(after[i + 3], before[i + 3]);
+    if (before[i + 3]) assert.deepEqual(after.subarray(i, i + 4), before.subarray(i, i + 4));
+  }
+  const resaved = storage();
+  await saveGalleryItem({ ...input, imageBase64: full.bytes.toString('base64') }, resaved.client);
+  const meta = await sharp(resaved.uploaded[0].bytes, { animated: true }).metadata();
+  assert.equal(meta.pages, 3); assert.deepEqual(meta.delay, [40, 90, 150]); assert.equal(meta.loop, 0);
+});
+
 test('claimed MIME types cannot bypass raster validation and GIFs reject trailing data or excessive decode work', async () => {
   const largeCanvas = Buffer.from(animatedGif);
   largeCanvas.writeUInt16LE(6000, 6); largeCanvas.writeUInt16LE(6000, 8);
@@ -86,6 +133,23 @@ test('claimed MIME types cannot bypass raster validation and GIFs reject trailin
   const maxFake = storage();
   await saveGalleryItem({ ...input, imageBase64: maxFrames.toString('base64') }, maxFake.client);
   assert.equal((await sharp(maxFake.uploaded[0].bytes, { animated: true }).metadata()).pages, 64);
+});
+
+test('animated WebP rejects trailing content, truncation, excessive frames and oversized logical canvases', async () => {
+  const webp = await sharp(animatedGif, { animated: true }).webp({ lossless: true }).toBuffer();
+  const canvas = Buffer.from(webp);
+  assert.equal(canvas.toString('ascii', 12, 16), 'VP8X');
+  canvas.writeUIntLE(5999, 24, 3); canvas.writeUIntLE(5999, 27, 3);
+  const pixels = Buffer.alloc(65 * 3);
+  for (let i = 0; i < 65; i++) pixels[i * 3 + i % 2] = 255;
+  const frames = await sharp(pixels, { raw: { width: 1, height: 65, channels: 3, pageHeight: 1 } })
+    .webp({ lossless: true, delay: 40 }).toBuffer();
+  assert.equal((await sharp(frames).metadata()).pages, 65);
+  for (const invalid of [Buffer.concat([webp, Buffer.from('<script>trailing</script>')]), webp.subarray(0, -8), canvas, frames]) {
+    const fake = storage();
+    await assert.rejects(saveGalleryItem({ ...input, imageBase64: invalid.toString('base64') }, fake.client), /图片数据无效/);
+    assert.equal(fake.uploaded.length, 0);
+  }
 });
 
 test('thumbnail HTTP route serves bounded raster content and rejects invalid IDs before storage lookup', async (t) => {

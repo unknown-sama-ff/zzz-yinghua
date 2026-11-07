@@ -2,9 +2,12 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { chromium } from 'playwright';
+import { createRequire } from 'node:module';
 import sharp from 'sharp';
 import { createServer } from 'vite';
+
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const output = resolve(process.env.IMAGE_TOOLS_SCREENSHOTS || 'node_modules/.cache/image-tools-qa');
 await mkdir(output, { recursive: true });
@@ -54,7 +57,7 @@ try {
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), copy.promptZh);
   await page.getByRole('button', { name: 'English Prompt', exact: true }).click();
   assert.equal(await page.locator('.image-prompt-result-text').inputValue(), copy.promptEn);
-  await page.getByRole('button', { name: '可编辑版本', exact: true }).click();
+  await page.getByRole('button', { name: '可复用模板', exact: true }).click();
   assert.match(await page.locator('.image-prompt-result-text').inputValue(), /【紫色】/);
   await page.getByRole('button', { name: '复制全部版本' }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText()); assert.ok(copied.includes(copy.promptEn)); assert.ok(copied.includes(copy.editablePrompt));
@@ -79,7 +82,8 @@ try {
   const pixels = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const i = (y * width + x) * 4, value = x < width / 2 ? 65 : 190;
-    for (let c = 0; c < 3; c++) { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; pixels[i + c] = value + Math.round((seed / 2 ** 32 - .5) * 35); }
+    const ripple = 6 * Math.sin(x * .3 + y * .35) * Math.cos(y * .22);
+    for (let c = 0; c < 3; c++) { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; pixels[i + c] = value + Math.round(ripple + (seed / 2 ** 32 - .5) * 2); }
     pixels[i + 3] = x < 8 ? 0 : x < 16 ? 128 : 255;
   }
   const noisy = await sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
@@ -105,7 +109,13 @@ try {
   await page.screenshot({ path: resolve(output, 'denoise-desktop.png'), fullPage: true });
   mark(`real local worker and PNG download preserve dimensions/alpha; synthetic RGB MSE ${(before / count).toFixed(2)} → ${(after / count).toFixed(2)}`);
 
-  const large = await sharp({ create: { width: 1800, height: 1800, channels: 3, background: '#9b83ad' } }).png().toBuffer();
+  const largeWidth = 640, largeHeight = 480;
+  const largePixels = Buffer.alloc(largeWidth * largeHeight * 3);
+  for (let y = 0; y < largeHeight; y++) for (let x = 0; x < largeWidth; x++) {
+    const ripple = 6 * Math.sin(x * .3 + y * .35) * Math.cos(y * .22);
+    largePixels.set([155 + ripple, 131 + ripple, 173 - ripple], (y * largeWidth + x) * 3);
+  }
+  const large = await sharp(largePixels, { raw: { width: largeWidth, height: largeHeight, channels: 3 } }).png().toBuffer();
   await page.locator('.local-denoise-file').setInputFiles({ name: 'large.png', mimeType: 'image/png', buffer: large });
   await page.getByRole('status').filter({ hasText: '已就绪' }).waitFor();
   await page.getByRole('button', { name: '开始本地降噪' }).click(); await page.getByRole('button', { name: '取消处理' }).click();

@@ -7,6 +7,7 @@ const result = { summary: 'test', promptZh: '中文构图', promptEn: 'English c
 test('copy-all includes complete prompt versions and omits empty negative prompts', () => {
   const copied = formatImagePrompt(result);
   for (const text of [result.promptZh, result.promptEn, result.editablePrompt, result.tips]) assert.ok(copied.includes(text));
+  assert.match(copied, /可复用模板/);
   assert.ok(!copied.includes('Negative Prompt'));
 });
 

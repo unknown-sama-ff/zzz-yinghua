@@ -1,4 +1,5 @@
 import { parseDataUrl } from './validation';
+import { detectAnimationMime } from './animation';
 import { GALLERY_SAVED_EVENT, galleryImageProxyUrl, saveToGallery, type GallerySaveInput, type GallerySaveResult } from './galleryClient';
 
 export type GalleryImageMetadata = Pick<GallerySaveInput, 'style' | 'characterName' | 'prompt' | 'provider'>;
@@ -127,10 +128,9 @@ export async function saveGalleryImage(source: Blob | string, metadata: GalleryI
   } else {
     imageBlob = source;
   }
-  // Canvas encoding would flatten animations. Preserve detected GIF bytes; the
-  // server validates every frame and creates its own static thumbnail.
-  const gif = /^GIF8[79]a$/.test(await imageBlob.slice(0, 6).text());
-  const upload = gif ? new Blob([imageBlob], { type: 'image/gif' }) : await convertToWebp(imageBlob);
+  // Send animation bytes to the server for bounded frame-aware compression.
+  const animationMime = detectAnimationMime(new Uint8Array(await imageBlob.slice(0, 21).arrayBuffer()));
+  const upload = animationMime ? new Blob([imageBlob], { type: animationMime }) : await convertToWebp(imageBlob);
   const imageBase64 = await blobToBase64(upload);
   const deleteToken = generateDeleteToken();
   const row = await saveToGallery({

@@ -12,13 +12,12 @@ export class ParallaxError extends Error {
 }
 const VERSION = 'anime-subject-consistency-reflection-v7';
 const ASSETS = ['background.webp', 'subject.webp', 'foreground.webp'];
-const STYLES = new Set(['自由创作', '动作底稿', '海报版']);
 export const VALID_KEY = /^[a-f0-9]{64}$/;
 
 export async function fetchGalleryImage(url) {
   const safe = await assertSafeUrl(url);
   const result = await fetchBufferLimited(safe.toString(), {}, 20000, 10 * 1024 * 1024);
-  if (!result.ok || !/^image\/(png|jpe?g|webp)(?:;|$)/i.test(result.contentType)) throw new ParallaxError('图库图片暂时无法读取');
+  if (!result.ok || !/^image\/(png|jpe?g|webp|gif)(?:;|$)/i.test(result.contentType)) throw new ParallaxError('图库图片暂时无法读取');
   return result.buffer;
 }
 
@@ -124,9 +123,9 @@ export function createParallaxService({
     const buffer = await loadImage(url);
     let normalized;
     try {
-      const image = sharp(buffer, { limitInputPixels: 24_000_000, failOnError: true });
+      const image = sharp(buffer, { limitInputPixels: 24_000_000, failOnError: true, page: 0, pages: 1 });
       const meta = await image.metadata();
-      if (!['png', 'jpeg', 'webp'].includes(meta.format)) throw new Error('format');
+      if (!['png', 'jpeg', 'webp', 'gif'].includes(meta.format)) throw new Error('format');
       normalized = await image.rotate().resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true }).flatten({ background: '#ffffff' }).removeAlpha().png().toBuffer();
     } catch { throw new ParallaxError('图库图片格式或尺寸暂不支持分层', 422); }
     const [model, depthModel] = await Promise.all([getModel(root), getDepthModel(root)]);
@@ -162,7 +161,7 @@ export function createParallaxService({
       const valid = typeof id === 'number' ? Number.isSafeInteger(id) && id > 0 : typeof id === 'string' && /^(?:\d{1,20}|[A-Za-z0-9-]{8,64})$/.test(id);
       if (!valid) throw new ParallaxError('无效的图库作品', 400);
       const row = await lookupImage(id);
-      if (!row || !STYLES.has(row.style) || typeof row.image_url !== 'string') throw new ParallaxError('未找到可分层的图库作品', 404);
+      if (!row || typeof row.image_url !== 'string' || !row.image_url.trim()) throw new ParallaxError('未找到可分层的图库作品', 404);
       const key = crypto.createHash('sha256').update(VERSION + row.image_url).digest('hex');
       const hit = await cached(key);
       if (hit) {

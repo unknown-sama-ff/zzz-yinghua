@@ -88,7 +88,7 @@ export function LocalDenoisePanel() {
   return <section className="local-denoise" aria-labelledby="local-denoise-title">
     <header className="local-denoise-heading">
       <div><div className="studio-eyebrow"><span />LOCAL IMAGE LAB</div><h1 id="local-denoise-title">图片降噪<span>，留住细节。</span></h1>
-        <p>处理已有图片中的颗粒与杂色。所有像素运算均在浏览器本地完成，无需 API 密钥。</p></div>
+        <p>压低平涂色块内的鱼鳞状细纹、颗粒与杂色，保留线稿和色块边界。所有像素运算均在浏览器本地完成。</p></div>
       <span className="local-denoise-badge">本地处理 / 无需上传服务器</span>
     </header>
     <div className="local-denoise-layout">
@@ -117,7 +117,7 @@ export function LocalDenoisePanel() {
           <figure><figcaption><strong>处理后</strong><span>{result ? `${appliedLabel}降噪` : 'AFTER'}</span></figcaption><div className="local-denoise-image">{result ? <img src={result.url} alt={`${appliedLabel}降噪后的图片`} /> : <div className="local-denoise-empty"><span aria-hidden="true">✧</span><p>{busy ? '正在准备你的画面…' : '处理完成后，在这里对比。'}</p></div>}</div></figure>
         </div>
         {result && source && <div className="local-denoise-download"><p>结果始终由原图计算，反复调整不会叠加处理。</p><a className="studio-action studio-action-secondary" href={result.url} download={`${source.name.replace(/\.[^.]+$/, '')}-降噪-${result.strength}.png`}>下载 PNG <span aria-hidden="true">↓</span></a></div>}
-        <details className="local-denoise-notes"><summary>它适合处理什么？</summary><p>使用亮度与色度联合引导的双边滤波近似，适合轻到中度颗粒噪声和彩色杂点。较强档可能柔化发丝、布纹与刻意的胶片颗粒，请对比后保存。它不会补画细节，也不能可靠修复严重压缩块、失焦或运动模糊。</p><p>这是实际像素处理，与创作流程中的「降噪」提示词开关独立。没有加载 AI 模型；不调用生成接口、不消耗生成额度。导出为静态 PNG，浏览器解码可能转换色彩空间，不保留原文件的 EXIF、ICC 或动画。</p><p>算法设计参考：<a href="https://github.com/opencv/opencv" target="_blank" rel="noopener noreferrer">OpenCV ↗</a>。本站独立实现，未打包 OpenCV 或模型权重。</p></details>
+        <details className="local-denoise-notes"><summary>它适合处理什么？</summary><p>使用 L0 梯度平滑处理二次元、番剧画风和平涂插画中的细密鱼鳞纹。较强随机颗粒会先经过亮度与色度联合保边预处理。轻度、标准、较强的 L0 强度分别为 0.0005、0.001、0.002。较强档可能削弱腮红、柔和渐变与刻意纹理，可用 100% 像素查看比较后保存。</p><p>本站采用分块 FFT 和有限迭代控制浏览器内存，分块边缘平滑衔接，透明交界附近优先保留原像素。大图处理可能需要数十秒，可随时取消。结果保留原尺寸和透明度，输出为浏览器解码后的静态 PNG，原始 EXIF、ICC 与动画需要另行保留。</p><p>这项本地数学处理的生成额度消耗为零。算法参考 <a href="https://github.com/CXP-2024/gpt-anime-denoise" target="_blank" rel="noopener noreferrer">gpt-anime-denoise 的 L0 梯度平滑 ↗</a></p></details>
       </div>
     </div>
   </section>;

@@ -37,6 +37,25 @@ test('vision request uses normalized image, explicit spatial rules and separate 
   assert.equal(state.budget, 0);
 });
 
+test('reverse prompt instructions prioritize reusable style and recognize three-view sheet structure', async () => {
+  const { invoke, state } = fixture();
+  await invoke({ focus: '保留原角色的鱼尾和发饰' });
+  const body = JSON.parse(state.calls[0].options.body);
+  const instructions = body.messages[0].content;
+  for (const rule of [
+    /reusable generation template/i,
+    /style, layout, composition, lighting, and rendering/i,
+    /reference subject/i,
+    /front, side, and back full-body orthographic views/i,
+    /same scale, proportions, and baseline/i,
+    /detail close-ups only when visible in the source/i,
+    /ordinary illustration or photograph/i,
+    /explicitly asks to retain/i,
+    /equivalent template instructions/i,
+  ]) assert.match(instructions, rule);
+  assert.equal(JSON.parse(body.messages[1].content[0].text).focus, '保留原角色的鱼尾和发饰');
+});
+
 test('invalid files, settings and target reject before any provider request', async () => {
   for (const [body, file] of [
     [{}, null], [{}, { buffer: Buffer.from('not an image'), mimetype: 'image/png' }],

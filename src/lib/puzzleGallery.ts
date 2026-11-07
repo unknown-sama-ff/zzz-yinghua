@@ -1,11 +1,9 @@
 import { galleryImageProxyUrl, listGalleryPage, type GalleryPage, type GalleryRow } from './galleryClient';
 
-const PUZZLE_STYLES = new Set(['自由创作', '动作底稿', '海报版']);
-
 export function eligiblePuzzleImages(rows: GalleryRow[]): GalleryRow[] {
   const seen = new Set<string>();
   return rows.filter((row) => {
-    if (!PUZZLE_STYLES.has(row.style.trim()) || !row.image_url || seen.has(row.image_url)) return false;
+    if (typeof row.image_url !== 'string' || !row.image_url.trim() || seen.has(row.image_url)) return false;
     seen.add(row.image_url);
     return true;
   });

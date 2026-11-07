@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import sharp from 'sharp';
 import { loadFrontend } from './loadFrontend.js';
 const { downloadBlob, downloadImage } = await loadFrontend("export * from './src/lib/download';");
 
@@ -26,6 +27,29 @@ test('GIF downloads keep their bytes and use .gif for data URLs and remote blobs
       if (original[key] === undefined) delete globalThis[key]; else globalThis[key] = original[key];
     }
     URL.createObjectURL = original.create; URL.revokeObjectURL = original.revoke;
+  }
+});
+
+test('animated WebP downloads preserve animation bytes and use the matching extension', async () => {
+  const gif = Buffer.from('R0lGODlhAgABAIAAAExpcf8AACH/C05FVFNDQVBFMi4wAwEAAAAh+QQFBAAAACwAAAAAAgABAAACAkwKACH5BAUJAAAALAAAAAACAAEAgExpcQAA/wICTAoAOw==', 'base64');
+  const webp = await sharp(gif, { animated: true }).webp({ lossless: true }).toBuffer();
+  const originals = { window: globalThis.window, document: globalThis.document, fetch: globalThis.fetch, create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  const links = []; let downloaded;
+  globalThis.window = { open: () => assert.fail('download should succeed') };
+  globalThis.document = { createElement: () => { const link = { click() {}, remove() {} }; links.push(link); return link; }, body: { appendChild() {} } };
+  globalThis.fetch = async () => new Response(webp, { headers: { 'Content-Type': 'image/webp' } });
+  URL.createObjectURL = (blob) => { downloaded = blob; return 'blob:webp'; };
+  URL.revokeObjectURL = () => {};
+  try {
+    const dataUrl = 'data:image/webp;base64,' + webp.toString('base64');
+    await downloadImage(dataUrl, 'animation.png');
+    assert.equal(links[0].download, 'animation.webp'); assert.equal(links[0].href, dataUrl);
+    await downloadImage('https://cdn.invalid/optimized-animation', 'animation.png');
+    assert.equal(links[1].download, 'animation.webp');
+    assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), webp);
+  } finally {
+    Object.assign(globalThis, { window: originals.window, document: originals.document, fetch: originals.fetch });
+    URL.createObjectURL = originals.create; URL.revokeObjectURL = originals.revoke;
   }
 });
 

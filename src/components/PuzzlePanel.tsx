@@ -101,14 +101,14 @@ export function PuzzlePanel({ active }: { active: boolean }) {
       const row = pickPuzzleImage(rows, gameRef.current?.row.image_url, Math.random, drawnImages.current);
       if (!row) {
         pool.current = null;
-        setError('图库里还没有可用的自由创作、动作底稿或海报版图片。先保存一幅作品，再来试试。');
+        setError('图库里还没有可用的图片。先保存一幅作品，再来试试。');
         return;
       }
       const image = await loadPuzzleImage(row.image_url);
       if (current !== request.current) return;
       commitGame(freshGame(row, image, difficultyRef.current, widthRef.current, heightRef.current));
       setShowGuide(false); z.current = 100;
-      if (rows.length === 1) setNotice('图库目前只有一张符合条件的图片；换一张会重新打乱这幅拼图。');
+      if (rows.length === 1) setNotice('图库目前只有一张图片；换一张会重新打乱这幅拼图。');
     } catch (err) {
       if (current === request.current) { pool.current = null; setError(err instanceof Error ? err.message : '抽取图片失败，请重试。'); }
     } finally { if (current === request.current) setLoading(false); }
@@ -291,7 +291,7 @@ export function PuzzlePanel({ active }: { active: boolean }) {
     </div>
     {error && <div className='puzzle-feedback' role='alert'><p>{error}</p><button type='button' onClick={() => void draw()} disabled={loading}>重新抽取</button></div>}
     <div className='puzzle-game-meta'>
-      <span>{game ? `${game.row.style}${game.row.character_name ? ' / ' + game.row.character_name : ''} · ${game.grid.columns} 列 × ${game.grid.rows} 行 · 共 ${game.pieces.length} 块` : '随机抽取自由创作、动作底稿、海报版图片'}</span>
+      <span>{game ? `${game.row.style || '图库作品'}${game.row.character_name ? ' / ' + game.row.character_name : ''} · ${game.grid.columns} 列 × ${game.grid.rows} 行 · 共 ${game.pieces.length} 块` : '随机抽取画廊全部图片'}</span>
       <strong aria-live='polite'>{game ? `还剩 ${game.groups.length} 组` : ''}</strong>
     </div>
     <div className='puzzle-progress' role='progressbar' aria-label='拼图完成度' aria-valuenow={connections} aria-valuemin={0} aria-valuemax={maxConnections}><span style={{ width: `${connections / maxConnections * 100}%` }} /></div>

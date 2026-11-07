@@ -27,8 +27,8 @@ let hasForeground = false;
 let realLayers;
 const offsets = [];
 const row = (id, style, image_url) => ({ id, style, image_url, created_at: '', character_name: '拼图测试', prompt: '', provider: '' });
-const first = [row(1, '三视图', '/unused.webp')];
-const second = [row(2, '自由创作', '/作者推荐/自由版.webp'), row(3, '海报版', '/作者推荐/海报版.webp'), row(4, '动作底稿', 'https://images.invalid/puzzle-broken.webp')];
+const first = [row(1, '三视图', '')];
+const second = [row(2, '自由创作', '/作者推荐/自由版.webp'), row(3, '海报版', '/作者推荐/海报版.webp'), row(4, '三视图', 'https://images.invalid/puzzle-broken.webp')];
 async function setup(context) {
   await context.addInitScript(() => {
     Math.random = () => 0.37;
@@ -98,6 +98,14 @@ async function touchDrag(page, session, id, x, y) {
   for (let i = 1; i <= 12; i++) await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from.x + (x + from.dx - from.x) * i / 12, y: from.y + (y + from.dy - from.y) * i / 12 }] });
   await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await fragment(page, id).evaluate(async (el) => { getComputedStyle(el).transform; await Promise.all(el.getAnimations().map((animation) => animation.finished.catch(() => {}))); });
+}
+async function dragRevealTouch(page, session) {
+  const bounds = await page.locator('.puzzle-reveal-card').boundingBox();
+  const x = bounds.x + bounds.width * 0.35, y = bounds.y + bounds.height * 0.45;
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (let i = 1; i <= 8; i++) await session.send('Input.dispatchTouchEvent', {
+    type: 'touchMove', touchPoints: [{ x: x + bounds.width * 0.45 * i / 8, y: y - bounds.height * 0.2 * i / 8 }],
+  });
 }
 try {
   if (process.env.PUZZLE_REAL_LAYERS === '1') {
@@ -341,7 +349,7 @@ try {
   await page.screenshot({ path: resolve(output, 'puzzle-desktop.png'), fullPage: true });
   await page.evaluate(() => { Math.random = () => 0.99; });
   await page.getByRole('button', { name: '换一张', exact: true }).click();
-  await page.getByText(/动作底稿.*8 列 × 6 行/).waitFor();
+  await page.getByText(/三视图.*8 列 × 6 行/).waitFor();
   assert.ok(proxyCalls > 0, 'direct image failure falls back to the backend proxy');
   assert.equal(offsets.length, 2, 'redraw reuses the already loaded pool');
   check('three difficulties; landscape adaptive layout; redraw avoids current image; image proxy fallback');
@@ -389,8 +397,57 @@ try {
   assert.equal(await fragment(touch, 0).getAttribute('data-group-size'), '2');
   assert.equal(await fragment(touch, 1).evaluate((el) => getComputedStyle(el).transitionDuration), '0s', 'reduced motion removes animated movement');
   assert.ok(await noOverflow(touch));
+
+  await touch.emulateMedia({ reducedMotion: 'no-preference' });
+  await touch.goto(base + '/tests/browser/puzzle-layers.html');
+  await touch.locator('.puzzle-reveal[data-phase=ready][data-layered=true]').waitFor();
+  await touch.locator('.puzzle-reveal-presentation').evaluate(async (el) => {
+    getComputedStyle(el).transform;
+    await Promise.all(el.getAnimations().map((animation) => animation.finished.catch(() => {})));
+  });
+  const touchCard = touch.locator('.puzzle-reveal-card');
+  assert.equal(await touchCard.evaluate((el) => getComputedStyle(el).touchAction), 'pinch-zoom');
+  await dragRevealTouch(touch, session);
+  await touch.waitForFunction(() => {
+    const base = new DOMMatrixReadOnly(getComputedStyle(document.querySelector('.puzzle-reveal-layer-base')).transform);
+    const subject = new DOMMatrixReadOnly(getComputedStyle(document.querySelector('.puzzle-reveal-layer-subject')).transform);
+    return base.m41 < -0.5 && subject.m41 > 0.5;
+  });
+  await touch.locator('.puzzle-reveal').screenshot({ path: resolve(output, 'puzzle-touch-layers.png') });
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await touch.evaluate(() => new Promise(requestAnimationFrame));
+  assert.equal(await touch.locator('.puzzle-reveal').getAttribute('data-mode'), 'layers', 'a drag cannot become a mode-switching tap');
+  assert.equal(await touch.locator('.puzzle-reveal').getAttribute('data-flipping'), 'false');
+  assert.equal(await touch.locator('.puzzle-reveal').evaluate((el) => el.style.getPropertyValue('--pan-x')), '0px');
+  for (const mode of ['flat', 'float']) {
+    await touchCard.tap();
+    await touch.locator(`.puzzle-reveal[data-mode=${mode}][data-flipping=false]`).waitFor();
+  }
+  await dragRevealTouch(touch, session);
+  await touch.waitForFunction(() => Math.abs(new DOMMatrixReadOnly(getComputedStyle(document.querySelector('.puzzle-reveal-tilt')).transform).m13) > 0.03);
+  await touch.locator('.puzzle-reveal').screenshot({ path: resolve(output, 'puzzle-touch-floating.png') });
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await touch.evaluate(() => new Promise(requestAnimationFrame));
+  assert.equal(await touch.locator('.puzzle-reveal').getAttribute('data-mode'), 'float');
+  await touchCard.tap();
+  await touch.locator('.puzzle-reveal[data-mode=layers][data-flipping=false]').waitFor();
+  await dragRevealTouch(touch, session);
+  await session.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
+  assert.equal(await touch.locator('.puzzle-reveal').evaluate((el) => el.style.getPropertyValue('--pan-x')), '0px');
+  await touch.emulateMedia({ reducedMotion: 'reduce' });
+  await dragRevealTouch(touch, session);
+  assert.equal(await touch.locator('.puzzle-reveal').evaluate((el) => el.style.getPropertyValue('--pan-x')), '0px');
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  assert.equal(await touch.locator('.puzzle-reveal').getAttribute('data-mode'), 'layers');
+  await touchCard.tap();
+  await touch.locator('.puzzle-reveal[data-mode=flat]').waitFor();
+  await touch.addStyleTag({ content: 'body { min-height: 1600px; }' });
+  await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 8, y: 650 }] });
+  for (let i = 1; i <= 8; i++) await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 8, y: 650 - i * 25 }] });
+  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await touch.waitForFunction(() => scrollY > 20);
   await mobile.close();
-  check('mobile touch dragging and snapping; reduced motion; gallery failure and empty states recover on retry');
+  check('mobile touch assembly, layered parallax and floating tilt; taps, cancellation, reduced motion and outside scrolling; gallery recovery');
   const recovery = await browser.newContext({ viewport: { width: 900, height: 800 }, reducedMotion: 'reduce' });
   await setup(recovery);
   const recoveryPage = await recovery.newPage();

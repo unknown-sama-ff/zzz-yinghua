@@ -1,20 +1,46 @@
 import sharp from 'sharp';
-import { MAX_INPUT_PIXELS } from './constants.js';
+import { MAX_COMPRESS_DIM, MAX_INPUT_PIXELS } from './constants.js';
 
 const MAX_GALLERY_GIF_FRAMES = 64;
 
-export function assertGalleryGifBounds(meta, buffer) {
+function assertAnimationBounds(meta) {
   const frames = meta.pages || 1;
   const height = meta.pageHeight || meta.height;
   if (!meta.width || !height || frames > MAX_GALLERY_GIF_FRAMES || meta.width * height * frames > MAX_INPUT_PIXELS) {
-    throw new Error('GIF exceeds frame or decoded pixel limit');
+    throw new Error('Animation exceeds frame or decoded pixel limit');
   }
+}
+
+export function assertGalleryGifBounds(meta, buffer) {
+  assertAnimationBounds(meta);
+  const frames = meta.pages || 1;
   // Some decoders report the frame rectangle instead of the logical screen.
   // Browsers still allocate the screen, so bound both representations.
   if (buffer.length < 13) throw new Error('GIF header');
   const screenWidth = buffer.readUInt16LE(6);
   const screenHeight = buffer.readUInt16LE(8);
   if (!screenWidth || !screenHeight || screenWidth * screenHeight * frames > MAX_INPUT_PIXELS) throw new Error('GIF screen limit');
+}
+
+/** Encode bounded animation as lossless WebP, retaining the smaller valid representation. */
+export async function prepareGalleryAnimation(buffer, meta) {
+  if (meta.format === 'gif') await validateGalleryGif(buffer, meta);
+  else {
+    assertAnimationBounds(meta);
+    if (buffer.length < 12 || buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WEBP'
+      || buffer.readUInt32LE(4) + 8 !== buffer.length) throw new Error('Invalid animated WebP container');
+    await sharp(buffer, { animated: true, failOn: 'warning', limitInputPixels: MAX_INPUT_PIXELS }).stats();
+  }
+  const encoded = await sharp(buffer, { animated: true, failOn: 'warning', limitInputPixels: MAX_INPUT_PIXELS })
+    .resize(MAX_COMPRESS_DIM, MAX_COMPRESS_DIM, { fit: 'inside', withoutEnlargement: true })
+    .webp({ lossless: true, effort: 4, delay: meta.delay, loop: meta.loop ?? 1 })
+    .toBuffer();
+  const result = await sharp(encoded).metadata();
+  const sameTiming = (result.pages || 1) === (meta.pages || 1) && (result.loop ?? 1) === (meta.loop ?? 1)
+    && JSON.stringify(result.delay || []) === JSON.stringify(meta.delay || []);
+  const sameOrientation = (result.orientation || 1) === (meta.orientation || 1);
+  const useEncoded = sameTiming && sameOrientation && encoded.length < buffer.length;
+  return { buffer: useEncoded ? encoded : buffer, format: useEncoded ? 'webp' : meta.format, animated: (meta.pages || 1) > 1 };
 }
 
 /** Preserve validated animation bytes while excluding trailing/polyglot content. */

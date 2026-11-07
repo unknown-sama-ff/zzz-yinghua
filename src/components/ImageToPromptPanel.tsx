@@ -7,7 +7,7 @@ import '../styles/image-to-prompt.css';
 
 const OUTPUTS = [
   { key: 'promptZh', label: '中文 Prompt' }, { key: 'promptEn', label: 'English Prompt' },
-  { key: 'editablePrompt', label: '可编辑版本' }, { key: 'negativePrompt', label: 'Negative Prompt' },
+  { key: 'editablePrompt', label: '可复用模板' }, { key: 'negativePrompt', label: 'Negative Prompt' },
 ] as const;
 
 export function ImageToPromptPanel() {
@@ -71,7 +71,7 @@ export function ImageToPromptPanel() {
   return <div className="image-prompt-page">
     <header className="image-prompt-heading">
       <div><p className="studio-eyebrow">IMAGE → PROMPT</p><h1>看见画面，<br />写出它的<span>提示词。</span></h1></div>
-      <p>把一张喜欢的照片或插画，拆成可再次创作的构图、光线与质感。<br />上传参考图，获得可以直接复制的中英文版本。</p>
+      <p>提炼参考图的整体画风、构图、光线与质感，生成可替换主体的复刻模板。<br />三视图会保留视角、比例与版面结构，提供可直接复制的中英文版本。</p>
     </header>
     <div className="image-prompt-workbench">
       <section className="image-prompt-source" aria-label="参考图片与反推设置">
@@ -87,7 +87,7 @@ export function ImageToPromptPanel() {
         <label className="image-prompt-field">用于哪种生图工具<select value={target} disabled={busy} onChange={(event) => { setTarget(event.target.value as PromptTarget); setOutput(null); }}>
           {PROMPT_TARGETS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select></label>
-        <label className="image-prompt-field">特别想保留什么 <span>可选</span><textarea value={focus} maxLength={500} disabled={busy} onChange={(event) => setFocus(event.target.value)} rows={3} placeholder="例如：保留窗边侧光、人物位置和胶片颗粒" /></label>
+        <label className="image-prompt-field">特别想保留什么 <span>可选</span><textarea value={focus} maxLength={500} disabled={busy} onChange={(event) => setFocus(event.target.value)} rows={3} placeholder="默认提炼整体画风与结构。如需保留原角色的发型、服装或其他特征，请在这里说明" /></label>
         <p className="image-prompt-connection">{useServerPreset ? '当前使用作者视觉模型通道' : '使用「设置」中的视觉模型'}{!configured && ' · 尚未配置'}</p>
         <button type="button" className="studio-action studio-action-primary image-prompt-submit" disabled={!source || busy} onClick={() => void run()}>{busy ? '正在观察画面…' : output ? '重新反推提示词' : '反推提示词'}<span aria-hidden="true">↗</span></button>
         {busy && <button type="button" className="studio-text-link" onClick={resetRequest}>停止等待</button>}
