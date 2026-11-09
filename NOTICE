@@ -1,0 +1,39 @@
+Yinghua Workshop
+Copyright (C) 2026 unknown-sama-ff and contributors.
+
+Except for third-party content and non-code assets identified in README.md,
+this project's code, configuration, and original documentation are licensed
+under the GNU Affero General Public License, version 3 only (AGPL-3.0-only).
+See LICENSE for the full terms, including the warranty disclaimer.
+
+Selected third-party notices
+---------------------------
+
+Anime Segmentation
+Source: https://github.com/SkyTNT/anime-segmentation
+License: Apache-2.0
+License text: docs/licenses/anime-segmentation.txt
+
+Depth Anything V2 Small
+Source: https://github.com/DepthAnything/Depth-Anything-V2
+ONNX conversion: https://huggingface.co/onnx-community/depth-anything-v2-small
+License: Apache-2.0
+Attribution and license text: docs/licenses/depth-anything-v2-small.txt
+
+image-to-prompt analysis reference
+Source: https://github.com/jiemianduan/image-to-prompt
+Copyright (c) 2026 jiemianduan
+License: MIT
+Attribution and license text: docs/licenses/image-to-prompt.txt
+
+gpt-anime-denoise L0 smoothing reference
+Source: https://github.com/CXP-2024/gpt-anime-denoise
+Copyright (c) 2026 CXP-2024
+License: MIT
+Attribution and license text: docs/licenses/gpt-anime-denoise.txt
+
+Third-party dependencies retain their own licenses and notices. The references
+above do not replace those licenses or grant rights to third-party models,
+non-code assets, or user content beyond their applicable terms.
+
+This notice is informational and does not modify the licenses identified above.
