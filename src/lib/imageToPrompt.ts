@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase';
+import { VISION_TIMEOUT_MS } from './constants';
 
 export const PROMPT_TARGETS = [
   { value: 'general', label: '通用生图' }, { value: 'midjourney', label: 'Midjourney' },
@@ -24,7 +25,7 @@ export async function reverseImagePrompt(file: File, options: {
   const abort = () => controller.abort();
   if (signal?.aborted) controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(abort, 130_000);
+  const timer = setTimeout(abort, VISION_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_BASE}/image-to-prompt`, { method: 'POST', body: form, signal: controller.signal });
     const data = await res.json().catch(() => null);

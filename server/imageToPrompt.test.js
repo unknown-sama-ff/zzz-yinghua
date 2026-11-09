@@ -11,7 +11,7 @@ const png = await sharp({ create: { width: 20, height: 10, channels: 4, backgrou
 function fixture(dependencies = {}) {
   const state = { calls: [], budget: 0, urls: [] };
   const handler = createImageToPromptHandler({
-    request: async (url, options) => { state.calls.push({ url, options }); return Response.json({ choices: [{ message: { content: JSON.stringify(result) } }] }); },
+    request: async (url, options, timeout) => { state.calls.push({ url, options, timeout }); return Response.json({ choices: [{ message: { content: JSON.stringify(result) } }] }); },
     validateUrl: async (url) => { state.urls.push(url); }, consumeBudget: () => { state.budget++; return true; }, ...dependencies,
   });
   async function invoke(body = {}, file = { buffer: png, mimetype: 'image/png' }) {
@@ -28,6 +28,7 @@ test('vision request uses normalized image, explicit spatial rules and separate 
   assert.equal(response.status, 200); assert.deepEqual(response.body.result, result);
   assert.equal(response.body.image.aspectRatio, '2:1');
   assert.equal(state.calls[0].url, 'https://vision.example/v1/chat/completions');
+  assert.equal(state.calls[0].timeout, 180_000);
   const body = JSON.parse(state.calls[0].options.body);
   assert.equal(body.model, 'vision-test'); assert.equal(state.calls[0].options.headers.Authorization, 'Bearer test-user-key');
   assert.equal(body.messages[0].content, IMAGE_TO_PROMPT_SYSTEM);

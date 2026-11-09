@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { UpstreamError, assertSafeUrl, codeFromStatus, fetchWithTimeout } from './http.js';
 import { consumePresetBudget } from './lib/rateLimit.js';
-import { MAX_INPUT_PIXELS, MAX_UPLOAD_BYTES } from './lib/constants.js';
+import { MAX_INPUT_PIXELS, MAX_UPLOAD_BYTES, VISION_TIMEOUT_MS } from './lib/constants.js';
 
 // Analysis order informed by the MIT-licensed image-to-prompt skill.
 // Source and license: docs/licenses/image-to-prompt.txt.
@@ -117,7 +117,7 @@ export function createImageToPromptHandler({ request = fetchWithTimeout, validat
             ] },
           ],
         }),
-      }, 120_000);
+      }, VISION_TIMEOUT_MS);
       if (!response.ok) {
         await response.body?.cancel?.().catch(() => {});
         throw new UpstreamError(codeFromStatus(response.status), `视觉模型请求失败 (${response.status})，请检查接口、模型和额度`, response.status);

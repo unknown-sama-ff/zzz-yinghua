@@ -1,4 +1,5 @@
 import { API_BASE } from './apiBase';
+import { VISION_TIMEOUT_MS } from './constants';
 
 export interface FaceBounds {
   faceTop: number;
@@ -60,7 +61,7 @@ export async function detectFace(
   const smallMime = small.startsWith('data:image/jpeg') ? 'image/jpeg' : imageMime;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 180000);
+  const timer = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_BASE}/detect-face`, {
       method: 'POST',

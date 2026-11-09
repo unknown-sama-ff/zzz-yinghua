@@ -71,7 +71,7 @@ loadEnv();
 // Upgrade Node's bundled fetch implementation together with the audited dependency.
 installSecureFetch();
 
-import { TASK_TTL_MS, MAX_UPLOAD_BYTES, MAX_FETCH_BYTES, FREE_CREATE_MAX_INPUT_IMAGES } from './lib/constants.js';
+import { TASK_TTL_MS, MAX_UPLOAD_BYTES, MAX_FETCH_BYTES, FREE_CREATE_MAX_INPUT_IMAGES, VISION_TIMEOUT_MS } from './lib/constants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -1011,7 +1011,7 @@ app.post('/api/detect-face', rateLimit, async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify(body),
-    }, 180000);
+    }, VISION_TIMEOUT_MS);
     if (!response.ok) {
       void response.body?.cancel?.().catch(() => {});
       throw new UpstreamError(codeFromStatus(response.status), `detect-face 返回 ${response.status}`, response.status);
