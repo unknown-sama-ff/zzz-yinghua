@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import multer from 'multer';
 import { providers, registerTaskStore, capN } from './providers.js';
 import { compositeEmbed, compositeStitch } from './lib/composite.js';
-import { gptImageQualityOptionsForModel, resolveGptImageModel, validateGptImageQuality, maxInputImagesForGptModel, supportsGptImageGif } from './lib/gptImageCapabilities.js';
+import { gptImageQualityOptionsForModel, resolveGptImageModel, validateGptImageQuality, maxInputImagesForGptModel, supportsGptImageGif, supportsGptImageTransparency, validateGptImageBackground } from './lib/gptImageCapabilities.js';
 import { validateGptImageAnimation } from './lib/gptImageAnimation.js';
 import {
   UpstreamError,
@@ -755,6 +755,8 @@ async function executeGeneration(body, idempotencyKey) {
   }
   const animationError = validateGptImageAnimation(body);
   if (animationError) return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: animationError } };
+  const backgroundError = validateGptImageBackground(body);
+  if (backgroundError) return { status: 400, body: { ok: false, code: 'INVALID_INPUT', message: backgroundError } };
 
   if (body.refImages !== undefined) {
     if (!Array.isArray(body.refImages)) {
@@ -1091,7 +1093,13 @@ app.use('/api/puzzle-layers', createPuzzleLayersRouter({ lookupImage: getGallery
 app.get('/api/image-capabilities', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   const model = resolveGptImageModel({ useServerPreset: true });
-  res.json({ ok: true, presetQualityOptions: gptImageQualityOptionsForModel(model), presetGifSupported: supportsGptImageGif(model) });
+  res.json({
+    ok: true,
+    presetQualityOptions: gptImageQualityOptionsForModel(model),
+    presetGifSupported: supportsGptImageGif(model),
+    presetMaxInputImages: maxInputImagesForGptModel(model),
+    presetTransparencySupported: supportsGptImageTransparency(model),
+  });
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, port: PORT }));

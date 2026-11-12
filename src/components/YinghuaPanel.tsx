@@ -15,6 +15,9 @@ import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from 
 import { SIX_FATE_EDIT_MAX_DIM, ZERO_FATE_INPUT_MAX_DIM } from '../lib/constants';
 import { isCurrentZeroFateDraft } from '../lib/zeroFate';
 import { prepareZeroFateInputs } from '../lib/zeroFateInputs';
+import { useCharacterSheetStore } from '../store/useCharacterSheetStore';
+import { buildYinghuaReferencePrompt, isCurrentCharacterResult } from '../lib/characterBreakdown';
+import { CharacterBreakdownReference } from './CharacterBreakdownReference';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { resolveYinghuaFaceImage } from '../lib/yinghuaFace';
@@ -27,7 +30,7 @@ import { GenerationErrorNotice } from './GenerationErrorNotice';
 import { YinghuaStagePreview } from './YinghuaStagePreview';
 import '../styles/yinghua-workflow.css';
 import type { GallerySaveInfo } from './GallerySaveButton';
-import type { GenSlot, InpaintTarget, UpstreamErrorDetails, YinghuaStyleId, ZeroFateMode } from '../types';
+import type { CharacterReferenceContext, GenSlot, InpaintTarget, UpstreamErrorDetails, YinghuaStyleId, ZeroFateMode } from '../types';
 
 // ---------------------------------------------------------------------------
 // One current stage keeps generation controls beside its preview.
@@ -54,6 +57,7 @@ const StyleCard = memo(function StyleCard({
   onResetDraftPrompt,
   onGoToDraft,
   onNextStep,
+  referenceContext,
 }: {
   style: { id: YinghuaStyleId; label: string; description: string };
   prompt: string;
@@ -76,12 +80,13 @@ const StyleCard = memo(function StyleCard({
   onResetDraftPrompt: () => void;
   onGoToDraft: () => void;
   onNextStep: () => void;
+  referenceContext: CharacterReferenceContext;
 }) {
-  const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]);
-  const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]);
+  const zeroReady = yinghuaSlots[1].status === 'done' && Boolean(yinghuaSlots[1].images[0]) && isCurrentCharacterResult(yinghuaSlots[1], referenceContext);
+  const threeReady = yinghuaSlots[2].status === 'done' && Boolean(yinghuaSlots[2].images[0]) && isCurrentCharacterResult(yinghuaSlots[2], referenceContext);
   // 六命阳是否存在必须只看正面图本身：阴面失败会把共享 slot 标为 error，
   // 但绝不能让已完成的阳图失去后续生成资格。
-  const frontReady = Boolean(yinghuaSlots[3].images[0]);
+  const frontReady = Boolean(yinghuaSlots[3].images[0]) && isCurrentCharacterResult(yinghuaSlots[3], referenceContext);
   // 链路：零命→三命→六命
   const needsBase = style.id === 2
     ? !zeroReady
@@ -212,6 +217,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const style3Face = useYinghuaStore((s) => s.style3Face);
   const setStyle3Face = useYinghuaStore((s) => s.setStyle3Face);
   const uploadedImage = useUploadStore((s) => s.uploadedImage);
+  const breakdownImage = useCharacterSheetStore((s) => uploadedImage ? s.sheets[uploadedImage]?.selectedImage ?? null : null);
   const palette = useUploadStore((s) => s.palette);
   const provider = useProviderStore((s) => s.provider);
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
@@ -228,12 +234,16 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     characterDynamic: yinghuaCharacterDynamic, microDynamic: yinghuaMicroDynamic,
     characterTraits: yinghuaCharacterTraits, lang: yinghuaLang,
   }), [characterName, palette, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang]);
-  const computedDraftPrompt = useMemo(() => buildZeroFateDraftPrompt(zeroPromptOptions), [zeroPromptOptions]);
+  const computedDraftPrompt = useMemo(() => {
+    const prompt = buildZeroFateDraftPrompt(zeroPromptOptions);
+    return buildYinghuaReferencePrompt(prompt, { stage: 'draft', name: characterName, lang: yinghuaLang, hasBreakdown: Boolean(breakdownImage) });
+  }, [zeroPromptOptions, breakdownImage, yinghuaLang, characterName]);
   useEffect(() => {
     useYinghuaStore.getState().setZeroFateDraftPrompt(computedDraftPrompt);
   }, [computedDraftPrompt]);
-  const draftContext = { sourceImage: uploadedImage ?? '', addonImage: yinghuaAddonImage, prompt: zeroFateDraftPrompt };
+  const draftContext = { sourceImage: uploadedImage ?? '', addonImage: yinghuaAddonImage, breakdownImage, prompt: zeroFateDraftPrompt };
   const draftReady = isCurrentZeroFateDraft(zeroFateDraft, draftContext);
+  const referenceContext = { sourceImage: uploadedImage ?? '', breakdownImage, characterName: characterName.trim() };
 
   // Compute prompts once from all inputs, then write to store in one effect.
   const computedPrompts = useMemo(() => {
@@ -264,10 +274,13 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           yinghuaCharacterTraits, yinghuaLang, style.id,
         );
       }
+      const stage = style.id === 1 ? (zeroFateMode === 'two-stage' ? 'zero-render' : 'zero-direct')
+        : style.id === 2 ? 'three' : style3Face === 'front' ? 'six-front' : 'six-back';
+      prompts[style.id] = buildYinghuaReferencePrompt(prompts[style.id], { stage, name: characterName, lang: yinghuaLang, hasBreakdown: Boolean(breakdownImage) });
     }
     return prompts;
   }, [characterName, palette, yinghuaShowText, yinghuaCharacterDynamic,
-      yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang, style3Face, zeroFateMode, zeroPromptOptions]);
+      yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang, style3Face, zeroFateMode, zeroPromptOptions, breakdownImage]);
 
   useEffect(() => {
     for (const [id, prompt] of Object.entries(computedPrompts)) {
@@ -326,7 +339,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       }
     }
     // 六命反面需要先有正面
-    if (id === 3 && style3Face === 'back' && !yinghuaSlots[3].images[0]) {
+    if (id === 3 && style3Face === 'back' && (!yinghuaSlots[3].images[0] || !isCurrentCharacterResult(yinghuaSlots[3], referenceContext))) {
       showError('请先生成六命阳，再生成六命阴');
       return;
     }
@@ -347,7 +360,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     const identityReference = sourceImage;
     const selectedProvider = provider;
     const selectedDraftImage = zeroFateDraft.images[0];
-    const selectedDraftContext = { sourceImage, addonImage, prompt: zeroFateDraftPrompt };
+    const selectedDraftContext = { sourceImage, addonImage, breakdownImage, prompt: zeroFateDraftPrompt };
 
     const setGenerationError = (message: string, upstreamError?: UpstreamErrorDetails) => {
       if (phase === 'draft') setZeroFateDraft({ status: 'error', error: message, upstreamError });
@@ -359,7 +372,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     try {
       if (phase) {
         const inputs = await prepareZeroFateInputs({
-          phase, sourceImage, addonImage, draftImage: selectedDraftImage,
+          phase, sourceImage, addonImage, breakdownImage, draftImage: selectedDraftImage,
           provider: selectedProvider, model: creds[selectedProvider].model,
         });
         imageOverride = inputs.imageOverride;
@@ -368,7 +381,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         const styleReferences = await loadStyleReferenceImages(id);
         const selectedModel = creds[selectedProvider].model;
         if (supportsMultipleImageInputs(selectedProvider, selectedModel)) {
-          const referenceDataUrls = [addonImage, ...styleReferences].filter((url): url is string => Boolean(url));
+          const referenceDataUrls = [breakdownImage, addonImage, ...styleReferences].filter((url): url is string => Boolean(url));
           const maxReferences = maxReferenceImagesForModel(selectedProvider, selectedModel);
           if (referenceDataUrls.length > maxReferences) {
             throw new Error(`当前模型最多支持 ${maxReferences} 张额外参考图`);
@@ -380,7 +393,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           });
         } else {
           const styleSheet = await stitchImages(styleReferences);
-          imageOverride = await stitchImages([sourceImage, addonImage, styleSheet]);
+          imageOverride = await stitchImages([sourceImage, breakdownImage, addonImage, styleSheet]);
         }
       } else {
         const baseImg = id === 3
@@ -391,6 +404,10 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
             ? '请先生成三命，六命以三命成图为底图'
             : '请先生成零命，三命需要零命结果锁定姿势与文字位置');
           return;
+        }
+        const baseSlot = id === 3 ? sourceSlots[selectedFace === 'back' ? 3 : 2] : sourceSlots[1];
+        if (!isCurrentCharacterResult(baseSlot, referenceContext)) {
+          throw new Error('角色三视图、拆解图或名字已更新，请先重新生成前一阶段');
         }
         const threeView = identityReference;
         if (id === 3 && selectedFace === 'front' && !threeView) {
@@ -406,7 +423,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         // Keep semantic priority stable for GPT edits: base composition first,
         // canonical color/identity three-view second, front anatomy anchor
         // third when available, optional prop last.
-        const references = [threeView, structureAnchor, addonImage]
+        const references = [threeView, structureAnchor, breakdownImage, addonImage]
           .filter((url): url is string => Boolean(url))
           .filter((url, index, all) => all.indexOf(url) === index);
         const selectedModel = creds[selectedProvider].model;
@@ -438,6 +455,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           }
           if (structureAnchor) {
             thumbs.push({ url: structureAnchor, size: 0.18, position: 'bottom-right' });
+          }
+          if (breakdownImage) {
+            thumbs.push({ url: breakdownImage, size: 0.25, position: 'bottom-right' });
           }
           if (addonImage && addonImage !== threeView && addonImage !== structureAnchor) {
             thumbs.push({ url: addonImage, size: 0.18, position: 'bottom-left' });
@@ -490,11 +510,23 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       });
 
       if (!images[0]) throw new Error('生成未返回图片，请重试');
+      const currentSource = useUploadStore.getState().uploadedImage ?? '';
+      const currentReferences = {
+        sourceImage: currentSource,
+        breakdownImage: useCharacterSheetStore.getState().sheets[currentSource]?.selectedImage ?? null,
+        characterName: useIdentityStore.getState().characterName.trim(),
+      };
+      if (!phase && !isCurrentCharacterResult({ status: 'done', images, characterContext: referenceContext }, currentReferences)) {
+        const savedImages = id === 3 && selectedFace === 'back' ? [sourceSlots[3].images[0], images[0]] : images;
+        setYinghuaSlot(id, { images: savedImages, characterContext: referenceContext });
+        throw new Error('生成期间角色三视图、拆解图或名字已更新，结果已保留，请重新生成当前角色');
+      }
       if (phase) {
         const current = useYinghuaStore.getState();
         const contextNow = {
           sourceImage: useUploadStore.getState().uploadedImage ?? '',
           addonImage: current.yinghuaAddonImage,
+          breakdownImage: useCharacterSheetStore.getState().sheets[useUploadStore.getState().uploadedImage ?? '']?.selectedImage ?? null,
           prompt: current.zeroFateDraftPrompt,
         };
         const draftToCheck = phase === 'draft'
@@ -515,16 +547,17 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
 
       // 六命：正面存 images[0]，反面存 images[1]，不互相覆盖
       if (id === 3) {
-        const existing = useYinghuaStore.getState().yinghuaSlots[3].images;
+        const existing = selectedFace === 'front' ? [] : useYinghuaStore.getState().yinghuaSlots[3].images;
         const newImages = [...existing];
         newImages[selectedFace === 'front' ? 0 : 1] = images[0];
-        setYinghuaSlot(id, { status: 'done', images: newImages });
+        setYinghuaSlot(id, { status: 'done', images: newImages, characterContext: referenceContext });
       } else if (id === 1) {
-        useYinghuaStore.getState().completeZeroFate(images);
+        useYinghuaStore.getState().completeZeroFate(images, referenceContext);
         setViewerClipRegions(null);
         setFaceBounds(null);
       } else {
-        setYinghuaSlot(id, { status: 'done', images });
+        setYinghuaSlot(id, { status: 'done', images, characterContext: referenceContext });
+        setYinghuaSlot(3, { status: 'idle', images: [], error: undefined, upstreamError: undefined, characterContext: undefined });
       }
       await Promise.resolve();
 
@@ -573,6 +606,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       <details className="yinghua-settings">
         <summary>动作与角色设置 <span>动作、表情、角色特点与附加参考</span><b aria-hidden="true">＋</b></summary>
         <div className="yinghua-settings-grid">
+          <CharacterBreakdownReference compact />
           <label>角色动态<input type="text" aria-label="角色动态" value={yinghuaCharacterDynamic} onChange={(e) => setYinghuaCharacterDynamic(e.target.value)} className="glass-input" /></label>
           <label>微动态细节<input type="text" aria-label="微动态细节" value={yinghuaMicroDynamic} onChange={(e) => setYinghuaMicroDynamic(e.target.value)} className="glass-input" /></label>
           <label>角色特点<input type="text" aria-label="角色特点" value={yinghuaCharacterTraits} onChange={(e) => setYinghuaCharacterTraits(e.target.value)} placeholder="性格、特性等（可选）" className="glass-input" /></label>
@@ -603,7 +637,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       <p className="yinghua-mode-notice" role="note">两阶段生成可能收到上游内容审核拒绝。若需要一步生成零命剪影，也可主动选择“直接生成”；两种模式均须通过内容审核。</p>
       <nav className="yinghua-step-navigation" aria-label="影画制作步骤">
         {steps.map((step, index) => {
-          const done = step.id === 'draft' ? draftReady : Boolean(yinghuaSlots[step.id].images[0]);
+          const done = step.id === 'draft' ? draftReady : Boolean(yinghuaSlots[step.id].images[0]) && isCurrentCharacterResult(yinghuaSlots[step.id], referenceContext);
           const loading = activeGeneration && (step.id === 'draft' ? activeGeneration.phase === 'draft' : activeGeneration.id === step.id && activeGeneration.phase !== 'draft');
           return <button type="button" key={step.id} aria-current={activeStep === step.id ? 'step' : undefined} aria-controls="yinghua-current-stage" onClick={() => setActiveStep(step.id)}>
             <span className="yinghua-step-number">{String(index + 1).padStart(2, '0')}</span>
@@ -619,11 +653,12 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           yinghuaSlots={yinghuaSlots} activeGeneration={activeGeneration} style3Face={style3Face}
           onRun={run} onPromptChange={handlePromptChange} onInpaintClick={handleInpaintClick} onFlipStyle3={() => setStyle3Face(style3Face === 'front' ? 'back' : 'front')}
           zeroFateMode={zeroFateMode} draftReady={draftReady} showDraft={activeStep === 'draft'}
+          referenceContext={referenceContext}
           onGenerateDraft={() => void run(1, true)} onConfirmDraft={() => { setActiveStep(1); void run(1); }}
           onResetDraftPrompt={() => useYinghuaStore.getState().setZeroFateDraftPrompt(computedDraftPrompt)}
           onGoToDraft={() => setActiveStep('draft')} onNextStep={() => setActiveStep(selectedStyle.id === 1 ? 2 : 3)} />
       </div>
-      <p className="yinghua-workflow-footnote">新零命生成后，需重新生成三命和六命，确保查看器中的图层对齐。</p>
+      <p className="yinghua-workflow-footnote">切换三视图、拆解图或角色名字后，需从当前角色重新生成。新零命会清空后续图层，新三命会清空六命，新六命阳会清空旧阴面，确保图层对应。</p>
     </section>
   );
 });

@@ -26,6 +26,7 @@ export interface GenRequest {
   /** Generation detail level, independent of dimensions and input-image compression. */
   quality?: GptImageQuality;
   output_format?: 'png' | 'jpeg' | 'webp' | 'gif';
+  background?: 'transparent' | 'opaque' | 'auto';
   frame_count?: number;
   frame_duration_ms?: number;
   stream?: false;
@@ -185,6 +186,7 @@ export type ZeroFateMode = 'two-stage' | 'direct';
 export interface ZeroFateDraftContext {
   sourceImage: string;
   addonImage: string | null;
+  breakdownImage?: string | null;
   prompt: string;
 }
 
@@ -255,11 +257,18 @@ export interface LayerPart {
 
 export type GenStatus = 'idle' | 'loading' | 'done' | 'error';
 
+export interface CharacterReferenceContext {
+  sourceImage: string;
+  breakdownImage: string | null;
+  characterName: string;
+}
+
 export interface GenSlot {
   status: GenStatus;
   images: string[];
   error?: string;
   upstreamError?: UpstreamErrorDetails;
+  characterContext?: CharacterReferenceContext;
 }
 
 /** Canvas API exposed via window.__inpaintCanvas for InpaintWorkspace. */

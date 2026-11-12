@@ -53,9 +53,13 @@ for (const lang of ['zh', 'en']) {
 test('an old draft cannot continue after changing character, prop, or action instructions', () => {
   const draft = { status: 'done', images: [image('draft')], context };
   assert.equal(isCurrentZeroFateDraft(draft, context), true);
-  for (const changed of [{ sourceImage: image('other') }, { addonImage: image('prop') }, { prompt: '另一个动作' }]) {
+  for (const changed of [{ sourceImage: image('other') }, { addonImage: image('prop') }, { breakdownImage: image('breakdown') }, { prompt: '另一个动作' }]) {
     assert.equal(isCurrentZeroFateDraft(draft, { ...context, ...changed }), false);
   }
+  assert.equal(isCurrentZeroFateDraft(draft, { ...context, breakdownImage: null }), true, 'older drafts without a breakdown remain valid when none is selected');
+  const withBreakdown = { ...draft, context: { ...context, breakdownImage: image('breakdown') } };
+  assert.equal(isCurrentZeroFateDraft(withBreakdown, { ...context, breakdownImage: image('other-breakdown') }), false);
+  assert.equal(isCurrentZeroFateDraft(withBreakdown, context), false, 'removing a breakdown also requires a new draft');
   assert.equal(isCurrentZeroFateDraft({ ...draft, images: [] }, context), false);
   assert.equal(isCurrentZeroFateDraft({ ...draft, status: 'error' }, context), true, 'a failed retry still permits using the last matching draft');
 });

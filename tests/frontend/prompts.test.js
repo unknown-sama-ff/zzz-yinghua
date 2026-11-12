@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadFrontend } from './loadFrontend.js';
 
-const { YINGHUA_STYLES, fillName, splitName, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
+const { YINGHUA_STYLES, fillName, splitName, buildZeroFateDraftPrompt, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
 const variants = [
   [1, '零命', 'promptTemplate', 'promptTemplateEn'],
   [2, '三命', 'promptTemplate', 'promptTemplateEn'],
@@ -39,12 +39,47 @@ for (const [id, label, zh, en] of variants) {
   }
 }
 
-test('zero-fate original Chinese view, pose, crop, occupancy and alignment requirements are unchanged', () => {
+test('zero-fate retains the original composition defaults when action settings are empty', () => {
   const original = '人物构图须有强烈设计感与视觉冲击力——优先采用大仰视、大俯视、极端斜侧等非常规视角，严禁正面平视、证件照式大头、对称站像。角色动作必须是低重心姿态：侧躺、蜷缩、趴卧、瘫坐、倚靠等，身体大面积接触支撑面，避免站立式pose。整体为卸防感的非战斗姿态，放松、慵懒、毫无戒备。同时融入微动态细节——打哈欠、wink、半睁眼、比耶、拉领带、抱玩偶等，制造"时间切片"般的生动瞬间感。允许头顶、肩部、手臂、发尾大幅出框，人物大面积裁切，肢体延展至画面边缘，形成破框而出的开放感。构图偏左或偏右，避免居中；角色主体和文字共占画面约80%~85%；动作设计具有艺术感、展现角色个性特点；画风与第1张主图保持角色设计一致。';
-  assert.ok(prompt(1, 'promptTemplate').includes(original));
+  assert.ok(fillName(YINGHUA_STYLES[0].promptTemplate, 'HAMAN KARN').includes(original));
   assert.match(prompt(1, 'promptTemplateEn', 'en'), /prioritize dramatic low-angle, high-angle, and extreme diagonal perspectives/);
   assert.match(prompt(1, 'promptTemplateEn', 'en'), /Crop aggressively with limbs extending to frame borders/);
 });
+
+for (const lang of ['zh', 'en']) {
+  for (const mode of ['draft', 'direct']) {
+    test(`zero-fate ${mode}/${lang} replaces pose and micro-action defaults independently in the composition`, () => {
+      const pose = lang === 'zh' ? '单脚站立，另一腿向后抬起' : 'standing on one foot with the other leg raised behind';
+      const micro = lang === 'zh' ? '闭眼微笑，右手挥手' : 'smiling with closed eyes and waving the right hand';
+      for (const [characterDynamic, microDynamic] of [[pose, micro], [pose, ''], ['', micro], ['  ', '  ']]) {
+        const text = mode === 'draft'
+          ? buildZeroFateDraftPrompt({ name: 'HERO', showText: true, characterDynamic, microDynamic, characterTraits: '沉着', lang })
+          : fillName(YINGHUA_STYLES[0][lang === 'zh' ? 'promptTemplate' : 'promptTemplateEn'],
+            'HERO', undefined, true, characterDynamic, microDynamic, '沉着', lang, 1);
+        if (characterDynamic.trim()) {
+          assert.ok(text.includes(lang === 'zh' ? `角色动作：${pose}。` : `The character's pose: ${pose}.`));
+          assert.equal(text.split(pose).length - 1, 1);
+          assert.doesNotMatch(text, /低重心姿态|避免站立式pose|low-center-of-gravity posture|Avoid standing poses/);
+        } else {
+          assert.match(text, lang === 'zh' ? /低重心姿态：侧躺、蜷缩、趴卧、瘫坐、倚靠/ : /low-center-of-gravity posture: lying on side, curled up/);
+        }
+        if (microDynamic.trim()) {
+          assert.ok(text.includes(lang === 'zh' ? `同时融入微动态细节——${micro}，制造` : `Incorporate micro-dynamic details: ${micro} — creating`));
+          assert.equal(text.split(micro).length - 1, 1);
+          assert.doesNotMatch(text, /打哈欠|wink|抱玩偶|yawning|hugging a plushie/);
+        } else {
+          assert.match(text, lang === 'zh' ? /打哈欠、wink、半睁眼、比耶、拉领带、抱玩偶等/ : /yawning, winking, half-closed eyes, peace sign, pulling a tie, hugging a plushie/);
+        }
+        assert.match(text, lang === 'zh' ? /大仰视、大俯视、极端斜侧/ : /dramatic low-angle, high-angle, and extreme diagonal/);
+        assert.match(text, lang === 'zh' ? /允许头顶、肩部、手臂、发尾大幅出框/ : /Crop aggressively with limbs extending to frame borders/);
+        assert.match(text, lang === 'zh' ? /构图偏左或偏右/ : /Offset composition left or right/);
+        assert.match(text, /80%[~-]85%/);
+        assert.match(text, /沉着/);
+        assert.doesNotMatch(text, /\{[A-Z_]+\}/);
+      }
+    });
+  }
+}
 
 test('foreground typography uses directional quotation marks at the lower corners', () => {
   for (const [id, , zhKey, enKey] of variants) {

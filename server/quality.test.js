@@ -163,7 +163,13 @@ test('capability endpoint reveals only options for the actual preset model and d
     const response = await fetch(base + '/api/image-capabilities');
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
-    assert.deepEqual(await response.json(), { ok: true, presetQualityOptions: expected, presetGifSupported: Boolean(model?.startsWith('gpt-image-2.6')) });
+    assert.deepEqual(await response.json(), {
+      ok: true,
+      presetQualityOptions: expected,
+      presetGifSupported: Boolean(model?.startsWith('gpt-image-2.6')),
+      presetMaxInputImages: 16,
+      presetTransparencySupported: model !== 'gpt-image-2.6',
+    });
   }
 });
 

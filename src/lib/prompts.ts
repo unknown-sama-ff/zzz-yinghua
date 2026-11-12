@@ -29,10 +29,14 @@ export const ZERO_FATE_ANATOMY_PRIORITY_PREFIX_EN = '[ZERO-FATE ANATOMY FIRST �
 export const SIX_FATE_ANATOMY_PRIORITY_PREFIX = '【六命结构优先·镜头不变】严格锁定底图视角、机位、透视、裁切、构图、脸位、主体位置、文字位置大小和原动作。保留原有近大远小、透视缩短及前后遮挡，不得靠改变这些镜头与动作参数来规避畸形。按原角色设定保持身体部件数量、连接与可见轮廓，不把被遮挡的部件重复画出，不把衣褶误画成关节。保留原裁切和遮挡，画外/遮挡部位不强行补全入画；服装调整只揭示原有身体表面，不能增生肉块或改变骨架。禁止相对原设定的额外/缺失部件、融合、穿插、断裂、镜像错位、异常弯折和与原透视不符的局部拉伸。仅修正局部结构和微表情，不重构动作。' + '\n' + LEG_STRUCTURE_ZH;
 export const SIX_FATE_ANATOMY_PRIORITY_PREFIX_EN = '[SIX-FATE ANATOMY FIRST — SAME CAMERA] Lock the base view, camera position, perspective, crop, composition, face/subject locations, typography placement/size and original action. Preserve its near/far scale, foreshortening and front/back occlusion; never change these viewing/action parameters to avoid defects. Preserve canonical body-part counts, connections and visible contours; never duplicate occluded parts or mistake garment folds for joints. Preserve cropping and occlusion; do not force hidden/off-frame parts into view. Costume changes reveal existing body surfaces, never extra flesh masses or a new skeleton. No extra/missing parts relative to the original design, fusion, interpenetration, broken connections, mirrored misplacement, abnormal bending or stretching inconsistent with the original perspective. Correct local anatomy and micro-expression only; never redesign actions.' + '\n' + LEG_STRUCTURE_EN;
 
-// These view/pose/crop instructions are retained verbatim from the original
-// zero-fate prompt: later tiers must inherit them, never replace them.
-const ZERO_COMPOSITION_ZH = '人物构图须有强烈设计感与视觉冲击力——优先采用大仰视、大俯视、极端斜侧等非常规视角，严禁正面平视、证件照式大头、对称站像。角色动作必须是低重心姿态：侧躺、蜷缩、趴卧、瘫坐、倚靠等，身体大面积接触支撑面，避免站立式pose。整体为卸防感的非战斗姿态，放松、慵懒、毫无戒备。同时融入微动态细节——打哈欠、wink、半睁眼、比耶、拉领带、抱玩偶等，制造"时间切片"般的生动瞬间感。允许头顶、肩部、手臂、发尾大幅出框，人物大面积裁切，肢体延展至画面边缘，形成破框而出的开放感。构图偏左或偏右，避免居中；角色主体和文字共占画面约80%~85%；动作设计具有艺术感、展现角色个性特点；画风与第1张主图保持角色设计一致。';
-const ZERO_COMPOSITION_EN = 'Composition must have strong design appeal and visual impact — prioritize dramatic low-angle, high-angle, and extreme diagonal perspectives. Strictly forbid front-facing, ID-photo-style headshots, or symmetrical standing poses. The character\'s pose must be a low-center-of-gravity posture: lying on side, curled up, lying prone, slumped sitting, leaning — body making large contact with a support surface. Avoid standing poses. The overall mood is defenseless and non-combat — relaxed, languid, completely unguarded. Incorporate micro-dynamic details: yawning, winking, half-closed eyes, peace sign, pulling a tie, hugging a plushie — creating a vivid frozen-moment feel. Allow head, shoulders, arms, and hair to dramatically break beyond the edges. Crop aggressively with limbs extending to frame borders, creating a sense of breaking out of the image. Offset composition left or right, avoid centering. Character and text together occupy approximately 80%-85% of the frame.';
+// Keep camera/crop requirements while replacing pose and micro-action defaults
+// in place, so custom settings do not compete with hard-coded examples.
+const ZERO_POSE_ZH = '角色动作必须是低重心姿态：侧躺、蜷缩、趴卧、瘫坐、倚靠等，身体大面积接触支撑面，避免站立式pose。';
+const ZERO_POSE_EN = 'The character\'s pose must be a low-center-of-gravity posture: lying on side, curled up, lying prone, slumped sitting, leaning — body making large contact with a support surface. Avoid standing poses.';
+const ZERO_MICRO_ZH = '打哈欠、wink、半睁眼、比耶、拉领带、抱玩偶等';
+const ZERO_MICRO_EN = 'yawning, winking, half-closed eyes, peace sign, pulling a tie, hugging a plushie';
+const ZERO_COMPOSITION_ZH = '人物构图须有强烈设计感与视觉冲击力——优先采用大仰视、大俯视、极端斜侧等非常规视角，严禁正面平视、证件照式大头、对称站像。{POSE_REQUIREMENT}整体为卸防感的非战斗姿态，放松、慵懒、毫无戒备。同时融入微动态细节——{MICRO_DYNAMIC}，制造"时间切片"般的生动瞬间感。允许头顶、肩部、手臂、发尾大幅出框，人物大面积裁切，肢体延展至画面边缘，形成破框而出的开放感。构图偏左或偏右，避免居中；角色主体和文字共占画面约80%~85%；动作设计具有艺术感、展现角色个性特点；画风与第1张主图保持角色设计一致。';
+const ZERO_COMPOSITION_EN = 'Composition must have strong design appeal and visual impact — prioritize dramatic low-angle, high-angle, and extreme diagonal perspectives. Strictly forbid front-facing, ID-photo-style headshots, or symmetrical standing poses. {POSE_REQUIREMENT} The overall mood is defenseless and non-combat — relaxed, languid, completely unguarded. Incorporate micro-dynamic details: {MICRO_DYNAMIC} — creating a vivid frozen-moment feel. Allow head, shoulders, arms, and hair to dramatically break beyond the edges. Crop aggressively with limbs extending to frame borders, creating a sense of breaking out of the image. Offset composition left or right, avoid centering. Character and text together occupy approximately 80%-85% of the frame.';
 
 const EDIT_REFERENCES_ZH = '【编辑参考】第1张为已生成底图，仅锁定姿态、镜头、透视、裁切、构图与文字；第2张为模块02全彩三视图（通常来自模块01），是身份、原始肤色/发色、服装配色/花纹/结构与身体比例的唯一最高权威，不按灰阶底图或记忆猜配色。三视图核对固有形体比例，不把它的站姿、机位或关节二维位置硬套入底图透视。其后的正面结构锚点（若有）只核对结构，禁止照搬它的正面姿势；附加元素（若有）只作武器/道具/装饰参考，不能改变身份和配色。参考可独立输入或作为缩略参考嵌入，最终均不得出现在成图。';
 const EDIT_REFERENCES_EN = '[EDIT REFERENCES] Input 1 is the generated base, locking pose, camera, perspective, crop, composition and typography only. Input 2 is the module-02 canonical full-color three-view (usually from module 01), the sole highest authority for identity, original skin/hair colors, garment palette/patterns/structure and body proportions; never guess colors from grayscale or memory. The three-view checks intrinsic proportions; never transplant its standing pose, camera or 2D joint coordinates into the base perspective. Any following front structure anchor checks anatomy only: never copy its frontal pose. Optional addon references are props/weapons/decorations only and must not change identity or palette. References may be separate inputs or embedded reference thumbnails; none may appear in the result.';
@@ -149,14 +153,14 @@ export const YINGHUA_STYLES: YinghuaStyle[] = [
       ZERO_COMPOSITION_ZH,
       '{ZERO_TEXT}',
       ZERO_RENDER_ZH,
-      '角色动态：{ACTION_POSE}。{CHARACTER_TRAITS}',
+      '{CHARACTER_TRAITS}',
     ),
     promptTemplateEn: join(
       'ZZZ Mindscape Cinema Monochrome Dark Silhouette Poster. Input 1 locks identity/costume; optional addon is prop reference only; the final three style samples supply composition, character treatment, color relationships and corner typography only. Never borrow their characters, garments, props, names or background palettes.',
       ZERO_COMPOSITION_EN,
       '{ZERO_TEXT}',
       ZERO_RENDER_EN,
-      'Character dynamic: {ACTION_POSE}. {CHARACTER_TRAITS}',
+      '{CHARACTER_TRAITS}',
     ),
   },
   {
@@ -217,9 +221,13 @@ export function fillName(
     ? '[TYPOGRAPHY OFF] No text, lettering, name, watermark or label; preserve the remaining composition and fully render the character/background where base text used to be.'
     : '【文字关闭】不绘制任何文字、字母、名字、水印或标签；其余构图不变，底图原文字区域恢复完整角色/背景。';
 
-  // Expand the one typography section before substituting names/colors. Turning
-  // text off removes its positive instructions rather than appending a conflict.
+  // Resolve pose/micro-action and typography sections before names/colors.
+  // Text off removes positive instructions rather than appending a conflict.
   let filled = template
+    .replaceAll('{POSE_REQUIREMENT}', () => characterDynamic?.trim()
+      ? (english ? `The character's pose: ${characterDynamic.trim()}.` : `角色动作：${characterDynamic.trim()}。`)
+      : (english ? ZERO_POSE_EN : ZERO_POSE_ZH))
+    .replaceAll('{MICRO_DYNAMIC}', () => microDynamic?.trim() || (english ? ZERO_MICRO_EN : ZERO_MICRO_ZH))
     .replaceAll('{ZERO_TEXT}', showText === false ? noText : english ? ZERO_TEXT_EN : ZERO_TEXT_ZH)
     .replaceAll('{THREE_TEXT}', showText === false ? noText : english ? THREE_TEXT_EN : THREE_TEXT_ZH)
     .replaceAll('{SIX_TEXT}', showText === false ? noText : english ? SIX_TEXT_EN : SIX_TEXT_ZH)
@@ -277,7 +285,7 @@ export function buildZeroFateDraftPrompt(options: ZeroFatePromptOptions): string
     LEG_STRUCTURE_EN,
     LIGHTING_EN,
     '{ZERO_TEXT}',
-    'Character dynamic: {ACTION_POSE}. {CHARACTER_TRAITS}',
+    '{CHARACTER_TRAITS}',
   ) : join(
     '【动作底稿·第一阶段】按第1张原角色图生成正常明暗的全彩游戏角色动作设定，可选参考只作道具。保持原衣装完整、全部衣物层次、原有覆盖范围、固有配色与身体比例；动作中衣物穿着稳固。表情自然，画面重点为整体动作与服装轮廓。',
     ZERO_COMPOSITION_ZH
@@ -287,10 +295,10 @@ export function buildZeroFateDraftPrompt(options: ZeroFatePromptOptions): string
     LEG_STRUCTURE_ZH,
     LIGHTING_ZH,
     '{ZERO_TEXT}',
-    '角色动态：{ACTION_POSE}。{CHARACTER_TRAITS}',
+    '{CHARACTER_TRAITS}',
   );
   return fillName(template, options.name, options.palette, false,
-    options.characterDynamic || (en ? 'a stable low-center-of-gravity game-character pose' : '自然稳定的低重心角色动作'),
+    options.characterDynamic,
     options.microDynamic, options.characterTraits, options.lang);
 }
 

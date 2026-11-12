@@ -14,6 +14,9 @@ import { useBuildRequest } from './useBuildRequest';
 import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
 import { ZoomButton } from './ImageLightbox';
+import { useIdentityStore } from '../store/useIdentityStore';
+import { useCharacterSheetStore } from '../store/useCharacterSheetStore';
+import { buildNamedCharacterPrompt } from '../lib/characterBreakdown';
 
 /** Image upload with drag/drop, validation, preview and palette extraction. */
 export const Uploader = memo(function Uploader() {
@@ -31,6 +34,7 @@ export const Uploader = memo(function Uploader() {
   const costumeChangeRefImage = useWorkbenchStore((s) => s.costumeChangeRefImage);
   const setCostumeChangeRefImage = useWorkbenchStore((s) => s.setCostumeChangeRefImage);
   const provider = useProviderStore((s) => s.provider);
+  const characterName = useIdentityStore((s) => s.characterName);
   const showError = useToast((s) => s.show);
   const buildRequest = useBuildRequest();
   const [dragging, setDragging] = useState(false);
@@ -281,11 +285,18 @@ export const Uploader = memo(function Uploader() {
 
             <button
               onClick={async () => {
+                if (!characterName.trim()) {
+                  showError('请先填写角色名字');
+                  document.getElementById('character-name')?.focus();
+                  return;
+                }
                 if (!uploadedImage) {
                   showError('请先上传角色立绘');
                   return;
                 }
                 setCostumeChangeSlot({ status: 'loading', error: undefined, images: [] });
+                const name = characterName.trim();
+                const prompt = buildNamedCharacterPrompt(costumeChangePrompt, name);
                 let imageOverride: string | undefined;
                 if (costumeChangeRefImage) {
                   try {
@@ -296,13 +307,14 @@ export const Uploader = memo(function Uploader() {
                     return;
                   }
                 }
-                generate(buildRequest(costumeChangePrompt, {
+                generate(buildRequest(prompt, {
                   imageOverride,
                   ...(provider === 'seedream' ? { size: '2848x1600' } : { size: YINGHUA_SIZE })
                 }))
                   .then((images) => {
                     setCostumeChangeSlot({ status: 'done', images });
                     addCostumeChangeImages(images);
+                    useCharacterSheetStore.getState().registerSources(images, name);
                   })
                   .catch((err) => {
                     const msg = err instanceof ApiError ? err.message : '生成失败';
@@ -310,7 +322,7 @@ export const Uploader = memo(function Uploader() {
                     showError(msg);
                   });
               }}
-              disabled={!uploadedImage || costumeChangeSlot.status === 'loading'}
+              disabled={!characterName.trim() || !uploadedImage || costumeChangeSlot.status === 'loading'}
               className="glass-btn w-full py-2 font-mono text-sm uppercase tracking-widest text-zzz-text disabled:opacity-40"
             >
               {costumeChangeSlot.status === 'loading' ? '生成中…' : '生成换装三视图'}

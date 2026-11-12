@@ -31,6 +31,7 @@ export function HomePage() {
           <button type="button" onClick={openCreate} className="studio-action studio-action-primary">自由创作 <span aria-hidden="true">↗</span></button>
           <a href={ROUTE_HASHES.assets} className="studio-action studio-action-secondary">进入角色工坊 <span aria-hidden="true">→</span></a>
         </div>
+        <a className="home-meme-link" href={ROUTE_HASHES.memes}><strong>给角色，做一套表情包。</strong><span>参考画风 / 模仿梗图 / 一键拆图 ↗</span></a>
         <a className="hero-theme" href={ROUTE_HASHES.assets}>
           <span className="theme-swatches" aria-hidden="true"><i /><i /><i /></span>
           <span>{palette ? '已跟随角色取色' : '上传角色，让工坊染上你的颜色'} <span aria-hidden="true">↗</span></span>

@@ -15,6 +15,8 @@ import { ResultView } from './ResultView';
 import { SectionHeader } from './SectionHeader';
 import { ZoomButton } from './ImageLightbox';
 import { memo } from 'react';
+import { buildNamedCharacterPrompt } from '../lib/characterBreakdown';
+import { useCharacterSheetStore } from '../store/useCharacterSheetStore';
 
 type ViewKey = 'front' | 'side' | 'back';
 
@@ -104,24 +106,32 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
   );
 
   const run = async () => {
+    if (!characterName.trim()) {
+      showError('请先填写角色名字');
+      document.getElementById('character-name')?.focus();
+      return;
+    }
     if (!threeViewUploads.front) {
       showError('请至少上传正面图片');
       return;
     }
     setThreeViewSlot({ status: 'loading', error: undefined, images: [] });
     try {
+      const name = characterName.trim();
+      const prompt = buildNamedCharacterPrompt(threeViewPrompt, name);
       const stitched = await stitchImages([
         threeViewUploads.front,
         threeViewUploads.side,
         threeViewUploads.back,
       ]);
       const images = await generate(
-        buildRequest(threeViewPrompt, {
+        buildRequest(prompt, {
           imageOverride: stitched,
           ...(provider === 'seedream' ? { size: '2848x1600' } : { size: YINGHUA_SIZE })
         }),
       );
       setThreeViewSlot({ status: 'done', images });
+      useCharacterSheetStore.getState().registerSources(images, name);
       addCostumeChangeImages(images);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : '生成失败';
@@ -141,7 +151,7 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
 
       <p className="mb-4 font-mono text-xs text-zzz-text/55">
         上传正面（必填）+ 侧面/背面（可选），自动拼合后发给 AI 生成完整三视图。（建议上传 PNG 透明背景图；只上传正面可能效果不佳）
-        生成完成后可将结果设为主立绘用于影画生成。
+        先填写角色名字，生成完成后选择“用作主立绘”，再生成对应的角色拆解图。
       </p>
 
       <div className="mb-4 grid grid-cols-3 gap-3">
@@ -165,11 +175,12 @@ export const ThreeViewPanel = memo(function ThreeViewPanel() {
 
       <button
         onClick={() => void run()}
-        disabled={!threeViewUploads.front || threeViewSlot.status === 'loading'}
+        disabled={!characterName.trim() || !threeViewUploads.front || threeViewSlot.status === 'loading'}
         className="glass-btn w-full py-2.5 font-mono text-sm uppercase tracking-widest text-zzz-text disabled:opacity-40"
       >
         {threeViewSlot.status === 'loading' ? '生成中…' : '生成三视图'}
       </button>
+      {!characterName.trim() && <p className="mt-2 text-xs text-zzz-text/60">请先在上方填写角色名字，再生成三视图。</p>}
 
       <ResultView
         slot={threeViewSlot}

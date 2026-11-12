@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { Palette } from '../types';
+import { useCharacterSheetStore } from './useCharacterSheetStore';
+import { useIdentityStore } from './useIdentityStore';
 
 interface UploadState {
   uploadedImage: string | null;
@@ -17,8 +19,11 @@ export const useUploadStore = create<UploadState>((set, get) => ({
   uploadedName: null,
   palette: null,
   uploadRevision: 0,
-  setUpload: (dataUrl, fileName) =>
-    set((s) => ({ uploadedImage: dataUrl, uploadedName: fileName, uploadRevision: s.uploadRevision + 1 })),
+  setUpload: (dataUrl, fileName) => {
+    const name = useCharacterSheetStore.getState().namesBySource[dataUrl];
+    if (name) useIdentityStore.getState().setCharacterName(name);
+    set((s) => ({ uploadedImage: dataUrl, uploadedName: fileName, palette: null, uploadRevision: s.uploadRevision + 1 }));
+  },
   setPalette: (p) => set({ palette: p }),
   setPaletteForUpload: (palette, revision) => {
     if (get().uploadRevision !== revision || !get().uploadedImage) return false;

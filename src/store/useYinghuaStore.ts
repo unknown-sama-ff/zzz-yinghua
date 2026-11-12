@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GenSlot, YinghuaStyleId, ZeroFateDraft, ZeroFateMode } from '../types';
+import type { CharacterReferenceContext, GenSlot, YinghuaStyleId, ZeroFateDraft, ZeroFateMode } from '../types';
 
 type ActiveGeneration = {
   id: YinghuaStyleId;
@@ -23,7 +23,7 @@ interface YinghuaState {
   setZeroFateDraftPrompt: (prompt: string) => void;
   zeroFateDraft: ZeroFateDraft;
   setZeroFateDraft: (patch: Partial<ZeroFateDraft>) => void;
-  completeZeroFate: (images: string[]) => void;
+  completeZeroFate: (images: string[], characterContext?: CharacterReferenceContext) => void;
 
   yinghuaShowText: boolean;
   setYinghuaShowText: (show: boolean) => void;
@@ -87,9 +87,9 @@ export const useYinghuaStore = create<YinghuaState>((set) => ({
   setZeroFateDraftPrompt: (zeroFateDraftPrompt) => set({ zeroFateDraftPrompt }),
   zeroFateDraft: { status: 'idle', images: [], context: null },
   setZeroFateDraft: (patch) => set((s) => ({ zeroFateDraft: { ...s.zeroFateDraft, ...patch } })),
-  completeZeroFate: (images) => set({
+  completeZeroFate: (images, characterContext) => set({
     yinghuaSlots: {
-      1: { status: 'done', images },
+      1: { status: 'done', images, ...(characterContext ? { characterContext } : {}) },
       2: { status: 'idle', images: [] },
       3: { status: 'idle', images: [] },
     },

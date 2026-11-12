@@ -6,6 +6,9 @@ node_modules/
 .claude/
 /.codex-repeat-review-build/
 
+# Local task notes, validation media and isolated builds
+/work/
+
 # Build output — committed for Railway deploy (avoids build timeout on free tier)
 
 # Env — secrets live here, never commit

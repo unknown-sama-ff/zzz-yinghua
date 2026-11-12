@@ -54,9 +54,9 @@ test('identical upstream task IDs have independent unpredictable local task IDs'
   assert.deepEqual(polls, ['https://provider.invalid/v1/tasks/1%2Fshared', 'https://provider.invalid/v1/tasks/1%2Fshared']);
 });
 
-test('gpt-image-2.5-sunburst accepts sixteen total image inputs', () => {
+test('known GPT image models accept sixteen total image inputs', () => {
   assert.equal(maxInputImagesForGptModel('gpt-image-2.5-sunburst'), 16);
-  assert.equal(maxInputImagesForGptModel('gpt-image-2'), 1);
+  assert.equal(maxInputImagesForGptModel('gpt-image-2'), 16);
 });
 
 test('gpt-image sends primary and references as repeated image fields', async () => {

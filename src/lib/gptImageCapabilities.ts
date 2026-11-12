@@ -23,7 +23,7 @@ export function isGptImageQuality(value: unknown): value is GptImageQuality {
 }
 
 /** Only public quality options are fetched; credentials never leave the server. */
-export async function fetchPresetImageCapabilities(): Promise<{ qualityOptions: GptImageQuality[]; gifSupported: boolean }> {
+export async function fetchPresetImageCapabilities(): Promise<{ qualityOptions: GptImageQuality[]; gifSupported: boolean; maxInputImages: number; transparencySupported: boolean }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -39,7 +39,10 @@ export async function fetchPresetImageCapabilities(): Promise<{ qualityOptions: 
       throw new Error('服务器精细度选项格式无效');
     }
     return { qualityOptions: [...new Set<GptImageQuality>(data.presetQualityOptions)],
-      gifSupported: 'presetGifSupported' in data && data.presetGifSupported === true };
+      gifSupported: 'presetGifSupported' in data && data.presetGifSupported === true,
+      maxInputImages: 'presetMaxInputImages' in data && Number.isInteger(data.presetMaxInputImages)
+        ? Math.max(1, Math.min(16, Number(data.presetMaxInputImages))) : 1,
+      transparencySupported: 'presetTransparencySupported' in data && data.presetTransparencySupported === true };
   } finally {
     clearTimeout(timer);
   }
@@ -49,9 +52,12 @@ export async function fetchPresetImageQualityOptions(): Promise<GptImageQuality[
   return (await fetchPresetImageCapabilities()).qualityOptions;
 }
 
-const MAX_INPUT_IMAGES_BY_MODEL: Record<string, number> = {
-  'gpt-image-2.5-sunburst': 16,
-};
+const KNOWN_GPT_IMAGE_MODEL = /^gpt-image-(?:1(?:\.5|-mini)?|2|2\.[56](?:-sunburst|-flare)?)(?:-\d{4}-\d{2}-\d{2})?$/;
+const TRANSPARENT_GPT_IMAGE_MODEL = /^gpt-image-(?:1(?:\.5|-mini)?|2|2\.[56]-(?:sunburst|flare))(?:-\d{4}-\d{2}-\d{2})?$/;
+
+export function supportsGptImageTransparency(model?: string): boolean {
+  return TRANSPARENT_GPT_IMAGE_MODEL.test(normalizeModel(model));
+}
 
 function normalizeModel(model?: string): string {
   return model?.trim().toLowerCase() ?? '';
@@ -59,7 +65,7 @@ function normalizeModel(model?: string): string {
 
 export function maxInputImagesForModel(provider: ProviderName, model?: string): number {
   if (provider !== 'gpt-image') return 1;
-  return MAX_INPUT_IMAGES_BY_MODEL[normalizeModel(model)] ?? 1;
+  return KNOWN_GPT_IMAGE_MODEL.test(normalizeModel(model)) ? 16 : 1;
 }
 
 export function maxReferenceImagesForModel(provider: ProviderName, model?: string): number {

@@ -1,4 +1,7 @@
 /* Exhibition shell: strong composition on the home page, quiet tools within. */
+.home-meme-link { margin-top:18px;display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--studio-secondary);font-size:12px }
+.home-meme-link strong { color:var(--zzz-text);font-weight:550 }
+.home-meme-link:hover strong { color:var(--studio-highlight) }
 :root {
   --studio-secondary: #a6adb9;
   --studio-highlight: #c264ff;

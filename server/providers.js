@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { resolveGptImageModel, validateGptImageQuality } from './lib/gptImageCapabilities.js';
+import { resolveGptImageModel, validateGptImageQuality, validateGptImageBackground } from './lib/gptImageCapabilities.js';
 import { validateGptImageAnimation } from './lib/gptImageAnimation.js';
 import {
   fetchWithTimeout,
@@ -264,6 +264,8 @@ async function gptImage(req) {
   if (qualityError) throw new UpstreamError('INVALID_INPUT', qualityError, 400);
   const animationError = validateGptImageAnimation({ ...req, provider: 'gpt-image' });
   if (animationError) throw new UpstreamError('INVALID_INPUT', animationError, 400);
+  const backgroundError = validateGptImageBackground({ ...req, provider: 'gpt-image' });
+  if (backgroundError) throw new UpstreamError('INVALID_INPUT', backgroundError, 400);
   const useServerPreset = req.useServerPreset === true;
   const key = useServerPreset
     ? process.env.GPT_IMAGE_API_KEY
@@ -367,8 +369,9 @@ async function gptImage(req) {
       }
       form.append('n', String(n));
       if (req.quality !== undefined) form.append('quality', req.quality);
+      if (req.background !== undefined) form.append('background', req.background);
+      if (req.output_format !== undefined) form.append('output_format', req.output_format);
       if (req.output_format === 'gif') {
-        form.append('output_format', 'gif');
         form.append('stream', 'false');
         if (req.frame_count !== undefined) form.append('frame_count', String(req.frame_count));
         if (req.frame_duration_ms !== undefined) form.append('frame_duration_ms', String(Math.round(req.frame_duration_ms / 10) * 10));
@@ -435,6 +438,7 @@ async function gptImage(req) {
   // No image → text-only generations.
   const body = { model, prompt: req.prompt, n };
   if (req.quality !== undefined) body.quality = req.quality;
+  if (req.background !== undefined) body.background = req.background;
   if (req.output_format !== undefined) body.output_format = req.output_format;
   if (req.output_format === 'gif') {
     body.stream = false;

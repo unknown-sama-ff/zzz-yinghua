@@ -23,15 +23,16 @@ export async function prepareZeroFateInputs(options: {
   phase: 'draft' | 'render';
   sourceImage: string;
   addonImage: string | null;
+  breakdownImage?: string | null;
   draftImage?: string;
   provider: ProviderName;
   model: string;
 }) {
-  const { phase, sourceImage, addonImage, draftImage, provider, model } = options;
+  const { phase, sourceImage, addonImage, breakdownImage, draftImage, provider, model } = options;
   const base = phase === 'render' ? draftImage : sourceImage;
   if (!base) throw new Error('请先生成并确认动作底稿');
   const styles = phase === 'render' ? await loadStyleReferenceImages(1) : [];
-  const references = (phase === 'render' ? [sourceImage, addonImage, ...styles] : [addonImage])
+  const references = (phase === 'render' ? [sourceImage, breakdownImage, addonImage, ...styles] : [breakdownImage, addonImage])
     .filter((url): url is string => Boolean(url));
   let imageOverride = base;
   let refImages: { base64: string; mime: string }[] | undefined;
@@ -41,11 +42,12 @@ export async function prepareZeroFateInputs(options: {
     }
     refImages = await Promise.all(references.map(async (url) => parseDataUrl(await asDataUrl(url))));
   } else if (phase === 'draft') {
-    if (addonImage) imageOverride = await stitchImages([sourceImage, addonImage]);
+    if (references.length) imageOverride = await stitchImages([sourceImage, ...references]);
   } else {
     // Preserve the approved draft's canvas and subject scale for single-image
     // endpoints, using the same thumbnail convention as later yinghua edits.
     const thumbs: ThumbEntry[] = [{ url: sourceImage, size: 0.23, position: 'bottom-right' }];
+    if (breakdownImage) thumbs.push({ url: breakdownImage, size: 0.25, position: 'bottom-right' });
     if (addonImage) thumbs.push({ url: addonImage, size: 0.18, position: 'bottom-right' });
     thumbs.push({ url: await stitchImages(styles), size: 0.25, position: 'bottom-left' });
     imageOverride = await embedThumbnails(base, thumbs);

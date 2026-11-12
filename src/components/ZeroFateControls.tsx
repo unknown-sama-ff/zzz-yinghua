@@ -31,7 +31,7 @@ export function ZeroFateControls({ isCurrent, onGenerateDraft, onConfirmDraft, o
           <textarea aria-label="动作底稿提示词" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={9} className="glass-input" />
           <button type="button" onClick={onResetPrompt} disabled={Boolean(active)} className="yinghua-text-button">恢复默认底稿提示词</button>
         </details>
-        {draft.images[0] && !isCurrent && <p role="status" className="yinghua-stage-warning">角色、动作或提示词已更新，请重新生成底稿。</p>}
+        {draft.images[0] && !isCurrent && <p role="status" className="yinghua-stage-warning">角色、拆解图、动作或提示词已更新，请重新生成底稿。</p>}
         <GenerationErrorNotice message={draft.error} upstreamError={draft.upstreamError} />
         <div className="yinghua-stage-actions">
           <button type="button" onClick={isCurrent ? onConfirmDraft : onGenerateDraft} disabled={Boolean(active)} className="yinghua-primary-action">

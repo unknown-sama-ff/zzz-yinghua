@@ -14,6 +14,10 @@ AGPL-3.0 允许商业使用。分发受许可覆盖的程序或衍生版本时�
 
 ## 功能
 
+- **角色拆解图与影画参考配对**：生成三视图和换装三视图前需填写角色名字；选定三视图后可生成带中文注释、白色背景的角色概念拆解图，也可手动上传。每张三视图单独保存配套拆解图，动作底稿、零命、三命和六命阳/阴自动携带对应参考，并分别锁定身份衣装、动作镜头和阶段配色职责。切换三视图、拆解图或名字后会检查旧底稿与生成结果是否仍匹配；新三命清空旧六命，新六命阳清空旧阴面。角色动态与微动态设置直接替换构图段落中的默认内容，中英文同步。
+
+- **表情包工坊**（`#/memes`）：上传或复用角色图，一键生成九宫格或15格静态表情贴纸。可添加各最多3张的风格、共用表情参考，并为每格指定参考图、动作与中文文案；输入合计最多16张。整套一次生图，浏览器检查真实透明区域后拆分，支持切线微调、单张重做、整图/单张PNG、ZIP打包及手动保存画廊。重做保留其余单张；切页保留草稿和任务，刷新不恢复。需要已确认支持原生透明输出的GPT图片通道（如 `gpt-image-2`、`gpt-image-2.5-sunburst`、`gpt-image-2.5-flare`），实际中转仍须支持；不透明结果会明确提示并保留原图，不自动追加生成。当前未确认透明能力的型号不会自动替换。网格拆图按实际像素导出，AI错字可单独重做。
+
 - **展厅首页与独立工作区**：首页展示本地风格示例；角色工坊分为角色素材、影画创作、海报创作，画廊和提示词有独立入口。自由创作仍支持多会话与原位重试，切换页面保留本次访问中的草稿、参考图和进行中任务。
 - **图片上传**：拖拽 / 点击，本地预览，类型与大小校验（PNG/JPEG/WEBP，≤10MB）。
 - **生成精细度**：在「设置 → 接口与模型」选择全局 GPT 图片精细度；默认自动。GPT Image 2.5 / 2.6 系列（含 Sunburst、Flare）支持自动、低、中、高、超高、最高，旧模型及未知模型显示前四档。影画、三视图、海报、自由创作和图片编辑共用；刷新恢复自动。作者免费通道根据服务器实际模型提供档位，读取失败时仍可使用服务器默认生成。
@@ -87,7 +91,8 @@ npm start              # Node 代理同时托管 dist/ 静态资源
 ## API 契约
 
 - `POST /api/generate` — body `{ provider, prompt, imageBase64?, size?, quality?, n?, customEndpoint?, customHeaders?, customBodyTemplate? }`
-- `GET /api/image-capabilities` — 返回 `{ ok: true, presetQualityOptions: [...] }`，只公开服务器预设可用精细度，不包含模型、密钥或接口地址。
+- `GET /api/image-capabilities` — 返回 `{ ok: true, presetQualityOptions: [...], presetGifSupported, presetMaxInputImages, presetTransparencySupported }`，只公开服务器预设能力，不包含模型、密钥或接口地址。
+- `POST /api/generate` 可选 `background: auto | opaque | transparent`；仅GPT图片通道支持。透明输出须使用已确认支持的型号和PNG/WebP格式；图像编辑与纯文生图均透传输出格式和背景设置。已知GPT图片型号最多16张输入，未知型号保持1张；自由创作已有独立上限保持不变。GPT Image 2.6 Sunburst/Flare 的透明输出依据[官方说明](https://developers.openai.com/api/docs/guides/image-prompting?model=gpt-image-2.6)启用；裸 `gpt-image-2.6` 等未确认别名保持保守。
 - `quality` 可选：`auto | low | medium | high | xhigh | max`，以实际模型能力校验；未提供时不向上游添加此参数。它与图片尺寸、参考图压缩及局部重绘范围无关。白嫖模式仍沿用 `GPT_IMAGE_MODEL`（默认 `gpt-image-2`）和现有额度规则，更高精细度可能增加耗时与费用。
 - 响应：`{ ok: true, images: string[] }` 或 `{ ok: false, code, message }`
 - 错误码：`INVALID_INPUT` `UNAUTHORIZED` `UPSTREAM_TIMEOUT` `UPSTREAM_ERROR` `RATE_LIMITED` `SSRF_BLOCKED`
