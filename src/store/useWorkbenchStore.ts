@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import { THREE_VIEW_PROMPT, COSTUME_CHANGE_PROMPT } from '../lib/prompts';
 import type { GenSlot } from '../types';
+import type { CharacterMaterialsJob } from '../lib/characterMaterials';
 
 const emptySlot = (): GenSlot => ({ status: 'idle', images: [] });
 
 interface WorkbenchState {
+  materialsJob: CharacterMaterialsJob | null;
+  setMaterialsJob: (job: CharacterMaterialsJob | null) => void;
   // --- Three-view step ---
   threeViewUploads: { front: string | null; side: string | null; back: string | null };
   setThreeViewUpload: (view: 'front' | 'side' | 'back', dataUrl: string | null) => void;
@@ -30,6 +33,8 @@ interface WorkbenchState {
 }
 
 export const useWorkbenchStore = create<WorkbenchState>((set) => ({
+  materialsJob: null,
+  setMaterialsJob: (materialsJob) => set({ materialsJob }),
   threeViewUploads: { front: null, side: null, back: null },
   setThreeViewUpload: (view, dataUrl) =>
     set((s) => ({ threeViewUploads: { ...s.threeViewUploads, [view]: dataUrl } })),

@@ -9,7 +9,7 @@ import { generate, ApiError } from '../lib/apiClient';
 import { YINGHUA_STYLES, YINGHUA_SIZE, fillName, buildZeroFateDraftPrompt, buildZeroFateRenderPrompt } from '../lib/prompts';
 import { stitchImages, embedThumbnails, extractFrontViewStructureAnchor } from '../lib/imageWorkerPool';
 import type { ThumbEntry } from '../lib/imageWorkerPool';
-import { loadStyleReferenceImages, preloadStyleReferenceImages } from '../lib/styleReferences';
+import { preloadStyleReferenceImages } from '../lib/styleReferences';
 import { maxReferenceImagesForModel, supportsMultipleImageInputs } from '../lib/gptImageCapabilities';
 import { parseDataUrl, validateImageFile, fileToDataUrl, compressDataUrl } from '../lib/validation';
 import { SIX_FATE_EDIT_MAX_DIM, ZERO_FATE_INPUT_MAX_DIM } from '../lib/constants';
@@ -18,6 +18,8 @@ import { prepareZeroFateInputs } from '../lib/zeroFateInputs';
 import { useCharacterSheetStore } from '../store/useCharacterSheetStore';
 import { buildYinghuaReferencePrompt, isCurrentCharacterResult } from '../lib/characterBreakdown';
 import { CharacterBreakdownReference } from './CharacterBreakdownReference';
+import { CharacterOriginalReferences } from './CharacterOriginalReferences';
+import { originalImagesForSource, uniqueImages } from '../lib/characterOriginals';
 import { detectFace } from '../lib/detectFace';
 import { computeClipRegions } from '../lib/clipRegions';
 import { resolveYinghuaFaceImage } from '../lib/yinghuaFace';
@@ -218,6 +220,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const setStyle3Face = useYinghuaStore((s) => s.setStyle3Face);
   const uploadedImage = useUploadStore((s) => s.uploadedImage);
   const breakdownImage = useCharacterSheetStore((s) => uploadedImage ? s.sheets[uploadedImage]?.selectedImage ?? null : null);
+  const originalsBySource = useCharacterSheetStore((s) => s.originalsBySource);
+  const originalImages = useMemo(() => originalImagesForSource(uploadedImage ?? '', originalsBySource), [uploadedImage, originalsBySource]);
   const palette = useUploadStore((s) => s.palette);
   const provider = useProviderStore((s) => s.provider);
   const freeloadEnabled = useProviderStore((s) => s.freeloadEnabled);
@@ -232,8 +236,8 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   const zeroPromptOptions = useMemo(() => ({
     name: characterName, palette: palette ?? undefined, showText: yinghuaShowText,
     characterDynamic: yinghuaCharacterDynamic, microDynamic: yinghuaMicroDynamic,
-    characterTraits: yinghuaCharacterTraits, lang: yinghuaLang,
-  }), [characterName, palette, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang]);
+    characterTraits: yinghuaCharacterTraits, lang: yinghuaLang, hasBreakdown: Boolean(breakdownImage),
+  }), [characterName, palette, yinghuaShowText, yinghuaCharacterDynamic, yinghuaMicroDynamic, yinghuaCharacterTraits, yinghuaLang, breakdownImage]);
   const computedDraftPrompt = useMemo(() => {
     const prompt = buildZeroFateDraftPrompt(zeroPromptOptions);
     return buildYinghuaReferencePrompt(prompt, { stage: 'draft', name: characterName, lang: yinghuaLang, hasBreakdown: Boolean(breakdownImage) });
@@ -241,9 +245,9 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
   useEffect(() => {
     useYinghuaStore.getState().setZeroFateDraftPrompt(computedDraftPrompt);
   }, [computedDraftPrompt]);
-  const draftContext = { sourceImage: uploadedImage ?? '', addonImage: yinghuaAddonImage, breakdownImage, prompt: zeroFateDraftPrompt };
+  const draftContext = { sourceImage: uploadedImage ?? '', originalImages, addonImage: yinghuaAddonImage, breakdownImage, prompt: zeroFateDraftPrompt };
   const draftReady = isCurrentZeroFateDraft(zeroFateDraft, draftContext);
-  const referenceContext = { sourceImage: uploadedImage ?? '', breakdownImage, characterName: characterName.trim() };
+  const referenceContext = { sourceImage: uploadedImage ?? '', originalImages, breakdownImage, characterName: characterName.trim() };
 
   // Compute prompts once from all inputs, then write to store in one effect.
   const computedPrompts = useMemo(() => {
@@ -264,14 +268,14 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           tmpl,
           characterName, palette ?? undefined, yinghuaShowText,
           yinghuaCharacterDynamic, yinghuaMicroDynamic,
-          yinghuaCharacterTraits, yinghuaLang, style.id,
+          yinghuaCharacterTraits, yinghuaLang, style.id, Boolean(breakdownImage),
         );
       } else {
         prompts[style.id] = fillName(
           yinghuaLang === 'en' && style.promptTemplateEn ? style.promptTemplateEn : style.promptTemplate,
           characterName, palette ?? undefined, yinghuaShowText,
           yinghuaCharacterDynamic, yinghuaMicroDynamic,
-          yinghuaCharacterTraits, yinghuaLang, style.id,
+          yinghuaCharacterTraits, yinghuaLang, style.id, Boolean(breakdownImage),
         );
       }
       const stage = style.id === 1 ? (zeroFateMode === 'two-stage' ? 'zero-render' : 'zero-direct')
@@ -360,7 +364,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     const identityReference = sourceImage;
     const selectedProvider = provider;
     const selectedDraftImage = zeroFateDraft.images[0];
-    const selectedDraftContext = { sourceImage, addonImage, breakdownImage, prompt: zeroFateDraftPrompt };
+    const selectedDraftContext = { sourceImage, originalImages, addonImage, breakdownImage, prompt: zeroFateDraftPrompt };
 
     const setGenerationError = (message: string, upstreamError?: UpstreamErrorDetails) => {
       if (phase === 'draft') setZeroFateDraft({ status: 'error', error: message, upstreamError });
@@ -370,31 +374,13 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
     let imageOverride: string | undefined;
     let refImages: { base64: string; mime: string }[] | undefined;
     try {
-      if (phase) {
+      if (phase || id === 1) {
         const inputs = await prepareZeroFateInputs({
-          phase, sourceImage, addonImage, breakdownImage, draftImage: selectedDraftImage,
+          phase: phase ?? 'direct', sourceImage, originalImages, addonImage, breakdownImage, draftImage: selectedDraftImage,
           provider: selectedProvider, model: creds[selectedProvider].model,
         });
         imageOverride = inputs.imageOverride;
         refImages = inputs.refImages;
-      } else if (id === 1) {
-        const styleReferences = await loadStyleReferenceImages(id);
-        const selectedModel = creds[selectedProvider].model;
-        if (supportsMultipleImageInputs(selectedProvider, selectedModel)) {
-          const referenceDataUrls = [breakdownImage, addonImage, ...styleReferences].filter((url): url is string => Boolean(url));
-          const maxReferences = maxReferenceImagesForModel(selectedProvider, selectedModel);
-          if (referenceDataUrls.length > maxReferences) {
-            throw new Error(`当前模型最多支持 ${maxReferences} 张额外参考图`);
-          }
-          imageOverride = sourceImage;
-          refImages = referenceDataUrls.map((url) => {
-            const parsed = parseDataUrl(url);
-            return { base64: parsed.base64, mime: parsed.mime };
-          });
-        } else {
-          const styleSheet = await stitchImages(styleReferences);
-          imageOverride = await stitchImages([sourceImage, breakdownImage, addonImage, styleSheet]);
-        }
       } else {
         const baseImg = id === 3
           ? (selectedFace === 'back' ? sourceSlots[3].images[0] : sourceSlots[2].images[0])
@@ -423,9 +409,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         // Keep semantic priority stable for GPT edits: base composition first,
         // canonical color/identity three-view second, front anatomy anchor
         // third when available, optional prop last.
-        const references = [threeView, structureAnchor, breakdownImage, addonImage]
-          .filter((url): url is string => Boolean(url))
-          .filter((url, index, all) => all.indexOf(url) === index);
+        const references = uniqueImages([...originalImages, threeView, structureAnchor, breakdownImage, addonImage]);
         const selectedModel = creds[selectedProvider].model;
         if (supportsMultipleImageInputs(selectedProvider, selectedModel)) {
           const maxReferences = maxReferenceImagesForModel(selectedProvider, selectedModel);
@@ -450,7 +434,11 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
           }));
         } else {
           const thumbs: ThumbEntry[] = [];
-          if (threeView) {
+          if (originalImages.length) {
+            const originalSheet = originalImages.length > 1 ? await stitchImages(originalImages) : originalImages[0];
+            thumbs.push({ url: originalSheet, size: 0.23, position: 'bottom-right' });
+          }
+          if (threeView && !originalImages.includes(threeView)) {
             thumbs.push({ url: threeView, size: 0.2, position: 'bottom-right' });
           }
           if (structureAnchor) {
@@ -468,7 +456,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         }
       }
 
-      if (selectedProvider === 'gpt-image' && imageOverride && !phase) {
+      if (selectedProvider === 'gpt-image' && imageOverride && !phase && id !== 1) {
         let src = imageOverride;
         if (src.startsWith('http://') || src.startsWith('https://')) {
           const res = await fetch(src);
@@ -513,6 +501,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       const currentSource = useUploadStore.getState().uploadedImage ?? '';
       const currentReferences = {
         sourceImage: currentSource,
+        originalImages: originalImagesForSource(currentSource, useCharacterSheetStore.getState().originalsBySource),
         breakdownImage: useCharacterSheetStore.getState().sheets[currentSource]?.selectedImage ?? null,
         characterName: useIdentityStore.getState().characterName.trim(),
       };
@@ -525,6 +514,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
         const current = useYinghuaStore.getState();
         const contextNow = {
           sourceImage: useUploadStore.getState().uploadedImage ?? '',
+          originalImages: originalImagesForSource(useUploadStore.getState().uploadedImage ?? '', useCharacterSheetStore.getState().originalsBySource),
           addonImage: current.yinghuaAddonImage,
           breakdownImage: useCharacterSheetStore.getState().sheets[useUploadStore.getState().uploadedImage ?? '']?.selectedImage ?? null,
           prompt: current.zeroFateDraftPrompt,
@@ -606,6 +596,7 @@ export const YinghuaPanel = memo(function YinghuaPanel() {
       <details className="yinghua-settings">
         <summary>动作与角色设置 <span>动作、表情、角色特点与附加参考</span><b aria-hidden="true">＋</b></summary>
         <div className="yinghua-settings-grid">
+          <CharacterOriginalReferences compact />
           <CharacterBreakdownReference compact />
           <label>角色动态<input type="text" aria-label="角色动态" value={yinghuaCharacterDynamic} onChange={(e) => setYinghuaCharacterDynamic(e.target.value)} className="glass-input" /></label>
           <label>微动态细节<input type="text" aria-label="微动态细节" value={yinghuaMicroDynamic} onChange={(e) => setYinghuaMicroDynamic(e.target.value)} className="glass-input" /></label>

@@ -20,10 +20,12 @@ const emptySheet = (): CharacterSheet => ({ images: [], selectedImage: null, slo
 
 interface CharacterSheetState {
   namesBySource: Record<string, string>;
+  originalsBySource: Record<string, string[]>;
   sheets: Record<string, CharacterSheet>;
   promptTemplate: string;
   setPromptTemplate: (prompt: string) => void;
   registerSources: (sources: string[], name: string) => void;
+  setOriginals: (sources: string[], originals: string[]) => void;
   setSlot: (source: string, slot: Partial<GenSlot>) => void;
   setUploading: (source: string, uploading: boolean) => void;
   addImages: (source: string, images: CharacterBreakdownImage[]) => void;
@@ -32,11 +34,15 @@ interface CharacterSheetState {
 
 export const useCharacterSheetStore = create<CharacterSheetState>((set) => ({
   namesBySource: {},
+  originalsBySource: {},
   sheets: {},
   promptTemplate: CHARACTER_BREAKDOWN_PROMPT,
   setPromptTemplate: (promptTemplate) => set({ promptTemplate }),
   registerSources: (sources, name) => set((state) => ({
     namesBySource: { ...state.namesBySource, ...Object.fromEntries(sources.map((source) => [source, name.trim()])) },
+  })),
+  setOriginals: (sources, originals) => set((state) => ({
+    originalsBySource: { ...state.originalsBySource, ...Object.fromEntries(sources.map((source) => [source, [...new Set(originals)]])) },
   })),
   setSlot: (source, patch) => set((state) => {
     const sheet = state.sheets[source] ?? emptySheet();

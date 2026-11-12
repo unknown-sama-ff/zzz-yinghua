@@ -2,16 +2,32 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadFrontend } from './loadFrontend.js';
 
-const { YINGHUA_STYLES, fillName, splitName, buildZeroFateDraftPrompt, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
+const { YINGHUA_STYLES, fillName, splitName, buildZeroFateDraftPrompt, buildZeroFateRenderPrompt, SIX_FATE_ANATOMY_PRIORITY_PREFIX, ZERO_FATE_ANATOMY_PRIORITY_PREFIX } = await loadFrontend("export * from './src/lib/prompts';");
 const variants = [
   [1, '零命', 'promptTemplate', 'promptTemplateEn'],
   [2, '三命', 'promptTemplate', 'promptTemplateEn'],
   [3, '六命阳', 'promptTemplateFront', 'promptTemplateFrontEn'],
   [3, '六命阴', 'promptTemplateBack', 'promptTemplateBackEn'],
 ];
-function prompt(id, key, lang = 'zh', showText = true) {
+function prompt(id, key, lang = 'zh', showText = true, hasBreakdown = false) {
   const style = YINGHUA_STYLES.find((candidate) => candidate.id === id);
-  return fillName(style[key], 'HAMAN KARN', undefined, showText, '侧躺', '半睁眼', '沉着', lang, id);
+  return fillName(style[key], 'HAMAN KARN', undefined, showText, '侧躺', '半睁眼', '沉着', lang, id, hasBreakdown);
+}
+
+for (const lang of ['zh', 'en']) {
+  test(`all yinghua stages/${lang} use the selected breakdown for clothing without a conflicting three-view authority`, () => {
+    const options = { name: 'HERO', showText: true, characterDynamic: '侧躺', microDynamic: '微笑', characterTraits: '', lang, hasBreakdown: true };
+    const texts = [buildZeroFateDraftPrompt(options), buildZeroFateRenderPrompt(options),
+      ...variants.map(([id, , zh, en]) => prompt(id, lang === 'zh' ? zh : en, lang, true, true))];
+    for (const text of texts) {
+      assert.match(text, lang === 'zh' ? /选中的角色拆解图/ : /the selected character breakdown sheet/);
+      assert.doesNotMatch(text, /\{[A-Z_]+\}/);
+      assert.doesNotMatch(text, /原衣装唯一权威|衣装\/花纹\/配饰结构严格按三视图|服装、花纹和配饰100%匹配第2张|Input 1.*sole costume authority|garments.*input 2.*100%/);
+    }
+    assert.match(texts[0], lang === 'zh' ? /衣装与服饰配色以选中的角色拆解图为准/ : /garment colors as defined by the selected character breakdown sheet/);
+    assert.match(prompt(2, lang === 'zh' ? 'promptTemplate' : 'promptTemplateEn', lang, true, true),
+      lang === 'zh' ? /衣装\/花纹\/配饰结构严格按选中的角色拆解图保留/ : /structures from the selected character breakdown sheet/);
+  });
 }
 
 for (const [id, label, zh, en] of variants) {
@@ -117,7 +133,7 @@ test('three-fate remains color-only, with canonical legwear and original languag
   assert.match(prompt(2, 'promptTemplate'), /R=G=B/);
   assert.match(prompt(2, 'promptTemplate'), /额外提亮30%/);
   assert.match(prompt(2, 'promptTemplateEn', 'en'), /plus 10% brightness/);
-  assert.match(prompt(2, 'promptTemplate'), /只有三视图明确有袜装才保留/);
+  assert.match(prompt(2, 'promptTemplate'), /只有原始角色参考明确有袜装才保留/);
   assert.doesNotMatch(prompt(2, 'promptTemplate'), /第1张后续图.*附加/);
 });
 

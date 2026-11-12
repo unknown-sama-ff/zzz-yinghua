@@ -16,6 +16,7 @@ import { pluckImages } from './lib/pluckImages.js';
 import { contentRejectionError } from './lib/contentRejection.js';
 import sharp from 'sharp';
 import { prepareEditImages } from './lib/prepareEditImages.js';
+import { editOutputSize } from './lib/editOutputSize.js';
 import {
   POLL_DEADLINE_MS,
   DEFAULT_TIMEOUT_MS,
@@ -292,7 +293,7 @@ async function gptImage(req) {
       : 'gpt-image 缺少模型名称（请在前端填写）', 401);
   }
   // Prefer aspectRatio when provided, otherwise use size
-  const size = req.aspectRatio ? undefined : (req.size || (req.output_format === 'gif' ? 'auto' : '1024x1024'));
+  let size = req.aspectRatio ? undefined : (req.size || (req.output_format === 'gif' ? 'auto' : '1024x1024'));
   const n = capN(req);
   const root = base.replace(/\/$/, '');
 
@@ -326,6 +327,15 @@ async function gptImage(req) {
       buffer = Buffer.from(req.imageBase64, 'base64');
       mime = req.imageMime || 'image/png';
       ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : 'png';
+    }
+    if (req.preserveOutputAspectRatio === true && !req.size && !req.aspectRatio) {
+      try {
+        const meta = await sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
+        const rotated = meta.orientation >= 5 && meta.orientation <= 8;
+        size = editOutputSize(rotated ? meta.height : meta.width, rotated ? meta.width : meta.height, model);
+      } catch (error) {
+        throw new UpstreamError('INVALID_INPUT', error.message || '无法读取原图尺寸，无法保持画幅比例', 400);
+      }
     }
     const payloadBytes = buffer.length;
     const requestedMaxDim = Number(req.inputImageMaxDimension);

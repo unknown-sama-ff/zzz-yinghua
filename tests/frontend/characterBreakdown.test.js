@@ -2,16 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadFrontend } from './loadFrontend.js';
 
-const { buildNamedCharacterPrompt, CHARACTER_BREAKDOWN_PROMPT, withCharacterBreakdownReference, buildYinghuaReferencePrompt, isCurrentCharacterResult,
-  useCharacterSheetStore, useUploadStore, useIdentityStore } = await loadFrontend(`
+const { buildNamedCharacterPrompt, buildCharacterBreakdownPrompt, CHARACTER_BREAKDOWN_PROMPT, withCharacterBreakdownReference, buildYinghuaReferencePrompt, isCurrentCharacterResult,
+  originalImagesForSource, canReuseMaterialThreeView, useCharacterSheetStore, useUploadStore, useIdentityStore } = await loadFrontend(`
   export * from './src/lib/characterBreakdown';
+  export * from './src/lib/characterOriginals';
+  export { canReuseMaterialThreeView } from './src/lib/characterMaterials';
   export { useCharacterSheetStore } from './src/store/useCharacterSheetStore';
   export { useUploadStore } from './src/store/useUploadStore';
   export { useIdentityStore } from './src/store/useIdentityStore';
 `);
 const image = (url, characterName = '可琳') => ({ url, characterName, prompt: '概念分解', provider: 'gpt-image' });
 function reset() {
-  useCharacterSheetStore.setState({ sheets: {}, namesBySource: {} });
+  useCharacterSheetStore.setState({ sheets: {}, namesBySource: {}, originalsBySource: {} });
   useUploadStore.getState().clearUpload();
   useIdentityStore.getState().setCharacterName('');
 }
@@ -82,7 +84,8 @@ for (const lang of ['zh', 'en']) {
     assert.ok(prompt.endsWith('ORIGINAL STAGE PROMPT'));
     assert.match(prompt, lang === 'zh' ? /底稿\/底图决定动作、镜头与构图/ : /base\/draft own pose, camera and composition/);
     assert.match(prompt, lang === 'zh' ? /不得照搬.*文字注释/ : /Never copy.*annotations/);
-    assert.match(prompt, lang === 'zh' ? /不代表要求换装/ : /not instructions to change the outfit/);
+    assert.match(prompt, lang === 'zh' ? /拆解图.*服饰款式.*最高依据/ : /selected breakdown sheet is the highest authority for outfit design/);
+    assert.match(prompt, lang === 'zh' ? /原始角色参考仍决定身份、五官/ : /Original character references still own identity, face/);
   });
   test(`stage references/${lang} retain names and distinguish grayscale, color restoration and clothing subtraction`, () => {
     for (const stage of ['draft', 'zero-direct', 'zero-render', 'three', 'six-front', 'six-back']) {
@@ -92,8 +95,8 @@ for (const lang of ['zh', 'en']) {
       assert.match(prompt, lang === 'zh' ? /单图接口/ : /Single-image endpoints/);
       if (stage === 'three') assert.match(prompt, lang === 'zh' ? /只转换灰阶、指定点缀和背景/ : /Change only grayscale, designated accents and background/);
       if (stage === 'six-front') assert.match(prompt, lang === 'zh' ? /仅还原全彩/ : /Restore full color only/);
-      if (stage === 'six-back') assert.match(prompt, lang === 'zh' ? /仅执行本阶段指定的原服装精简/ : /Apply only this stage’s specified subtraction/);
-      if (stage === 'zero-render') assert.match(prompt, lang === 'zh' ? /第3张为拆解图/ : /input 3 the breakdown/);
+      if (stage === 'six-back') assert.match(prompt, lang === 'zh' ? /仅在拆解图确定的衣装基础上执行本阶段指定精简/ : /Apply only this stage’s specified subtraction to the sheet’s outfit/);
+      if (stage === 'zero-render') assert.match(prompt, lang === 'zh' ? /之后依次为原始角色参考、辅助三视图、拆解图/ : /followed by original references, auxiliary three-view, breakdown/);
     }
     const noSheet = buildYinghuaReferencePrompt('NO TEXT IN IMAGE', { stage: 'draft', name: 'CORIN', lang, hasBreakdown: false });
     assert.match(noSheet, /CORIN/);
@@ -109,4 +112,39 @@ test('later stages reject a different source, breakdown or name while retaining 
     assert.equal(isCurrentCharacterResult(slot, { ...context, ...change }), false);
   }
   assert.equal(isCurrentCharacterResult({ status: 'done', images: ['manual'] }, context), true);
+});
+
+test('derived three-views retain immutable original references and different variants remain independent', () => {
+  reset();
+  const store = useCharacterSheetStore.getState();
+  const originals = ['front-a', 'back-a'];
+  store.setOriginals(['view-a1', 'view-a2'], originals);
+  store.setOriginals(['view-b'], ['front-b']);
+  originals[0] = 'mutated';
+  assert.deepEqual(originalImagesForSource('view-a1', useCharacterSheetStore.getState().originalsBySource), ['front-a', 'back-a']);
+  assert.deepEqual(originalImagesForSource('view-a2', useCharacterSheetStore.getState().originalsBySource), ['front-a', 'back-a']);
+  assert.deepEqual(originalImagesForSource('view-b', useCharacterSheetStore.getState().originalsBySource), ['front-b']);
+  assert.deepEqual(originalImagesForSource('manual-view', {}), ['manual-view']);
+  const prompt = buildCharacterBreakdownPrompt(CHARACTER_BREAKDOWN_PROMPT, 'ALPHA');
+  assert.match(prompt, /原始参考是身份、可见衣装款式、配色与饰品的最高依据/);
+  assert.match(prompt, /辅助三视图.*不能覆盖原图/);
+});
+
+test('changing original references invalidates completed downstream artwork even with the same three-view and breakdown', () => {
+  const context = { sourceImage: 'view-a', originalImages: ['front-a', 'back-a'], breakdownImage: 'sheet-a', characterName: 'ALPHA' };
+  const slot = { status: 'done', images: ['result'], characterContext: context };
+  assert.equal(isCurrentCharacterResult(slot, { ...context, originalImages: ['front-a', 'back-a'] }), true);
+  assert.equal(isCurrentCharacterResult(slot, { ...context, originalImages: ['front-b', 'back-a'] }), false);
+});
+
+test('one-click retry reuses a successful three-view only when its original inputs still match', () => {
+  const input = { name: 'ALPHA', originals: ['front'], threeViewPrompt: 'views', breakdownTemplate: 'sheet', provider: 'gpt-image', model: 'gpt-image-2' };
+  const job = { input, phase: 'breakdown', status: 'error', threeViewImage: 'generated-view' };
+  assert.equal(canReuseMaterialThreeView(job, { ...input }), true);
+  assert.equal(canReuseMaterialThreeView(job, { ...input, breakdownTemplate: 'better sheet instructions' }), true);
+  for (const change of [{ name: 'BETA' }, { originals: ['other'] }, { threeViewPrompt: 'different views' }, { model: 'other-model' }]) {
+    assert.equal(canReuseMaterialThreeView(job, { ...input, ...change }), false);
+  }
+  assert.equal(canReuseMaterialThreeView({ ...job, phase: 'three-view' }, input), false);
+  assert.equal(canReuseMaterialThreeView({ ...job, status: 'done' }, input), false);
 });

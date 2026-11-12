@@ -3,8 +3,8 @@
 /** Default upstream request timeout (ms). */
 export const DEFAULT_TIMEOUT_MS = Number(process.env.UPSTREAM_TIMEOUT_MS || 300000);
 
-/** Vision-model request timeout (3 min), shared by all vision endpoints. */
-export const VISION_TIMEOUT_MS = 180_000;
+/** Vision-model request timeout (264 s), shared by all vision endpoints. */
+export const VISION_TIMEOUT_MS = 264_000;
 
 /** Poll deadline for long-running tasks (ms). */
 export const POLL_DEADLINE_MS = 180000;

@@ -18,8 +18,8 @@ export const FIDELITY_PREFIX_EN = join(IDENTITY_EN, OUTPUT_EN);
 export const FIDELITY_EDIT_PREFIX = join(IDENTITY_ZH, OUTPUT_ZH);
 export const FIDELITY_EDIT_PREFIX_EN = join(IDENTITY_EN, OUTPUT_EN);
 
-export const ZERO_FATE_COSTUME_LOCK_PREFIX = '【零命衣装锁定·最高优先级】第1张主图（模块02三视图/立绘）是原衣装唯一权威。完整保留服装款式、内外层与部件、领口、袖型、裙/裤长度、护甲、鞋袜、手套、饰品、图案和材质关系；遮挡后重新露出的衣物仍按原设计绘制。禁止增删、替换、合并、简化或重设计衣装；改姿势、镜头、光影或单色渲染只改变表现，不改变衣装设计。';
-export const ZERO_FATE_COSTUME_LOCK_PREFIX_EN = '[ZERO-FATE COSTUME LOCK — HIGHEST PRIORITY] Input 1 (the module-02 three-view/primary art) is the sole costume authority. Preserve garment style, every inner/outer layer and component, neckline, sleeves, skirt/trouser length, armor, footwear, hosiery, gloves, accessories, patterns and material relationships. Newly revealed clothing must follow that original design. Never add, remove, replace, merge, simplify or redesign garments; pose, camera, lighting and monochrome rendering change only their presentation.';
+export const ZERO_FATE_COSTUME_LOCK_PREFIX = "【零命衣装锁定·最高优先级】{COSTUME_REFERENCE}是衣装设计与服饰配色的最高依据。完整保留服装款式、内外层与部件、领口、袖型、裙/裤长度、护甲、鞋袜、手套、饰品、图案和材质关系；遮挡后重新露出的衣物仍按该设计绘制。禁止增删、替换、合并、简化或重设计衣装；改姿势、镜头、光影或单色渲染只改变表现，不改变衣装设计。";
+export const ZERO_FATE_COSTUME_LOCK_PREFIX_EN = "[ZERO-FATE COSTUME LOCK — HIGHEST PRIORITY] {COSTUME_REFERENCE} is the highest authority for outfit design and garment/accessory colors. Preserve garment style, all layers/components, neckline, sleeves, hem lengths, armor, footwear, hosiery, gloves, accessories, patterns and materials. Newly visible garments follow that design. Never add, remove, replace, merge, simplify or redesign the outfit; pose, camera, lighting and monochrome change its presentation only.";
 
 /** Zero-fate anatomy guard: repair limbs locally without changing the approved composition. */
 export const ZERO_FATE_ANATOMY_PRIORITY_PREFIX = '【零命结构优先·镜头不变】严格保留原定视角、机位、透视、裁切、构图、低重心动作、身体接触支撑面的关系和文字布局；不得用换镜头、换姿势、拉远、改裁切或改变透视来规避畸形。身体结构及各部件归属符合原角色物种与设定，躯干与原生肢体/尾部连接自然；禁止非设定的重复、粘连、断裂、异常弯折、关节错位或躯干增生，不把衣褶/发丝/阴影误画成身体部件。保持原有前后遮挡与画面外裁切，被遮挡或出框部位不要强行补画入画；只修复局部连接与轮廓，不重构动作、不改变角色比例，不因单色剪影而删除或合并原生部件。' + '\n' + LEG_STRUCTURE_ZH;
@@ -38,8 +38,8 @@ const ZERO_MICRO_EN = 'yawning, winking, half-closed eyes, peace sign, pulling a
 const ZERO_COMPOSITION_ZH = '人物构图须有强烈设计感与视觉冲击力——优先采用大仰视、大俯视、极端斜侧等非常规视角，严禁正面平视、证件照式大头、对称站像。{POSE_REQUIREMENT}整体为卸防感的非战斗姿态，放松、慵懒、毫无戒备。同时融入微动态细节——{MICRO_DYNAMIC}，制造"时间切片"般的生动瞬间感。允许头顶、肩部、手臂、发尾大幅出框，人物大面积裁切，肢体延展至画面边缘，形成破框而出的开放感。构图偏左或偏右，避免居中；角色主体和文字共占画面约80%~85%；动作设计具有艺术感、展现角色个性特点；画风与第1张主图保持角色设计一致。';
 const ZERO_COMPOSITION_EN = 'Composition must have strong design appeal and visual impact — prioritize dramatic low-angle, high-angle, and extreme diagonal perspectives. Strictly forbid front-facing, ID-photo-style headshots, or symmetrical standing poses. {POSE_REQUIREMENT} The overall mood is defenseless and non-combat — relaxed, languid, completely unguarded. Incorporate micro-dynamic details: {MICRO_DYNAMIC} — creating a vivid frozen-moment feel. Allow head, shoulders, arms, and hair to dramatically break beyond the edges. Crop aggressively with limbs extending to frame borders, creating a sense of breaking out of the image. Offset composition left or right, avoid centering. Character and text together occupy approximately 80%-85% of the frame.';
 
-const EDIT_REFERENCES_ZH = '【编辑参考】第1张为已生成底图，仅锁定姿态、镜头、透视、裁切、构图与文字；第2张为模块02全彩三视图（通常来自模块01），是身份、原始肤色/发色、服装配色/花纹/结构与身体比例的唯一最高权威，不按灰阶底图或记忆猜配色。三视图核对固有形体比例，不把它的站姿、机位或关节二维位置硬套入底图透视。其后的正面结构锚点（若有）只核对结构，禁止照搬它的正面姿势；附加元素（若有）只作武器/道具/装饰参考，不能改变身份和配色。参考可独立输入或作为缩略参考嵌入，最终均不得出现在成图。';
-const EDIT_REFERENCES_EN = '[EDIT REFERENCES] Input 1 is the generated base, locking pose, camera, perspective, crop, composition and typography only. Input 2 is the module-02 canonical full-color three-view (usually from module 01), the sole highest authority for identity, original skin/hair colors, garment palette/patterns/structure and body proportions; never guess colors from grayscale or memory. The three-view checks intrinsic proportions; never transplant its standing pose, camera or 2D joint coordinates into the base perspective. Any following front structure anchor checks anatomy only: never copy its frontal pose. Optional addon references are props/weapons/decorations only and must not change identity or palette. References may be separate inputs or embedded reference thumbnails; none may appear in the result.';
+const EDIT_REFERENCES_ZH = "【编辑参考】第1张为已生成底图，锁定姿态、镜头、透视、裁切、构图与文字；其后原始角色参考决定身份、肤色/发色、物种、体型及原生身体比例，不从灰阶或记忆猜原色。{COSTUME_REFERENCE}决定衣装款式、服装配色/花纹/结构与饰品。生成三视图仅补充视角，不覆盖相应权威，也不把其站姿、机位或关节二维位置硬套入底图。正面结构锚点（若有）只核对身体连接；可选附加图只作道具参考。独立图片或嵌入缩略图均不得出现在成图。";
+const EDIT_REFERENCES_EN = "[EDIT REFERENCES] Input 1 is the generated base, locking pose, camera, perspective, crop, composition and typography. Following original references own identity, skin/hair colors, species, physique and anatomy; never infer canonical colors from grayscale or memory. {COSTUME_REFERENCE} owns outfit design, garment colors/patterns/structure and accessories. The generated three-view only supplements views; never override these authorities or transplant its standing pose, camera or 2D joint locations into the base. Any front structure anchor checks anatomy only; optional addon images supply props only. No standalone or embedded reference images in the final artwork.";
 const EDIT_LOCK_ZH = '【画面锁定】禁止移动、缩放、旋转、裁切或重新构图。视角、机位、透视、角色轮廓/位置/大小/角度、脸位与表情、文字字形/字距/行距/边距/裁切程度均与零命逐像素对齐。只改色彩、渲染和材质，不照搬三视图的姿势。';
 const EDIT_LOCK_EN = '[FRAME LOCK] Never move, scale, rotate, crop or recompose. View, camera, perspective, character contour/position/size/angle, face position/expression and typography letterforms/spacing/line spacing/margins/cropping remain pixel-aligned to zero-fate. Change only color, rendering and material treatment; never copy the three-view pose.';
 const LIGHTING_ZH = '【光照】全局45度柔和顶光；光向与布料褶皱、发丝走向共同决定明暗，同一材质按朝向分层，明暗交界清晰但不锐利。';
@@ -56,12 +56,12 @@ const ZERO_TEXT_EN = join(
   FRONT_TEXT_QUOTES_EN,
 );
 const ZERO_RENDER_ZH = join(
-  '【角色明暗与配色】主体统一为「{DOMINANT_COLOR}」单一色相的低饱和灰调，暗部占绝大部分，接近深色剪影。全部裸露皮肤为最暗近纯黑，五官极隐约；头发、衣装、护甲和配饰也以深暗为主，仅受光面、结构线和褶皱高光提亮，不大面积铺亮色/白色，不把皮肤画亮。通过明度差保留材质和原衣装/花纹细节。双色调主色为低饱和「{DOMINANT_COLOR}」；仅虹膜和极少数标志配饰保留主图原色，不换主题色、不额外提亮，除此无其他色相。',
+  '【角色明暗与配色】主体统一为「{DOMINANT_COLOR}」单一色相的低饱和灰调，暗部占绝大部分，接近深色剪影。全部裸露皮肤为最暗近纯黑，五官极隐约；头发、衣装、护甲和配饰也以深暗为主，仅受光面、结构线和褶皱高光提亮，不大面积铺亮色/白色，不把皮肤画亮。通过明度差保留材质和原衣装/花纹细节。双色调主色为低饱和「{DOMINANT_COLOR}」；虹膜保留原始角色参考的原色，极少数标志配饰保留{COSTUME_REFERENCE}对应原色，不换主题色、不额外提亮，除此无其他色相。',
   LIGHTING_ZH,
   '【背景】「{DOMINANT_COLOR}」的高饱和高亮版纯色平涂，非低饱和灰调；深沉主体与鲜亮背景形成撞色、明暗和饱和度双重对比。主体背景明确分离，仅允许极少量染边，不让主体大块面融进背景。保持强烈留白、斜向冲击和登场张力；不要求全身入画。',
 );
 const ZERO_RENDER_EN = join(
-  '[CHARACTER VALUES/COLORS] Unify the subject to a muted/desaturated 「{DOMINANT_COLOR}」 hue with deep shadows over most of its area, nearly a dark silhouette. All bare skin is darkest near-black with barely visible facial features. Hair, clothing, armor and accessories are predominantly dark too: lift only lit surfaces, structural lines and fold highlights; no large bright/white fills and no bright skin. Distinguish materials and preserve original garments/patterns with value differences. Duotone dominant is muted 「{DOMINANT_COLOR}」; only irises and very few signature accessories retain input 1\'s original colors, never theme-recolored or artificially brightened. No other hues.',
+  '[CHARACTER VALUES/COLORS] Unify the subject to a muted/desaturated 「{DOMINANT_COLOR}」 hue with deep shadows over most of its area, nearly a dark silhouette. All bare skin is darkest near-black with barely visible facial features. Hair, clothing, armor and accessories are predominantly dark too: lift only lit surfaces, structural lines and fold highlights; no large bright/white fills and no bright skin. Distinguish materials and preserve original garments/patterns with value differences. Duotone dominant is muted 「{DOMINANT_COLOR}」; only irises retain original character colors and very few signature accessories retain colors from {COSTUME_REFERENCE}, never theme-recolored or artificially brightened. No other hues.',
   LIGHTING_EN,
   '[BACKGROUND] Flat vivid, high-saturation/high-brightness 「{DOMINANT_COLOR}」, not muted grayscale. Strong light/dark and saturation contrast against the deep muted subject. Clearly separate subject/background, allowing only tiny edge bleeding; never merge large subject masses into the background. Strong negative space, diagonal impact and entrance tension; full-body framing is not required.',
 );
@@ -82,8 +82,8 @@ const SIX_TEXT_EN = join(
   FRONT_TEXT_QUOTES_EN,
 );
 
-const SIX_COLOR_ZH = '【六命配色铁律】肤色、发色、服装、花纹和配饰100%匹配第2张全彩三视图，原色优先于光照与风格化，不统一染色或另换配色。尤其不得把灰阶误认成白/银/浅灰/漂白发；三视图没有这种发色就不生成。';
-const SIX_COLOR_EN = '[SIX-FATE COLOR IRON RULE] Skin, hair, garments, patterns and accessories must match input 2\'s original full-color palette 100%; original colors take priority over lighting and stylization. Never recolor uniformly or replace the palette. Never mistake grayscale for white/silver/light-gray/bleached hair unless the canonical three-view actually has that hair color.';
+const SIX_COLOR_ZH = "【六命配色铁律】肤色/发色严格匹配原始角色参考；服装、花纹与饰品配色严格匹配{COSTUME_REFERENCE}。固有色优先于光照与风格化，不统一染色或另换配色。不得把灰阶误认成白/银/浅灰/漂白发，原图没有这种发色就不生成。";
+const SIX_COLOR_EN = "[SIX-FATE COLOR IRON RULE] Match skin/hair colors to original character references and garment/pattern/accessory colors to {COSTUME_REFERENCE}. Canonical colors override lighting and stylization; never recolor uniformly or replace the palette. Never mistake grayscale for white/silver/light-gray/bleached hair absent from original art.";
 const SIX_FINISH_ZH = join(
   '【画面与质感】纯白背景#FFFFFF，无渐变、噪点、纹理、背景阴影或暗角。全彩高饱和赛璐珞，脸部清晰，高精度明亮印刷品美学；放松、慵懒的非战斗日常氛围，不改变底图动作。',
   LIGHTING_ZH,
@@ -100,19 +100,19 @@ const SIX_FINISH_EN = join(
 const SIX_FRONT_ZH = join(
   '《绝区零》Mindscape Cinema六命阳影画风格，明亮健康、全年龄游戏美术。',
   EDIT_REFERENCES_ZH,
-  '【阳面任务】第1张为三命成图，在原视角、机位、透视和动作下，仅将灰阶还原为全彩高饱和赛璐珞；服装款式、配件与花纹不改，沿用三视图真实颜色。',
+  '【阳面任务】第1张为三命成图，在原视角、机位、透视和动作下，仅将灰阶还原为全彩高饱和赛璐珞；服装款式、配件与花纹不改，肤色/发色沿用原图，服饰颜色沿用{COSTUME_REFERENCE}。',
   SIX_COLOR_ZH,
   SIX_FINISH_ZH,
 );
 const SIX_FRONT_EN = join(
   'ZZZ Mindscape Cinema six-fate Yang art style; bright, wholesome, all-ages game artwork.',
   EDIT_REFERENCES_EN,
-  '[YANG TASK] Input 1 is the three-fate result. Preserve its view, camera, perspective and action while restoring grayscale to high-saturation full-color cel-shading. Do not change garment design, accessories or patterns; restore canonical original colors.',
+  '[YANG TASK] Input 1 is the three-fate result. Preserve its view, camera, perspective and action while restoring grayscale to high-saturation full-color cel-shading. Do not change garment design, accessories or patterns; restore original skin/hair colors and garment colors from {COSTUME_REFERENCE}.',
   SIX_COLOR_EN,
   SIX_FINISH_EN,
 );
-const STREAMLINE_ZH = '【服装精简·必须执行】只在原服装上做减法，不换款、不设计整套新衣。按实际结构选择，不必凑数：外套/披风/斗篷/大衣/外甲去除或显著改短/改薄/镂空；防护板/机械外壳去除非关键覆盖或镂空但保留机体结构；裙/衣下摆显著改短或高开衩；袖部改无袖/短袖/吊带/挂脖；领部调整为深V/方领/挂脖/露肩；背部露背/绑带/镂空；腰封/腹部覆盖去除或腰侧镂空/露脐；裤装/裙内层改短或去除冗余覆盖。呈现自然松动、滑落或改短，不是暴力破坏；保留原色、图案与标志性装饰。肩、锁骨、胸线、腰腹、后背、大腿、手臂等适用区域连续呈现，露肤面积明显增加。腿部仍保持原袜装（如有），不添加三视图不存在的深色丝袜/连裤袜；只改变衣物覆盖，不改变身体比例、关节、原生轮廓和遮挡；鱼尾、鳍、鳞片、毛发及机体结构不是衣物，不得为露肤而删除或改成人腿。';
-const STREAMLINE_EN = '[COSTUME STREAMLINING — REQUIRED] Subtract from existing garments only; never replace the outfit style or invent a new set. Apply where relevant without a quota: remove or significantly shorten/thin/open outerwear/capes/cloaks/coats/outer armor; open or remove non-critical protective plates/shell coverage while preserving mechanical structure; shorten skirt/hems or add high slits; use sleeveless/short-sleeve/tank/halter variants; adjust neckline to deep-V/square/halter/off-shoulder; open-back/straps/cutouts; remove waist/abdominal coverage or add waist-side/bare-midriff cutouts; shorten lower garments/inner skirts or remove redundant coverage. Garments loosen, slip or shorten naturally, never look violently destroyed. Preserve original colors, patterns and signature decoration. Relevant shoulder/collarbone/chest line/waist/back/thigh/arm regions show continuous skin with noticeably increased exposure. Preserve existing legwear; never add dark stockings/tights absent from the three-view. Change garment coverage only, never body proportions, joints, canonical contours or occlusion. Fish tails, fins, scales, fur and mechanical structure are body parts, not garments; never remove them or turn them into human legs to expose skin.';
+const STREAMLINE_ZH = '【服装精简·必须执行】只在原服装上做减法，不换款、不设计整套新衣。按实际结构选择，不必凑数：外套/披风/斗篷/大衣/外甲去除或显著改短/改薄/镂空；防护板/机械外壳去除非关键覆盖或镂空但保留机体结构；裙/衣下摆显著改短或高开衩；袖部改无袖/短袖/吊带/挂脖；领部调整为深V/方领/挂脖/露肩；背部露背/绑带/镂空；腰封/腹部覆盖去除或腰侧镂空/露脐；裤装/裙内层改短或去除冗余覆盖。呈现自然松动、滑落或改短，不是暴力破坏；保留原色、图案与标志性装饰。肩、锁骨、胸线、腰腹、后背、大腿、手臂等适用区域连续呈现，露肤面积明显增加。腿部仍保持原袜装（如有），不添加{COSTUME_REFERENCE}不存在的深色丝袜/连裤袜；只改变衣物覆盖，不改变身体比例、关节、原生轮廓和遮挡；鱼尾、鳍、鳞片、毛发及机体结构不是衣物，不得为露肤而删除或改成人腿。';
+const STREAMLINE_EN = '[COSTUME STREAMLINING — REQUIRED] Subtract from existing garments only; never replace the outfit style or invent a new set. Apply where relevant without a quota: remove or significantly shorten/thin/open outerwear/capes/cloaks/coats/outer armor; open or remove non-critical protective plates/shell coverage while preserving mechanical structure; shorten skirt/hems or add high slits; use sleeveless/short-sleeve/tank/halter variants; adjust neckline to deep-V/square/halter/off-shoulder; open-back/straps/cutouts; remove waist/abdominal coverage or add waist-side/bare-midriff cutouts; shorten lower garments/inner skirts or remove redundant coverage. Garments loosen, slip or shorten naturally, never look violently destroyed. Preserve original colors, patterns and signature decoration. Relevant shoulder/collarbone/chest line/waist/back/thigh/arm regions show continuous skin with noticeably increased exposure. Preserve existing legwear; never add dark stockings/tights absent from {COSTUME_REFERENCE}. Change garment coverage only, never body proportions, joints, canonical contours or occlusion. Fish tails, fins, scales, fur and mechanical structure are body parts, not garments; never remove them or turn them into human legs to expose skin.';
 const SIX_BACK_ZH = join(
   '《绝区零》Mindscape Cinema六命阴影画风格，明亮健康、全年龄日常休闲氛围。',
   EDIT_REFERENCES_ZH,
@@ -149,14 +149,14 @@ export const YINGHUA_STYLES: YinghuaStyle[] = [
     label: '零命 · 单色调深色剪影',
     description: '单色调深色剪影海报风，主体压深、内部用亮线勾勒透出细节，压在明亮同色背景上高对比。',
     promptTemplate: join(
-      '《绝区零》Mindscape Cinema单色调深色剪影海报风。第1张主图锁定身份与衣装；可选附加元素只作道具参考；其余3张风格样张只参考构图方向、人物风格、色彩关系和角落文字，不借用角色、衣装、道具、名字或背景配色。',
+      '《绝区零》Mindscape Cinema单色调深色剪影海报风。第1张原始主参考锁定身份与身体结构，衣装以{COSTUME_REFERENCE}为准；可选附加元素只作道具参考；其余3张风格样张只参考构图方向、人物风格、色彩关系和角落文字，不借用角色、衣装、道具、名字或背景配色。',
       ZERO_COMPOSITION_ZH,
       '{ZERO_TEXT}',
       ZERO_RENDER_ZH,
       '{CHARACTER_TRAITS}',
     ),
     promptTemplateEn: join(
-      'ZZZ Mindscape Cinema Monochrome Dark Silhouette Poster. Input 1 locks identity/costume; optional addon is prop reference only; the final three style samples supply composition, character treatment, color relationships and corner typography only. Never borrow their characters, garments, props, names or background palettes.',
+      'ZZZ Mindscape Cinema Monochrome Dark Silhouette Poster. Input 1 locks identity/anatomy; {COSTUME_REFERENCE} owns clothing; optional addon is prop reference only; the final three style samples supply composition, character treatment, color relationships and corner typography only. Never borrow their characters, garments, props, names or background palettes.',
       ZERO_COMPOSITION_EN,
       '{ZERO_TEXT}',
       ZERO_RENDER_EN,
@@ -171,10 +171,10 @@ export const YINGHUA_STYLES: YinghuaStyle[] = [
       '《绝区零》Mindscape Cinema三命：编辑零命，冷酷锐利的中性灰阶主体+高饱和点缀，画风与零命一致。',
       EDIT_REFERENCES_ZH,
       EDIT_LOCK_ZH,
-      '【衣装与肤色判读】衣装/花纹/配饰结构严格按三视图保留，只改色彩；不添加口罩、面罩、眼镜、绷带、纹身、伤痕等原图不存在的元素。零命裸腿裸臂也会渲染成黑色，不能据此当成黑丝/深色织物；只有三视图明确有袜装才保留，否则还原为符合原肤色的灰阶裸露肌肤。',
-      '【灰阶】除指定点缀，主体彻底去饱和为R=G=B的纯中性黑白灰，去除零命「{DOMINANT_COLOR}」偏色，无残余染色灰。按三视图原亮暗关系转换：亮部浅灰至近白230–255，暗部深灰至近黑10–30；不是均匀死灰。皮肤按三视图原肤色形成对应浅/中/深灰，不能照搬零命近黑脸/肌肤。强块面光影、清晰外轮廓线稿表现立体层次、褶皱和发丝。',
+      '【衣装与肤色判读】衣装/花纹/配饰结构严格按{COSTUME_REFERENCE}保留，只改色彩；不添加该衣装参考不存在的服饰或配件，身体纹身/伤痕等仍以原始角色参考为准。零命裸腿裸臂也会渲染成黑色，不能据此当成黑丝/深色织物；只有{COSTUME_REFERENCE}明确有袜装才保留，否则还原为符合原肤色的灰阶裸露肌肤。',
+      '【灰阶】除指定点缀，主体彻底去饱和为R=G=B的纯中性黑白灰，去除零命「{DOMINANT_COLOR}」偏色，无残余染色灰。皮肤/头发按原始参考、衣装按{COSTUME_REFERENCE}的固有亮暗关系转换：亮部浅灰至近白230–255，暗部深灰至近黑10–30；不是均匀死灰。皮肤按原始参考的原肤色形成对应浅/中/深灰，不能照搬零命近黑脸/肌肤。强块面光影、清晰外轮廓线稿表现立体层次、褶皱和发丝。',
       LIGHTING_ZH,
-      '【点缀】仅极少数披风、指甲、手套、唇舌、标志配饰/发饰/道具挂饰/领结纹饰等指定部位，强制恢复三视图对应原色，100%满饱和并额外提亮30%；不可沿用零命灰调。形成鲜艳点缀与灰阶主体的最强焦点反差，其他部位无其他颜色。',
+      '【点缀】仅极少数披风、指甲、手套、唇舌、标志配饰/发饰/道具挂饰/领结纹饰等指定部位，强制恢复{COSTUME_REFERENCE}对应原色，100%满饱和并额外提亮30%；不可沿用零命灰调。形成鲜艳点缀与灰阶主体的最强焦点反差，其他部位无其他颜色。',
       '【背景】统一深黑RGB 8–15，可有极微弱工业噪点，不要具体场景、第二色、渐变或暗角；主体与背景极强明暗对比，轮廓清晰锐利、高光近白。{CHARACTER_TRAITS}',
       '{THREE_TEXT}',
     ),
@@ -182,10 +182,10 @@ export const YINGHUA_STYLES: YinghuaStyle[] = [
       'ZZZ Mindscape Cinema three-fate: edit zero-fate into a cool, sharp neutral grayscale subject with intensely saturated accents. Keep the same art style.',
       EDIT_REFERENCES_EN,
       EDIT_LOCK_EN,
-      '[GARMENTS/SKIN] Preserve canonical garment/pattern/accessory structures; change color only. Never add masks, glasses, bandages, tattoos, scars or other nonexistent elements. Bare arms/legs also look black in zero-fate: never infer dark stockings/fabric from that silhouette. Keep legwear only when the three-view explicitly has it; otherwise render bare skin in grayscale derived from its original skin tone.',
-      '[GRAYSCALE] Except for designated accents, fully desaturate to true neutral R=G=B black/white/gray. Strip zero-fate\'s 「{DOMINANT_COLOR}」 tint completely, with no tinted-gray residue. Convert canonical original value relationships: bright areas to light-gray/near-white 230–255, dark areas to dark-gray/near-black 10–30, not uniform flat gray. Skin uses light/mid/dark gray according to canonical skin tone; do not copy zero-fate\'s near-black face/skin. Strong blocky shading and crisp contour linework convey volume, folds and hair.',
+      '[GARMENTS/SKIN] Preserve garment/pattern/accessory structures from {COSTUME_REFERENCE}; change color only. Never add outfit elements absent from that reference; skin marks and scars still follow original character art. Bare arms/legs also look black in zero-fate: never infer dark stockings/fabric from that silhouette. Keep legwear only when {COSTUME_REFERENCE} explicitly has it; otherwise render bare skin in grayscale derived from its original skin tone.',
+      '[GRAYSCALE] Except for designated accents, fully desaturate to true neutral R=G=B black/white/gray. Strip zero-fate\'s 「{DOMINANT_COLOR}」 tint completely, with no tinted-gray residue. Convert original skin/hair values and garment values from {COSTUME_REFERENCE}: bright areas to light-gray/near-white 230–255, dark areas to dark-gray/near-black 10–30, not uniform flat gray. Skin uses light/mid/dark gray according to canonical skin tone; do not copy zero-fate\'s near-black face/skin. Strong blocky shading and crisp contour linework convey volume, folds and hair.',
       LIGHTING_EN,
-      '[ACCENTS] Only very few designated cape/nail/glove/lip/signature accessory/hair ornament/prop pendant/bow-pattern areas restore corresponding original three-view colors at 100% saturation plus 10% brightness, never zero-fate\'s gray tones. Maximal vivid-accent versus grayscale focal contrast; no other subject colors.',
+      '[ACCENTS] Only very few designated cape/nail/glove/lip/signature accessory/hair ornament/prop pendant/bow-pattern areas restore corresponding colors from {COSTUME_REFERENCE} at 100% saturation plus 10% brightness, never zero-fate\'s gray tones. Maximal vivid-accent versus grayscale focal contrast; no other subject colors.',
       '[BACKGROUND] Uniform deep-black RGB 8–15 with optional extremely faint industrial noise; no scene, second color, gradient or vignette. Extreme value contrast, crisp silhouette, near-white highlights. {CHARACTER_TRAITS}',
       '{THREE_TEXT}',
     ),
@@ -213,6 +213,7 @@ export function fillName(
   characterTraits?: string,
   lang?: 'zh' | 'en',
   styleId?: number,
+  hasBreakdown = false,
 ): string {
   const english = lang === 'en';
   const upper = (name || 'CHARACTER').toUpperCase();
@@ -260,7 +261,11 @@ export function fillName(
     : styleId === 3
       ? (english ? SIX_FATE_ANATOMY_PRIORITY_PREFIX_EN : SIX_FATE_ANATOMY_PRIORITY_PREFIX)
       : '';
-  return join(...[priority, fidelity, filled].filter(Boolean));
+  const costumeReference = english
+    ? (hasBreakdown ? 'the selected character breakdown sheet' : 'the original character references')
+    : (hasBreakdown ? '选中的角色拆解图' : '原始角色参考');
+  return join(...[priority, fidelity, filled].filter(Boolean))
+    .replaceAll('{COSTUME_REFERENCE}', () => costumeReference);
 }
 
 interface ZeroFatePromptOptions {
@@ -271,13 +276,14 @@ interface ZeroFatePromptOptions {
   microDynamic: string;
   characterTraits: string;
   lang: 'zh' | 'en';
+  hasBreakdown?: boolean;
 }
 
 /** Establish readable anatomy before introducing silhouette and typography. */
 export function buildZeroFateDraftPrompt(options: ZeroFatePromptOptions): string {
   const en = options.lang === 'en';
   const template = en ? join(
-    '[ACTION DRAFT — STAGE 1] Create one clean, normally lit full-color game-character action study from input 1. Optional reference is a prop only. Keep the complete original costume, all garment layers, original coverage, colors and body proportions. Keep clothing securely in place throughout the action. Use a natural expression and present the overall action and costume silhouette.',
+    '[ACTION DRAFT — STAGE 1] Create one clean, normally lit full-color game-character action study from input 1. Original art owns identity and body proportions; the generated three-view only supplements views. Keep the complete original costume, garment layers, coverage and garment colors as defined by {COSTUME_REFERENCE}. Keep clothing securely in place throughout the action. Use a natural expression and present the overall action and costume silhouette.',
     ZERO_COMPOSITION_EN
       .replace('The overall mood is defenseless and non-combat — relaxed, languid, completely unguarded.', 'Use a natural, stable non-combat game-character pose with clear body support and balanced weight.')
       .replace('Character and text together occupy', 'The character occupies'),
@@ -287,7 +293,7 @@ export function buildZeroFateDraftPrompt(options: ZeroFatePromptOptions): string
     '{ZERO_TEXT}',
     '{CHARACTER_TRAITS}',
   ) : join(
-    '【动作底稿·第一阶段】按第1张原角色图生成正常明暗的全彩游戏角色动作设定，可选参考只作道具。保持原衣装完整、全部衣物层次、原有覆盖范围、固有配色与身体比例；动作中衣物穿着稳固。表情自然，画面重点为整体动作与服装轮廓。',
+    '【动作底稿·第一阶段】按第1张原角色图生成正常明暗的全彩游戏角色动作设定，原始参考决定身份与身体比例，生成三视图仅补视角。衣装与服饰配色以{COSTUME_REFERENCE}为准，保持衣装完整、全部衣物层次及覆盖范围；动作中衣物穿着稳固。表情自然，画面重点为整体动作与服装轮廓。',
     ZERO_COMPOSITION_ZH
       .replace('整体为卸防感的非战斗姿态，放松、慵懒、毫无戒备。', '整体为自然稳定的游戏角色日常动作，身体支撑与重心关系清楚。')
       .replace('角色主体和文字共占', '角色主体占'),
@@ -299,7 +305,7 @@ export function buildZeroFateDraftPrompt(options: ZeroFatePromptOptions): string
   );
   return fillName(template, options.name, options.palette, false,
     options.characterDynamic,
-    options.microDynamic, options.characterTraits, options.lang);
+    options.microDynamic, options.characterTraits, options.lang, undefined, options.hasBreakdown);
 }
 
 /** Edit the approved draft; the generator must not choose a new camera or pose. */
@@ -307,21 +313,20 @@ export function buildZeroFateRenderPrompt(options: ZeroFatePromptOptions): strin
   const en = options.lang === 'en';
   const template = en ? join(
     '[ZERO-FATE RENDER — STAGE 2] Input 1 is the approved full-color action draft, the sole authority for view, camera, perspective, crop, pose, subject position/scale, silhouette, joint connections and front/back occlusion. Freeze these exactly. Only change value/color treatment, background and requested typography. Never choose a new pose or repair anatomy by moving limbs.',
-    '[REFERENCES] The following canonical character reference supplies identity, original colors and costume design only. Any prop reference is optional. The final three style samples supply dark-silhouette treatment, color relationships and typography only; never copy their poses, characters, garments or names. References may be separate inputs or embedded thumbnails; remove all thumbnails from the final image and fully render the underlying scene.',
+    '[REFERENCES] Following original character references supply identity, skin/hair colors and anatomy; {COSTUME_REFERENCE} owns costume design and garment colors. The auxiliary three-view supplements views only. Any prop reference is optional. The final three style samples supply dark-silhouette treatment, color relationships and typography only; never copy their poses, characters, garments or names. References may be separate inputs or embedded thumbnails; remove all thumbnails from the final image and fully render the underlying scene.',
     ZERO_FATE_ANATOMY_PRIORITY_PREFIX_EN,
-    '[COSTUME] Keep every original garment layer, component, pattern and accessory from the canonical character reference in the approved draft pose. No costume redesign or streamlining.',
+    '[COSTUME] Keep every original garment layer, component, pattern and accessory from {COSTUME_REFERENCE} in the approved draft pose. No costume redesign or streamlining.',
     ZERO_RENDER_EN,
     '{ZERO_TEXT}',
   ) : join(
     '【零命转绘·第二阶段】第1张为已确认的全彩动作底稿，是视角、机位、透视、裁切、动作、角色位置大小、身体轮廓、关节连接与前后遮挡的唯一权威，必须原样锁定。只改变明暗配色、背景及指定文字，不重新选姿势，不移动肢体来修复结构。',
-    '【参考分工】其后的原角色参考仅提供身份、原始配色和衣装设计；可选道具参考仅提供道具。最后3张风格样张只提供深色剪影处理、色彩关系与文字风格，不借用其姿势、角色、衣装或名字。参考可独立输入或嵌为缩略图，最终去除全部参考缩略图并完整恢复其下方画面。',
+    '【参考分工】其后原始角色参考提供身份、肤色/发色与身体结构，衣装和服饰配色以{COSTUME_REFERENCE}为准；辅助三视图仅补视角；可选道具参考仅提供道具。最后3张风格样张只提供深色剪影处理、色彩关系与文字风格，不借用其姿势、角色、衣装或名字。参考可独立输入或嵌为缩略图，最终去除全部参考缩略图并完整恢复其下方画面。',
     ZERO_FATE_ANATOMY_PRIORITY_PREFIX,
-    '【衣装锁定】按原角色参考保留全部衣装内外层、部件、花纹与饰品，并沿用动作底稿的穿着和遮挡关系；不重设计、不精简衣装。',
+    '【衣装锁定】按{COSTUME_REFERENCE}保留全部衣装内外层、部件、花纹与饰品，并沿用动作底稿的穿着和遮挡关系；不重设计、不精简衣装。',
     ZERO_RENDER_ZH,
     '{ZERO_TEXT}',
   );
-  // No styleId=1: its direct-generation prefix declares input 1 the costume
-  // authority. Here input 1 owns pose, while the canonical reference owns costume.
+  // The approved draft owns pose; the selected costume reference owns clothing.
   return fillName(template, options.name, options.palette, options.showText,
-    options.characterDynamic, options.microDynamic, options.characterTraits, options.lang);
+    options.characterDynamic, options.microDynamic, options.characterTraits, options.lang, undefined, options.hasBreakdown);
 }

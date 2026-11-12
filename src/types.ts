@@ -185,6 +185,7 @@ export type ZeroFateMode = 'two-stage' | 'direct';
 /** Inputs that determine whether an action draft still belongs to this character/pose. */
 export interface ZeroFateDraftContext {
   sourceImage: string;
+  originalImages?: string[];
   addonImage: string | null;
   breakdownImage?: string | null;
   prompt: string;
@@ -259,6 +260,7 @@ export type GenStatus = 'idle' | 'loading' | 'done' | 'error';
 
 export interface CharacterReferenceContext {
   sourceImage: string;
+  originalImages?: string[];
   breakdownImage: string | null;
   characterName: string;
 }

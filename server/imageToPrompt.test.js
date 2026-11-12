@@ -28,7 +28,7 @@ test('vision request uses normalized image, explicit spatial rules and separate 
   assert.equal(response.status, 200); assert.deepEqual(response.body.result, result);
   assert.equal(response.body.image.aspectRatio, '2:1');
   assert.equal(state.calls[0].url, 'https://vision.example/v1/chat/completions');
-  assert.equal(state.calls[0].timeout, 180_000);
+  assert.equal(state.calls[0].timeout, 264_000);
   const body = JSON.parse(state.calls[0].options.body);
   assert.equal(body.model, 'vision-test'); assert.equal(state.calls[0].options.headers.Authorization, 'Bearer test-user-key');
   assert.equal(body.messages[0].content, IMAGE_TO_PROMPT_SYSTEM);

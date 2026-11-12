@@ -916,6 +916,7 @@ app.post('/api/inpaint', rateLimit, upload.fields([
     imageMime: imageFile?.mimetype,
     maskBase64,
     maskMime: maskFile?.mimetype,
+    preserveOutputAspectRatio: true,
     ...(bodyFields.preserveInputQuality === true || bodyFields.preserveInputQuality === 'true' ? { preserveInputQuality: true } : {}),
     ...(bodyFields.inputImageMaxDimension !== undefined ? { inputImageMaxDimension: Number(bodyFields.inputImageMaxDimension) } : {}),
     n: 1,

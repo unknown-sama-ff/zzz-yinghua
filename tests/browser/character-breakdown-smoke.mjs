@@ -69,12 +69,13 @@ try {
   const assets = page.getByRole('region', { name: '角色拆解图工作台' });
   await assets.getByRole('button', { name: '生成角色拆解图', exact: true }).click();
   await assets.getByAltText('当前配套角色拆解图', { exact: true }).waitFor();
-  assert.equal(requests[1].imageBase64, bytes(fixtures.a));
+  assert.equal(requests[1].imageBase64, bytes(fixtures.front));
+  assert.equal(requests[1].refImages[0].base64, bytes(fixtures.a));
   assert.match(requests[1].prompt, /角色名字：ALPHA/);
   assert.match(requests[1].prompt, /中文手写注释/);
   assert.match(requests[1].prompt, /纯白色背景/);
   assert.equal(await assets.getByAltText('当前配套角色拆解图', { exact: true }).getAttribute('src'), fixtures.sheetA);
-  checked('breakdown generation uses the selected three-view, named prompt, Chinese notes and white background');
+  checked('breakdown generation uses original art first, auxiliary three-view, named prompt, Chinese notes and white background');
 
   await page.evaluate(async (fixtures) => {
     const { useWorkbenchStore } = await import('/src/store/useWorkbenchStore.ts');
@@ -130,9 +131,11 @@ try {
   assert.equal(await panel.getByAltText('当前配套角色拆解图', { exact: true }).getAttribute('src'), fixtures.manual);
   await panel.getByRole('button', { name: '生成动作底稿', exact: true }).click();
   await panel.getByRole('button', { name: '确认结构并生成零命', exact: true }).waitFor();
-  assert.equal(requests.at(-1).refImages[0].base64, bytes(fixtures.manual));
+  assert.equal(requests.at(-1).refImages[0].base64, bytes(fixtures.a));
+  assert.equal(requests.at(-1).refImages[1].base64, bytes(fixtures.manual));
+  assert.match(requests.at(-1).prompt, /衣装与服饰配色以选中的角色拆解图为准/);
   assert.match(requests.at(-1).prompt, /角色名字：ALPHA/);
-  assert.match(requests.at(-1).prompt, /第1张为角色三视图，随后是拆解图/);
+  assert.match(requests.at(-1).prompt, /原始角色主参考作为第1张/);
   const conversion = page.waitForRequest((request) => new URL(request.url()).pathname === '/api/generate');
   await panel.getByRole('button', { name: '确认结构并生成零命', exact: true }).click();
   await conversion;
@@ -140,9 +143,10 @@ try {
     const { useYinghuaStore } = await import('/src/store/useYinghuaStore.ts');
     return !useYinghuaStore.getState().activeGeneration && useYinghuaStore.getState().yinghuaSlots[1].status === 'done';
   });
-  assert.equal(requests.at(-1).refImages[0].base64, bytes(fixtures.a));
-  assert.equal(requests.at(-1).refImages[1].base64, bytes(fixtures.manual));
-  assert.match(requests.at(-1).prompt, /第1张为已确认动作底稿，第2张为角色三视图，第3张为拆解图/);
+  assert.equal(requests.at(-1).refImages[0].base64, bytes(fixtures.front));
+  assert.equal(requests.at(-1).refImages[1].base64, bytes(fixtures.a));
+  assert.equal(requests.at(-1).refImages[2].base64, bytes(fixtures.manual));
+  assert.match(requests.at(-1).prompt, /第1张为已确认动作底稿，之后依次为原始角色参考、辅助三视图、拆解图/);
   checked('draft and zero conversion use the correct reference order and stage-specific priorities');
 
   const go = async (name) => panel.getByRole('navigation', { name: '影画制作步骤' }).getByRole('button', { name: new RegExp(name) }).click();
@@ -156,7 +160,8 @@ try {
       return !useYinghuaStore.getState().activeGeneration;
     });
     assert.ok(requests.at(-1).refImages.some((image) => image.base64 === bytes(fixtures.manual)));
-    assert.equal(requests.at(-1).refImages[0].base64, bytes(fixtures.a));
+    assert.equal(requests.at(-1).refImages[0].base64, bytes(fixtures.front));
+    assert.match(requests.at(-1).prompt, /衣装最高依据/);
   };
   await runStage('三命灰阶', '生成三命');
   assert.match(requests.at(-1).prompt, /只转换灰阶、指定点缀和背景/);
@@ -164,7 +169,7 @@ try {
   assert.match(requests.at(-1).prompt, /仅还原全彩/);
   await panel.getByRole('button', { name: '切换到六命阴', exact: true }).click();
   await runStage('六命全彩', '生成六命阴');
-  assert.match(requests.at(-1).prompt, /仅执行本阶段指定的原服装精简/);
+  assert.match(requests.at(-1).prompt, /仅在拆解图确定的衣装基础上执行本阶段指定精简/);
   checked('three-fate, Yang and Yin all receive the matched sheet with distinct rendering and clothing instructions');
 
   await panel.getByRole('button', { name: '切换到六命阳', exact: true }).click();
@@ -185,14 +190,15 @@ try {
   await panel.getByRole('button', { name: '生成零命', exact: true }).click();
   await direct;
   await page.waitForFunction(async () => !(await import('/src/store/useYinghuaStore.ts')).useYinghuaStore.getState().activeGeneration);
-  assert.equal(requests.at(-1).refImages[0].base64, bytes(fixtures.manual));
-  assert.match(requests.at(-1).prompt, /随后是拆解图与可选道具/);
+  assert.equal(requests.at(-1).refImages[0].base64, bytes(fixtures.a));
+  assert.equal(requests.at(-1).refImages[1].base64, bytes(fixtures.manual));
+  assert.match(requests.at(-1).prompt, /随后为原始补充视角、辅助三视图、拆解图与道具/);
   checked('changing the sheet invalidates old draft and downstream bases; direct mode also carries the selected sheet');
 
   const fallback = await page.evaluate(async (fixtures) => {
     const { prepareZeroFateInputs } = await import('/src/lib/zeroFateInputs.ts');
     const { isCurrentZeroFateDraft } = await import('/src/lib/zeroFate.ts');
-    const options = { sourceImage: fixtures.a, breakdownImage: fixtures.manual, addonImage: null, provider: 'seedream', model: 'local-unknown' };
+    const options = { sourceImage: fixtures.a, originalImages: [fixtures.front], breakdownImage: fixtures.manual, addonImage: null, provider: 'seedream', model: 'local-unknown' };
     const draft = await prepareZeroFateInputs({ ...options, phase: 'draft' });
     const render = await prepareZeroFateInputs({ ...options, phase: 'render', draftImage: fixtures.draft });
     const context = { sourceImage: fixtures.a, addonImage: null, prompt: 'same', breakdownImage: fixtures.manual };

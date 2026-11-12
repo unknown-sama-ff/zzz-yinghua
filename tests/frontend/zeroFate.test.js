@@ -53,7 +53,7 @@ for (const lang of ['zh', 'en']) {
 test('an old draft cannot continue after changing character, prop, or action instructions', () => {
   const draft = { status: 'done', images: [image('draft')], context };
   assert.equal(isCurrentZeroFateDraft(draft, context), true);
-  for (const changed of [{ sourceImage: image('other') }, { addonImage: image('prop') }, { breakdownImage: image('breakdown') }, { prompt: '另一个动作' }]) {
+  for (const changed of [{ sourceImage: image('other') }, { originalImages: [image('other-original')] }, { addonImage: image('prop') }, { breakdownImage: image('breakdown') }, { prompt: '另一个动作' }]) {
     assert.equal(isCurrentZeroFateDraft(draft, { ...context, ...changed }), false);
   }
   assert.equal(isCurrentZeroFateDraft(draft, { ...context, breakdownImage: null }), true, 'older drafts without a breakdown remain valid when none is selected');

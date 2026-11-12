@@ -24,8 +24,8 @@ export const CACHE_TTL_MS = 5 * 60_000;
 /** Cache purge interval (1 min). */
 export const CACHE_PURGE_INTERVAL_MS = 60_000;
 
-/** Vision-model request timeout (3 min), shared by all vision calls. */
-export const VISION_TIMEOUT_MS = 180_000;
+/** Vision-model request timeout (264 s), shared by all vision calls. */
+export const VISION_TIMEOUT_MS = 264_000;
 
 /**
  * Gallery list request timeout (15 s). Far shorter than the generate timeouts

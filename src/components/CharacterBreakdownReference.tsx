@@ -46,7 +46,7 @@ export function CharacterBreakdownReference({ compact = false }: { compact?: boo
           } finally { useCharacterSheetStore.getState().setUploading(source, false); }
         }} />
     </label>
-    <p className="character-breakdown-hint">{!source ? '请先选择或上传角色三视图。' : selected ? '已与当前三视图配对，影画生成时会自动带入。' : '当前三视图尚未选用拆解图，可生成后自动配对，也可手动上传。'}</p>
+    <p className="character-breakdown-hint">{!source ? '请先选择或上传角色三视图。' : selected ? '已与当前三视图配对，后续影画的服饰、配饰与服装配色以此拆解图为准。' : '当前三视图尚未选用拆解图，可生成后自动配对，也可手动上传。'}</p>
     {selected && <figure className="character-breakdown-preview">
       <div className="relative"><img src={selected.url} alt="当前配套角色拆解图" data-no-inpaint /><ZoomButton src={selected.url} alt="当前配套角色拆解图" /></div>
       <figcaption>

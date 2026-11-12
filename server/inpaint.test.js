@@ -107,3 +107,57 @@ test('inpaint forwards denoise input options and keeps a precise mask aligned', 
   assert.equal(receivedMask.height, receivedImage.height);
   assert.equal(receivedMask.hasAlpha, true);
 });
+
+test('smart edits and masked repairs send the source aspect ratio to upstream instead of a square default', async (t) => {
+  const base = await startApp(t);
+  const originalFetch = globalThis.fetch;
+  let requestedSize;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    requestedSize = init.body.get('size');
+    return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), { status: 200 });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  for (const [width, height, size, mode] of [
+    [1536, 1024, '1536x1024', 'smart'],
+    [1024, 1536, '1024x1536', 'smart'],
+    [1920, 1080, '1536x864', 'precise'],
+    [600, 900, '1024x1536', 'smart'],
+    [1024, 1024, '1024x1024', 'smart'],
+  ]) {
+    const image = await sharp({ create: { width, height, channels: 3, background: '#ffffff' } }).png().toBuffer();
+    const form = new FormData();
+    form.append('image', new Blob([image], { type: 'image/png' }), 'image.png');
+    if (mode === 'precise') form.append('mask', await pngBlob(4), 'mask.png');
+    editFields(form, mode);
+    const response = await fetch(base + '/api/inpaint', { method: 'POST', body: form });
+    const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.equal(requestedSize, size, `${width}x${height}/${mode}`);
+  }
+});
+
+test('remote-source edits infer output dimensions after fetching the original image', async (t) => {
+  const base = await startApp(t);
+  const originalFetch = globalThis.fetch;
+  const image = await sharp({ create: { width: 1024, height: 1536, channels: 3, background: '#ffffff' } }).png().toBuffer();
+  let requestedSize;
+  let imageFetches = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).startsWith(base)) return originalFetch(url, init);
+    if (!init?.body?.get) {
+      imageFetches++;
+      return new Response(image, { headers: { 'Content-Type': 'image/png' } });
+    }
+    requestedSize = init.body.get('size');
+    return new Response(JSON.stringify({ data: [{ b64_json: 'ZmFrZQ==' }] }), { status: 200 });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const form = new FormData();
+  form.append('imageUrl', 'https://8.8.8.8/character.png');
+  editFields(form, 'smart');
+  const response = await fetch(base + '/api/inpaint', { method: 'POST', body: form });
+  assert.equal(response.status, 200, JSON.stringify(await response.json()));
+  assert.equal(requestedSize, '1024x1536');
+  assert.equal(imageFetches, 1, 'dimension detection must reuse the existing source fetch');
+});
