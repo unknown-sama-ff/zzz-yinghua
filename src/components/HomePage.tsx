@@ -12,7 +12,7 @@ const examples = [
 ];
 
 const mindscapeExamples = [
-  { name: '卡芙卡', image: '/作品示例/kafka-mindscape-cut.webp', preview: '/作品示例/kafka-mindscape-cut-preview.webp', caption: '玫红撞色 / 斜向明暗切片' },
+  { name: '银狼', image: '/作品示例/silverwolf-mindscape-cut.webp', preview: '/作品示例/silverwolf-mindscape-cut-preview.webp', caption: '银紫撞色 / 斜向明暗切片' },
   { name: '流萤', image: '/作品示例/firefly-mindscape-cut.webp', preview: '/作品示例/firefly-mindscape-cut-preview.webp', caption: '黑白对比 / 角色大字排版' },
 ];
 
