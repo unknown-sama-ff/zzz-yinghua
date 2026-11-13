@@ -72,6 +72,14 @@ try {
   await upload('风格参考', 'style.png', style);
   await upload('共用表情参考', 'expression.png', expression);
   await upload('第5格表情参考', 'cell5.png', reference);
+  const expressionsBefore = await page.locator('.meme-expression-label textarea').evaluateAll((fields) => fields.map((field) => field.value));
+  await page.getByRole('button', { name: '一键全套无字', exact: true }).click();
+  assert.deepEqual(await page.locator('.meme-expression-label textarea').evaluateAll((fields) => fields.map((field) => field.value)), expressionsBefore);
+  await page.getByRole('button', { name: '15 格', exact: true }).click();
+  assert.equal(await page.locator('.meme-tile-heading input').count(), 15);
+  assert.ok(await page.locator('.meme-tile-heading input').evaluateAll((fields) => fields.every((field) => field.value === '')), 'one click also clears the hidden six captions');
+  assert.equal(await page.getByRole('button', { name: '一键全套无字', exact: true }).isDisabled(), true);
+  await page.getByRole('button', { name: '九宫格', exact: true }).click();
   await page.getByRole('button', { name: '一键生成表情包', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: 'GPT 图片通道' }).waitFor(); assert.equal(calls.length, 0);
   await page.getByRole('button', { name: '设置', exact: true }).click();
@@ -87,6 +95,8 @@ try {
   assert.equal(calls[0].imageBase64, reference.toString('base64'));
   assert.deepEqual(calls[0].refImages.map((image) => image.base64), [style, expression, reference].map((bytes) => bytes.toString('base64')));
   assert.match(calls[0].prompt, /图片4：仅用于第5格/); assert.equal(await resultTiles().count(), 9);
+  assert.match(calls[0].prompt, /全部为无字表情包/);
+  assert.equal((calls[0].prompt.match(/不绘制文字/g) ?? []).length, 9);
   assert.equal(await page.locator('.meme-tile-image img').first().evaluate((image) => image.naturalWidth), 201);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'desktop overflow');
   await page.screenshot({ path: resolve(output, 'desktop-setup.png') });

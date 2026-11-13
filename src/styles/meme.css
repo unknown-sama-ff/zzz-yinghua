@@ -35,6 +35,9 @@
 .meme-references>section+section { border-top:1px solid var(--studio-rule) }
 .meme-content { margin-top:32px }
 .meme-content-heading { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:18px }
+.meme-content-actions { display:flex;align-items:center;gap:10px;flex-wrap:wrap }
+.meme-clear-captions { min-height:38px;padding:8px 13px;font-size:12px }
+.meme-clear-captions:disabled { opacity:.45;cursor:default }
 .meme-count { display:flex;padding:3px;border:1px solid var(--studio-rule);border-radius:6px }
 .meme-count button { padding:7px 18px;border-radius:3px;color:var(--studio-secondary);font-size:12px }
 .meme-count button[aria-pressed=true] { background:var(--studio-highlight);color:var(--zzz-on-accent,#17131e);font-weight:650 }

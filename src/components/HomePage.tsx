@@ -3,6 +3,7 @@ import { useLightboxStore } from '../store/useLightboxStore';
 import { useUploadStore } from '../store/useUploadStore';
 import { ROUTE_HASHES } from '../lib/navigation';
 import { HomeFeatures } from './HomeFeatures';
+import { HomeMemeShowcase } from './HomeMemeShowcase';
 
 const examples = [
   { title: '让角色，跳出画框。', kind: '自由版', image: '/作者推荐/自由版.webp', caption: '粗粝印刷 / 自由构图', className: 'exhibit-wide' },
@@ -56,6 +57,7 @@ export function HomePage() {
       </div>
     </section>
 
+    <HomeMemeShowcase />
     <HomeFeatures />
 
     <section className="exhibition-capabilities" aria-labelledby="capabilities-title">

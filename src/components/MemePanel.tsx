@@ -140,8 +140,12 @@ export function MemePanel() {
 
       <section className="meme-content">
         <div className="meme-content-heading"><div className="meme-section-heading"><h2>这一套，想说什么？</h2><span>每格都能改</span></div>
-          <div className="meme-count" role="group" aria-label="表情包格数">{([9, 15] as const).map((number) => <button key={number} type="button" aria-pressed={draft.count === number} onClick={() => state.patchDraft({ count: number })}>{number === 9 ? '九宫格' : '15 格'}</button>)}</div>
+          <div className="meme-content-actions">
+            <button type="button" className="meme-clear-captions glass-btn" disabled={draft.tiles.every((tile) => !tile.caption)} onClick={() => state.patchDraft({ tiles: draft.tiles.map((tile) => ({ ...tile, caption: '' })) })}>一键全套无字</button>
+            <div className="meme-count" role="group" aria-label="表情包格数">{([9, 15] as const).map((number) => <button key={number} type="button" aria-pressed={draft.count === number} onClick={() => state.patchDraft({ count: number })}>{number === 9 ? '九宫格' : '15 格'}</button>)}</div>
+          </div>
         </div>
+        <p className="meme-help">文案留空即为无字表情包；一键清空全套文案，保留动作、神态与参考图。</p>
         <div className="meme-draft-grid">
           {draft.tiles.slice(0, draft.count).map((tile, index) => <article className="meme-tile-draft" key={tile.id}>
             <div className="meme-tile-heading"><span>{String(index + 1).padStart(2, '0')}</span><label>文案<input aria-label={`第${index + 1}格文案`} maxLength={40} value={tile.caption} placeholder="留空则不加字" onChange={(event) => state.patchTile(index, { caption: event.target.value })} /></label></div>

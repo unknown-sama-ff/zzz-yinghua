@@ -1,13 +1,14 @@
 .home-features { padding: 42px 0 48px; border-top: 1px solid var(--studio-rule); }
 .feature-exhibit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 28px; border: 1px solid var(--studio-rule); background: var(--zzz-panel); }
-.feature-stage { min-width: 0; padding: 28px; background: radial-gradient(ellipse at 50% 48%, color-mix(in srgb, var(--zzz-primary) 12%, var(--zzz-bg)), var(--zzz-bg) 75%); }
+.feature-scroll-track { min-width: 0; min-height: 148svh; --scatter: 1; --spread: .8; --art-opacity: 0; --pieces-opacity: 1; background: radial-gradient(ellipse at 50% 48%, color-mix(in srgb, var(--zzz-primary) 12%, var(--zzz-bg)), var(--zzz-bg) 75%); }
+.feature-stage { position: sticky; top: 100px; min-width: 0; padding: 64px 28px 28px; overflow: clip; }
 .feature-portrait { display: flex; justify-content: center; align-items: center; min-width: 0; padding: 10px; }
-.feature-portrait-frame { position: relative; width: min(100%, 416px); aspect-ratio: 941 / 1672; perspective: 1000px; }
-.feature-portrait-art { position: absolute; inset: 0; transform-style: preserve-3d; }
+.feature-portrait-frame { position: relative; width: min(100%, 416px, calc(61svh * .5628)); aspect-ratio: 941 / 1672; perspective: 1000px; }
+.feature-portrait-art { position: absolute; inset: 0; transform-style: preserve-3d; opacity: var(--art-opacity, 1); }
 .feature-portrait-art img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
 .feature-portrait.is-layered .feature-portrait-art { transform: rotateX(calc(var(--demo-tilt-x, 0deg) * .55)) rotateY(calc(var(--demo-tilt-y, 0deg) * .55)) scale(.96); }
-.feature-portrait.is-layered img:first-child { transform: translate3d(calc(var(--demo-x, 0px) * -.5), calc(var(--demo-y, 0px) * -.5), -16px) scale(1.016); }
-.feature-portrait.is-layered img:nth-child(2) { transform: translate3d(calc(var(--demo-x, 0px) * .25), calc(var(--demo-y, 0px) * .25), 16px) scale(.984); }
+.feature-portrait.is-layered img:first-child { transform: translate3d(calc(var(--demo-x, 0px) * -.5 + var(--scroll-depth, 0px) * -.5), calc(var(--demo-y, 0px) * -.5 + var(--scroll-depth, 0px) * -.35), -16px) scale(1.016); }
+.feature-portrait.is-layered img:nth-child(2) { transform: translate3d(calc(var(--demo-x, 0px) * .25 + var(--scroll-depth, 0px) * .25), calc(var(--demo-y, 0px) * .25 + var(--scroll-depth, 0px) * .2), 16px) scale(.984); }
 .feature-portrait.is-floating .feature-portrait-art {
   transform: translate3d(calc(var(--demo-x, 0px) * .3), calc(-10px + var(--demo-y, 0px) * .3), 12px)
     rotateX(calc(3deg + var(--demo-tilt-x, 0deg))) rotateY(calc(-4deg + var(--demo-tilt-y, 0deg))) scale(.94);
@@ -17,8 +18,20 @@
 .feature-portrait.is-floating .feature-portrait-art::before { background: var(--zzz-ink); border: 1px solid #ffffff50; transform: translateZ(-10px); }
 .feature-portrait.is-floating .feature-portrait-art::after { border: 1px solid #ffffff65; background: radial-gradient(ellipse at var(--demo-focus-x, 50%) var(--demo-focus-y, 50%), #ffffff26, transparent 65%); transform: translateZ(1px); }
 .feature-portrait-art, .feature-portrait-art img { transition: transform 220ms ease-out, box-shadow 220ms ease-out; }
+.feature-puzzle-pieces { position: absolute; inset: 0; pointer-events: none; transform-style: preserve-3d; opacity: var(--pieces-opacity, 0); }
+.feature-puzzle-piece { position: absolute; overflow: visible; transform: translate3d(calc(var(--scatter) * var(--spread) * var(--piece-x)), calc(var(--scatter) * var(--spread) * var(--piece-y)), calc(var(--scatter) * var(--spread) * var(--piece-z))) rotate(calc(var(--scatter) * var(--spread) * var(--piece-turn))); filter: drop-shadow(0 calc(var(--scatter) * 9px) calc(var(--scatter) * 10px) #0007); }
+.feature-piece-seam { fill: none; stroke: #fff9; stroke-width: 2; }
+.feature-scroll-track[data-assembly='assembling'] .feature-puzzle-piece { will-change: transform; }
+.feature-assembly-caption { display: flex; align-items: center; gap: 14px; max-width: 320px; margin: 24px auto 0; font-size: 10px; color: var(--studio-secondary); letter-spacing: 1px; }
+.feature-assembly-line { flex: 1; height: 2px; background: var(--studio-rule); position: relative; }
+.feature-assembly-line::after { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--assembly-progress, 0%); background: var(--studio-highlight); }
+.feature-skip-assembly { display: block; margin: 8px auto 0; min-height: 32px; padding: 4px 10px; font-size: 11px; color: var(--studio-highlight); }
+.feature-caption-complete { display: none; }
+.feature-scroll-track[data-assembly='complete'] .feature-caption-pending { display: none; }
+.feature-scroll-track[data-assembly='complete'] .feature-caption-complete { display: inline; }
+.feature-scroll-track[data-assembly='complete'] .feature-skip-assembly { visibility: hidden; }
 .feature-caption { max-width: 416px; margin: 12px auto 0; color: var(--studio-secondary); font-size: 11px; line-height: 1.7; }
-.feature-copy { align-self: center; min-width: 0; padding: clamp(28px, 4vw, 60px); }
+.feature-copy { position: sticky; top: 120px; align-self: start; min-width: 0; padding: clamp(28px, 4vw, 60px); }
 .feature-kicker { font: 11px 'Oswald', sans-serif; letter-spacing: 2px; color: var(--studio-highlight); }
 .feature-copy h3 { margin: 18px 0; font-size: clamp(27px, 3vw, 40px); line-height: 1.4; font-weight: 800; }
 .feature-copy > p:not(.feature-kicker), .feature-mode-description { margin-top: 14px; color: var(--studio-secondary); font-size: 13px; line-height: 1.9; }
@@ -33,16 +46,35 @@
 .feature-layer-guide > div { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 12px; padding-left: 14px; border-left: 2px solid var(--studio-rule); }
 .feature-layer-guide dt { color: var(--zzz-text); font-size: 12px; font-weight: 700; }
 .feature-layer-guide dd { margin: 0; color: var(--studio-secondary); font-size: 12px; line-height: 1.7; }
+.home-memes { padding: 42px 0 48px; border-top: 1px solid var(--studio-rule); }
+.home-meme-exhibit { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); margin-top: 28px; border: 1px solid var(--studio-rule); background: var(--zzz-panel); }
+.home-meme-art { display: block; width: 100%; position: relative; align-self: center; background: #fff; overflow: hidden; }
+.home-meme-art img { width: 100%; height: auto; display: block; transition: transform 300ms ease; }
+.home-meme-art:hover img { transform: scale(1.025); }
+.home-meme-copy { padding: clamp(24px, 4vw, 56px); align-self: center; }
+.home-meme-copy h3 { margin: 18px 0; font-size: clamp(26px, 3vw, 40px); font-weight: 800; line-height: 1.4; }
+.home-meme-copy > p:not(.feature-kicker), .home-meme-copy li { color: var(--studio-secondary); font-size: 13px; line-height: 1.9; }
+.home-meme-copy ul { list-style: none; display: grid; gap: 10px; margin: 26px 0 32px; }
+.home-meme-copy li { padding-left: 14px; border-left: 2px solid var(--studio-highlight); }
+.home-meme-copy .home-meme-note { margin-top: 18px; font-size: 11px; }
 @media (max-width: 750px) {
-  .home-features { padding: 30px 0 36px; }
+  .home-features, .home-memes { padding: 30px 0 36px; }
   .feature-exhibit { grid-template-columns: minmax(0, 1fr); margin-top: 22px; }
-  .feature-stage { padding: 20px; }
-  .feature-portrait-frame { width: min(100%, 340px); }
-  .feature-copy { padding: 26px; }
+  .feature-scroll-track { min-height: 142svh; --spread: .5; }
+  .feature-stage { top: 116px; padding: 60px 20px 20px; }
+  .feature-portrait-frame { width: min(100%, 340px, calc(53svh * .5628)); }
+  .feature-copy { position: static; padding: 26px; }
   .feature-copy h3 { font-size: 27px; }
+  .home-meme-exhibit { grid-template-columns: minmax(0, 1fr); margin-top: 22px; }
+  .home-meme-copy { padding: 26px; }
 }
 @media (max-width: 359px) { .feature-stage { padding: 12px; }.feature-copy { padding: 20px; }.feature-demo-controls { gap: 6px; }.feature-demo-controls button { padding: 9px 10px; } }
 @media (prefers-reduced-motion: reduce) {
+  .feature-scroll-track { min-height: 0; }
+  .feature-stage, .feature-copy { position: static; }
+  .feature-portrait-art { opacity: 1; }
+  .feature-puzzle-pieces, .feature-skip-assembly, .feature-assembly-caption, .feature-caption { display: none; }
+  .home-meme-art img { transition: none; transform: none; }
   .feature-portrait-art, .feature-portrait-art img { transition: none; }
   .feature-portrait.is-layered .feature-portrait-art, .feature-portrait.is-floating .feature-portrait-art, .feature-portrait.is-layered img:nth-child(n) { transform: none; }
 }
